@@ -1,9 +1,7 @@
 .vs/
 build/
 External/vcpkg_installed/
-x64/
-Debug/
-Release/
+
 
 *.user
 *.suo
