@@ -156,6 +156,9 @@ LoadedMesh buildMesh(const aiMesh* source, const aiMatrix4x4& transform) {
         box.minBounds = glm::min(glm::min(a, b), c);
         box.maxBounds = glm::max(glm::max(a, b), c);
         box.normal = normal;
+        box.a = a;
+        box.b = b;
+        box.c = c;
 
         const glm::vec3 minSize(0.035f, 0.055f, 0.035f);
         for (int axis = 0; axis < 3; ++axis) {

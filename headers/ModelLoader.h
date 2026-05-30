@@ -17,6 +17,9 @@ struct LoadedMesh {
         glm::vec3 minBounds{0.0f};
         glm::vec3 maxBounds{0.0f};
         glm::vec3 normal{0.0f, 1.0f, 0.0f};
+        glm::vec3 a{0.0f};
+        glm::vec3 b{0.0f};
+        glm::vec3 c{0.0f};
     };
     std::vector<CollisionBox> collisionBoxes;
 };

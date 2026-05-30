@@ -4,6 +4,7 @@
 
 #include "AudioPlayer.h"
 #include "Environment.h"
+#include "Mapa1.h"
 #include "Player.h"
 #include "Shader.h"
 
@@ -36,6 +37,7 @@ enum class EstadoJuego {
     MENU_MUNDOS,
     COMO_JUGAR,
     CREDITOS,
+    MUNDO_1,
     MUNDO_2
 };
 
@@ -1232,7 +1234,8 @@ void drawSpinningCoinIcon(MenuContext& menu, const Texture2D& coinIcon, float x,
     }
 }
 
-void drawMissionHud(MenuContext& menu, const MissionManager& mission, int width, int height, float timeSeconds) {
+template <typename Mission>
+void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int height, float timeSeconds) {
     beginUiFrame(menu, width, height);
 
     const int coinCount = std::clamp(mission.collectedCount(), 0, MissionCoinTotal);
@@ -1323,7 +1326,8 @@ void mostrarMenuMundos(MenuContext& menu, int width, int height, float timeSecon
     const float centerX = width * 0.5f;
     const float startY = 224.0f;
     if (drawButton(menu, menu.mundo1, centeredRect(centerX, startY, buttonWidth, buttonHeight), mouse, clicked)) {
-        menu.notificationUntil = glfwGetTime() + 2.3;
+        appState = EstadoJuego::MUNDO_1;
+        menu.notificationUntil = 0.0;
     }
     if (drawButton(menu, menu.mundo2, centeredRect(centerX, startY + 68.0f, buttonWidth, buttonHeight), mouse, clicked)) {
         appState = EstadoJuego::MUNDO_2;
@@ -1468,7 +1472,7 @@ void updateCursorMode(GLFWwindow* window) {
     lastCursorState = appState;
 }
 
-void processAppInput(GLFWwindow* window, Mundo2Runtime& mundo2) {
+void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2) {
     const bool escapeDown = glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
     if (escapeDown && !lastEscapeKey) {
         switch (appState) {
@@ -1478,6 +1482,11 @@ void processAppInput(GLFWwindow* window, Mundo2Runtime& mundo2) {
         case EstadoJuego::MENU_MUNDOS:
         case EstadoJuego::COMO_JUGAR:
         case EstadoJuego::CREDITOS:
+            appState = EstadoJuego::MENU_PRINCIPAL;
+            break;
+        case EstadoJuego::MUNDO_1:
+            mapa1.shutdown();
+            glfwSetWindowTitle(window, "Paper Pinix");
             appState = EstadoJuego::MENU_PRINCIPAL;
             break;
         case EstadoJuego::MUNDO_2:
@@ -1717,7 +1726,9 @@ void renderMundo2(GLFWwindow* window, Mundo2Runtime& mundo2, MenuContext& menu, 
 }
 }
 
-int main() {
+int main(int argc, char** argv) {
+    const bool mapa1SmokeTest = argc > 1 && std::string(argv[1]) == "--smoke-mapa1";
+
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW." << std::endl;
         return 1;
@@ -1726,6 +1737,9 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    if (mapa1SmokeTest) {
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    }
 
     GLFWwindow* window = glfwCreateWindow(WindowWidth, WindowHeight, "Paper Pinix", nullptr, nullptr);
     if (window == nullptr) {
@@ -1768,7 +1782,20 @@ int main() {
         return 1;
     }
 
+    Mapa1 mapa1;
     Mundo2Runtime mundo2;
+
+    if (mapa1SmokeTest) {
+        const bool loaded = mapa1.initialize();
+        if (loaded) {
+            mapa1.render(window, 1.0f / 60.0f);
+        }
+        mapa1.shutdown();
+        shutdownMenu(menu);
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return loaded ? 0 : 1;
+    }
 
     while (!glfwWindowShouldClose(window)) {
         const float now = static_cast<float>(glfwGetTime());
@@ -1776,7 +1803,7 @@ int main() {
         lastFrame = now;
 
         updateCursorMode(window);
-        processAppInput(window, mundo2);
+        processAppInput(window, mapa1, mundo2);
 
         double cursorX = 0.0;
         double cursorY = 0.0;
@@ -1789,13 +1816,21 @@ int main() {
         int height = 0;
         glfwGetFramebufferSize(window, &width, &height);
 
-        if (appState == EstadoJuego::MUNDO_2) {
+        if (appState == EstadoJuego::MUNDO_1) {
+            if (!mapa1.initialize()) {
+                glfwSetWindowShouldClose(window, GLFW_TRUE);
+            } else {
+                mapa1.render(window, deltaTime);
+                drawMissionHud(menu, mapa1, width, height, now);
+            }
+        } else if (appState == EstadoJuego::MUNDO_2) {
             if (!iniciarMundo2(mundo2)) {
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
             } else {
                 renderMundo2(window, mundo2, menu, sceneShader, lavaShader, now);
             }
         } else {
+            glDisable(GL_DEPTH_TEST);
             glClearColor(0.16f, 0.50f, 0.80f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
             const glm::vec2 mouse(static_cast<float>(cursorX), static_cast<float>(cursorY));
@@ -1812,6 +1847,7 @@ int main() {
             case EstadoJuego::CREDITOS:
                 mostrarCreditos(menu, width, height, now, mouse, clicked);
                 break;
+            case EstadoJuego::MUNDO_1:
             case EstadoJuego::MUNDO_2:
                 break;
             }
@@ -1821,6 +1857,7 @@ int main() {
         glfwPollEvents();
     }
 
+    mapa1.shutdown();
     shutdownMenu(menu);
     glfwDestroyWindow(window);
     glfwTerminate();
