@@ -81,6 +81,10 @@ struct MenuContext {
     std::array<TextSprite, MissionCoinTotal + 1> coinMessages;
     TextSprite estrellaLista;
     TextSprite nivelCompletado;
+    TextSprite combateSolo2D;
+    TextSprite vidaJugador;
+    TextSprite cargandoAtaque;
+    TextSprite parryActivo;
     TextSprite promptHablarToad;
     TextSprite nombreToad;
     TextSprite dialogoToad;
@@ -1271,6 +1275,52 @@ void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int he
     }
 }
 
+void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int height, float timeSeconds) {
+    beginUiFrame(menu, width, height);
+    const Rect healthPanel{22.0f, 22.0f, 282.0f, 72.0f};
+    drawRect(menu, {healthPanel.x + 6.0f, healthPanel.y + 7.0f, healthPanel.width, healthPanel.height}, {0.01f, 0.02f, 0.05f, 0.48f});
+    drawRect(menu, healthPanel, {0.06f, 0.12f, 0.24f, 0.94f});
+    drawText(menu, menu.vidaJugador, healthPanel.x + 14.0f, healthPanel.y + 10.0f);
+    const int maximumHealth = std::max(1, mapa1.maximumHealth());
+    const float segmentWidth = 66.0f;
+    for (int index = 0; index < maximumHealth; ++index) {
+        const bool active = index < mapa1.currentHealth();
+        drawRect(
+            menu,
+            {healthPanel.x + 14.0f + index * (segmentWidth + 9.0f), healthPanel.y + 43.0f, segmentWidth, 16.0f},
+            active ? glm::vec4(0.92f, 0.18f, 0.16f, 1.0f) : glm::vec4(0.20f, 0.23f, 0.30f, 0.90f));
+    }
+
+    if (mapa1.chargingAttack()) {
+        const Rect chargePanel{22.0f, 106.0f, 282.0f, 54.0f};
+        drawRect(menu, chargePanel, {0.06f, 0.12f, 0.24f, 0.94f});
+        drawText(menu, menu.cargandoAtaque, chargePanel.x + 14.0f, chargePanel.y + 7.0f);
+        drawRect(menu, {chargePanel.x + 14.0f, chargePanel.y + 35.0f, 254.0f, 10.0f}, {0.20f, 0.23f, 0.30f, 0.90f});
+        drawRect(menu, {chargePanel.x + 14.0f, chargePanel.y + 35.0f, 254.0f * mapa1.chargeRatio(), 10.0f},
+            mapa1.chargeRatio() >= 1.0f
+                ? glm::vec4(1.00f, 0.84f, 0.12f, 1.0f)
+                : glm::vec4(0.24f, 0.88f, 1.00f, 1.0f));
+    }
+
+    if (mapa1.parryActive(timeSeconds)) {
+        const Rect parryPanel = centeredRect(width * 0.5f, 38.0f, 188.0f, 48.0f);
+        drawRect(menu, parryPanel, {0.08f, 0.62f, 0.68f, 0.94f});
+        drawText(menu, menu.parryActivo,
+            parryPanel.x + (parryPanel.width - menu.parryActivo.size.x) * 0.5f,
+            parryPanel.y + (parryPanel.height - menu.parryActivo.size.y) * 0.5f);
+    }
+
+    if (mapa1.showCombatHint(timeSeconds)) {
+        const Rect panel = centeredRect(width * 0.5f, static_cast<float>(height) - 116.0f, 760.0f, 62.0f);
+        drawRect(menu, {panel.x + 7.0f, panel.y + 8.0f, panel.width, panel.height}, {0.01f, 0.02f, 0.05f, 0.48f});
+        drawRect(menu, {panel.x - 4.0f, panel.y - 4.0f, panel.width + 8.0f, panel.height + 8.0f}, {1.0f, 0.80f, 0.20f, 0.98f});
+        drawRect(menu, panel, {0.82f, 0.18f, 0.10f, 0.96f});
+        drawText(menu, menu.combateSolo2D,
+            panel.x + (panel.width - menu.combateSolo2D.size.x) * 0.5f,
+            panel.y + (panel.height - menu.combateSolo2D.size.y) * 0.5f);
+    }
+}
+
 void drawToadHud(MenuContext& menu, const ToadNpc& toad, int width, int height) {
     if (!toad.showPrompt() && !toad.dialogOpen()) {
         return;
@@ -1651,9 +1701,11 @@ bool initializeMenu(MenuContext& menu) {
     menu.textoComoJugar = createTextSprite(
         L"- Usa las teclas de movimiento para controlar al personaje.\n"
         L"- Evita obst\u00e1culos y enemigos.\n"
+        L"- Mundo 1: apunta y dispara con el mouse; mantenlo para cargar.\n"
+        L"- Pulsa F justo antes del impacto para hacer parry.\n"
         L"- Completa el nivel para ganar.\n"
         L"- Presiona ESC o el bot\u00f3n Volver para regresar al men\u00fa.",
-        25, white, 670, true, false);
+        23, white, 700, true, false);
     menu.tituloCreditos = createTextSprite(L"Cr\u00e9ditos", 44, titleColor, 520, false, true);
     menu.textoCreditos = createTextSprite(
         L"Paper Pinix\n"
@@ -1668,6 +1720,10 @@ bool initializeMenu(MenuContext& menu) {
     }
     menu.estrellaLista = createTextSprite(L"\u00a1La estrella apareci\u00f3!", 29, titleColor, 400, false, true);
     menu.nivelCompletado = createTextSprite(L"\u00a1Nivel completado!", 52, titleColor, 520, false, true);
+    menu.combateSolo2D = createTextSprite(L"\u00a1Peligro! Cambia a 2D con TAB para detener a los enemigos.", 27, white, 720, false, true);
+    menu.vidaJugador = createTextSprite(L"VIDA", 25, white, 120, false, false);
+    menu.cargandoAtaque = createTextSprite(L"CARGANDO TIRO", 21, white, 250, false, false);
+    menu.parryActivo = createTextSprite(L"PARRY", 23, white, 150, false, true);
     menu.promptHablarToad = createTextSprite(L"Pulsa F para hablar", 28, white, 330, false, true);
     menu.nombreToad = createTextSprite(L"Toad", 30, titleColor, 170, false, true);
     menu.dialogoToad = createTextSprite(
@@ -1728,6 +1784,7 @@ void renderMundo2(GLFWwindow* window, Mundo2Runtime& mundo2, MenuContext& menu, 
 
 int main(int argc, char** argv) {
     const bool mapa1SmokeTest = argc > 1 && std::string(argv[1]) == "--smoke-mapa1";
+    const bool mapa1CombatSmokeTest = argc > 1 && std::string(argv[1]) == "--smoke-mapa1-combat";
 
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW." << std::endl;
@@ -1737,7 +1794,7 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    if (mapa1SmokeTest) {
+    if (mapa1SmokeTest || mapa1CombatSmokeTest) {
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     }
 
@@ -1785,9 +1842,11 @@ int main(int argc, char** argv) {
     Mapa1 mapa1;
     Mundo2Runtime mundo2;
 
-    if (mapa1SmokeTest) {
-        const bool loaded = mapa1.initialize();
-        if (loaded) {
+    if (mapa1SmokeTest || mapa1CombatSmokeTest) {
+        bool loaded = mapa1.initialize(false);
+        if (loaded && mapa1CombatSmokeTest) {
+            loaded = mapa1.runCombatSmokeTest();
+        } else if (loaded) {
             mapa1.render(window, 1.0f / 60.0f);
         }
         mapa1.shutdown();
@@ -1822,6 +1881,7 @@ int main(int argc, char** argv) {
             } else {
                 mapa1.render(window, deltaTime);
                 drawMissionHud(menu, mapa1, width, height, now);
+                drawMapa1CombatHud(menu, mapa1, width, height, now);
             }
         } else if (appState == EstadoJuego::MUNDO_2) {
             if (!iniciarMundo2(mundo2)) {

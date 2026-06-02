@@ -4,17 +4,19 @@
 
 class AudioPlayer {
 public:
-    AudioPlayer() = default;
+    AudioPlayer();
+    explicit AudioPlayer(std::wstring alias);
     AudioPlayer(const AudioPlayer&) = delete;
     AudioPlayer& operator=(const AudioPlayer&) = delete;
     ~AudioPlayer();
 
     bool open(const std::string& filePath);
     bool playLoop();
+    bool playOnce();
     void stop();
     void close();
 
 private:
-    std::wstring m_alias{L"bgm_loop"};
+    std::wstring m_alias;
     bool m_open{false};
 };

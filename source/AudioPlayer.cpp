@@ -3,10 +3,14 @@
 #include <Windows.h>
 #include <mmsystem.h>
 
+#include <atomic>
 #include <iostream>
 #include <sstream>
+#include <utility>
 
 namespace {
+std::atomic_uint nextAudioChannel{1};
+
 std::wstring widen(const std::string& value) {
     if (value.empty()) {
         return {};
@@ -17,8 +21,9 @@ std::wstring widen(const std::string& value) {
         return std::wstring(value.begin(), value.end());
     }
 
-    std::wstring result(static_cast<size_t>(required - 1), L'\0');
+    std::wstring result(static_cast<size_t>(required), L'\0');
     MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, result.data(), required);
+    result.pop_back();
     return result;
 }
 
@@ -33,6 +38,14 @@ bool sendMci(const std::wstring& command) {
     std::wcerr << L"MCI audio command failed: " << command << L" -> " << errorText << std::endl;
     return false;
 }
+}
+
+AudioPlayer::AudioPlayer()
+    : m_alias(L"audio_channel_" + std::to_wstring(nextAudioChannel.fetch_add(1))) {
+}
+
+AudioPlayer::AudioPlayer(std::wstring alias)
+    : m_alias(std::move(alias)) {
 }
 
 AudioPlayer::~AudioPlayer() {
@@ -57,6 +70,18 @@ bool AudioPlayer::playLoop() {
         return false;
     }
     return sendMci(L"play " + m_alias + L" repeat");
+}
+
+bool AudioPlayer::playOnce() {
+    if (!m_open) {
+        return false;
+    }
+
+    sendMci(L"stop " + m_alias);
+    if (!sendMci(L"seek " + m_alias + L" to start")) {
+        return false;
+    }
+    return sendMci(L"play " + m_alias);
 }
 
 void AudioPlayer::stop() {

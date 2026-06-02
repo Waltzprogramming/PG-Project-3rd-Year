@@ -1,5 +1,6 @@
 #include "Mapa1.h"
 
+#include "AudioPlayer.h"
 #include "Mesh.h"
 #include "ModelLoader.h"
 #include "Shader.h"
@@ -10,6 +11,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <algorithm>
 #include <array>
@@ -34,16 +36,34 @@ constexpr float TriangleMargin = 0.012f;
 constexpr float LandingMargin = 0.09f;
 constexpr float StepHeightWithoutJump = 0.12f;
 constexpr int StartingLives = 3;
+constexpr int PlayerMaximumHealth = 3;
+constexpr int EnemyMaximumHealth = 3;
 constexpr int TotalCoins = 10;
 constexpr float DeathHeight = -4.0f;
 constexpr float MoveSpeed2D = 1.20f;
 constexpr float MoveSpeed3D = 1.28f;
-constexpr float JumpSpeed = 4.60f;
+constexpr float JumpSpeed = 6.25f;
 constexpr float Gravity = 9.20f;
 constexpr float CameraBaseHeight = -0.92f;
 constexpr float CameraVerticalTracking = 0.62f;
 constexpr float CameraMaximumHeight = 5.25f;
 constexpr float CameraSmoothing = 8.0f;
+constexpr float EnemyDetectionRange = 9.50f;
+constexpr float EnemyAttackRange = 4.60f;
+constexpr float EnemyStopDistance = 1.10f;
+constexpr float EnemyMoveSpeed = 0.82f;
+constexpr float EnemyMaximumStepHeight = 0.24f;
+constexpr float EnemyShotCooldown = 2.80f;
+constexpr float EnemyShotSpeed = 3.20f;
+constexpr float PlayerShotSpeed = 5.40f;
+constexpr float ChargedPlayerShotSpeed = 6.20f;
+constexpr float ProjectileLifetime = 4.20f;
+constexpr float PlayerInvulnerabilityTime = 1.25f;
+constexpr float PlayerAttackCooldown = 0.38f;
+constexpr float PlayerChargeTime = 1.65f;
+constexpr float ParryWindow = 0.50f;
+constexpr float ParryEffectTime = 0.34f;
+constexpr float ProjectileSwordLength = 0.72f;
 
 struct TerrainTriangle {
     glm::vec3 a{0.0f};
@@ -88,6 +108,42 @@ struct Star {
     bool projectIn2D{false};
 };
 
+enum class EnemyState {
+    Idle,
+    Chase,
+    Attack,
+    Hurt,
+    Dying
+};
+
+struct DemonEnemy {
+    glm::vec3 position{0.0f};
+    glm::vec3 spawnPosition{0.0f};
+    EnemyState state{EnemyState::Idle};
+    float shotCooldown{0.0f};
+    float animationTime{0.0f};
+    float hurtTime{0.0f};
+    int health{EnemyMaximumHealth};
+    bool facingLeft{false};
+    bool alive{true};
+};
+
+struct Projectile {
+    glm::vec3 position{0.0f};
+    glm::vec3 velocity{0.0f};
+    float lifetime{ProjectileLifetime};
+    bool fromPlayer{false};
+    int damage{1};
+    bool charged{false};
+};
+
+struct AtlasFrame {
+    int x{0};
+    int y{0};
+    int width{0};
+    int height{0};
+};
+
 struct MapMaterial {
     glm::vec4 color{1.0f};
     std::shared_ptr<Texture2D> texture;
@@ -123,6 +179,26 @@ Mesh createPlayerMesh() {
         makeVertex({0.42f, 0.00f, 0.0f}, {1.0f, 0.0f}),
         makeVertex({-0.42f, 0.00f, 0.0f}, {0.0f, 0.0f}),
         makeVertex({-0.42f, 1.15f, 0.0f}, {0.0f, 1.0f})
+    };
+    const std::vector<unsigned int> indices = {0, 1, 2, 0, 2, 3};
+
+    Mesh mesh;
+    mesh.upload(vertices, indices);
+    return mesh;
+}
+
+Mesh createSpriteMesh(const AtlasFrame& frame, float width, float height, int atlasWidth, int atlasHeight) {
+    constexpr float inset = 0.18f;
+    const float u0 = (static_cast<float>(frame.x) + inset) / static_cast<float>(atlasWidth);
+    const float u1 = (static_cast<float>(frame.x + frame.width) - inset) / static_cast<float>(atlasWidth);
+    const float vTop = 1.0f - (static_cast<float>(frame.y) + inset) / static_cast<float>(atlasHeight);
+    const float vBottom = 1.0f - (static_cast<float>(frame.y + frame.height) - inset) / static_cast<float>(atlasHeight);
+    const float halfWidth = width * 0.5f;
+    const std::vector<Vertex> vertices = {
+        makeVertex({halfWidth, height, 0.0f}, {u1, vTop}),
+        makeVertex({halfWidth, 0.0f, 0.0f}, {u1, vBottom}),
+        makeVertex({-halfWidth, 0.0f, 0.0f}, {u0, vBottom}),
+        makeVertex({-halfWidth, height, 0.0f}, {u0, vTop})
     };
     const std::vector<unsigned int> indices = {0, 1, 2, 0, 2, 3};
 
@@ -221,6 +297,33 @@ Mesh createStarMesh() {
     return mesh;
 }
 
+Mesh createParryRingMesh() {
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+    constexpr int segments = 48;
+    constexpr float outerRadius = 0.66f;
+    constexpr float innerRadius = 0.52f;
+    vertices.reserve(static_cast<size_t>((segments + 1) * 2));
+    indices.reserve(static_cast<size_t>(segments * 6));
+
+    for (int index = 0; index <= segments; ++index) {
+        const float angle = glm::two_pi<float>() * static_cast<float>(index) / static_cast<float>(segments);
+        const glm::vec2 direction(std::cos(angle), std::sin(angle));
+        vertices.push_back(makeVertex({direction.x * outerRadius, direction.y * outerRadius, 0.0f}, {1.0f, 1.0f}));
+        vertices.push_back(makeVertex({direction.x * innerRadius, direction.y * innerRadius, 0.0f}, {0.0f, 0.0f}));
+    }
+
+    for (int index = 0; index < segments; ++index) {
+        const unsigned int outer = static_cast<unsigned int>(index * 2);
+        const unsigned int inner = outer + 1;
+        indices.insert(indices.end(), {outer, inner, outer + 2, inner, inner + 2, outer + 2});
+    }
+
+    Mesh mesh;
+    mesh.upload(vertices, indices);
+    return mesh;
+}
+
 bool containsText(const std::string& text, const char* pattern) {
     return text.find(pattern) != std::string::npos;
 }
@@ -293,17 +396,43 @@ bool pointInPlatform(const ExtraPlatform& platform, float x, float z, bool proje
     const float dz = (z - centerZ) / radiusZ;
     return dx * dx + dz * dz <= 1.0f;
 }
+
+glm::quat rotationBetweenVectors(glm::vec3 from, glm::vec3 to) {
+    from = glm::normalize(from);
+    to = glm::normalize(to);
+    const float cosine = glm::dot(from, to);
+    if (cosine < -0.9999f) {
+        glm::vec3 axis = glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), from);
+        if (glm::dot(axis, axis) < 0.0001f) {
+            axis = glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), from);
+        }
+        return glm::angleAxis(glm::pi<float>(), glm::normalize(axis));
+    }
+
+    const glm::vec3 axis = glm::cross(from, to);
+    const float scale = std::sqrt((1.0f + cosine) * 2.0f);
+    const float inverseScale = 1.0f / scale;
+    return glm::normalize(glm::quat(
+        scale * 0.5f,
+        axis.x * inverseScale,
+        axis.y * inverseScale,
+        axis.z * inverseScale));
+}
 }
 
 struct Mapa1::Impl {
     Shader shader;
+    AudioPlayer backgroundMusic{L"mapa1_background_music"};
+    AudioPlayer parrySound{L"mapa1_parry_sound"};
     std::vector<WorldModel> worldModels;
     std::unordered_map<std::string, std::shared_ptr<Texture2D>> textureCache;
     std::array<Texture2D, 5> playerTextures;
+    LoadedModel projectileSwordModel;
     Texture2D skyboxTexture;
     Texture2D coinIconTexture;
     Texture2D platformSideTexture;
     Texture2D platformTopTexture;
+    Texture2D enemyTexture;
     Mesh playerMesh;
     Mesh skyboxMesh;
     Mesh pipeBodyMesh;
@@ -312,6 +441,12 @@ struct Mapa1::Impl {
     Mesh platformMesh;
     Mesh coinMesh;
     Mesh starMesh;
+    Mesh parryRingMesh;
+    std::vector<Mesh> enemyIdleMeshes;
+    std::vector<Mesh> enemyRunMeshes;
+    std::vector<Mesh> enemyAttackMeshes;
+    std::vector<Mesh> enemyHurtMeshes;
+    std::vector<Mesh> enemyDeathMeshes;
     std::vector<TerrainTriangle> terrainTriangles;
     std::vector<ExtraPlatform> extraPlatforms = {
         {PlatformShape::Ellipse, 0.60f, 1.40f, -0.40f, 0.40f, 0.18f, 0.24f, {0.36f, 0.72f, 0.32f, 1.0f}, "tuberia", false, false},
@@ -329,10 +464,20 @@ struct Mapa1::Impl {
     };
     std::vector<Coin> coins;
     Star star;
+    std::vector<DemonEnemy> enemies;
+    std::vector<Projectile> projectiles;
 
     bool initialized{false};
+    bool backgroundMusicOpen{false};
+    bool backgroundMusicPlaying{false};
+    bool parrySoundOpen{false};
     bool mode3D{false};
     bool tabPressed{false};
+    bool mouseAttackPressed{false};
+    bool chargingPlayerAttack{false};
+    bool parryPressed{false};
+    bool resetEnemiesRequested{false};
+    bool clearProjectilesRequested{false};
     float posX{0.0f};
     float posY{0.0f};
     float posZ{0.0f};
@@ -341,6 +486,7 @@ struct Mapa1::Impl {
     float playerAngle{0.0f};
     float cameraOffsetY{0.0f};
     int lives{StartingLives};
+    int playerHealth{PlayerMaximumHealth};
     float messageTime{0.0f};
     std::string statusMessage;
     float titleTime{0.0f};
@@ -351,7 +497,40 @@ struct Mapa1::Impl {
     int coinMessageCount{0};
     float coinMessageUntil{0.0f};
     float starMessageUntil{0.0f};
+    float combatHintUntil{0.0f};
+    float playerAttackCooldown{0.0f};
+    float playerChargeTime{0.0f};
+    float playerInvulnerability{0.0f};
+    float parryUntil{0.0f};
+    float parryEffectUntil{0.0f};
+    glm::vec3 playerAimDirection{1.0f, 0.0f, 0.0f};
     bool completed{false};
+
+    void initializeAudio() {
+        backgroundMusicOpen = backgroundMusic.open(resolveAssetPath("assets/audio/devil-never-cry-compatible.mp3"));
+        if (backgroundMusicOpen) {
+            backgroundMusicPlaying = backgroundMusic.playLoop();
+        } else {
+            std::cerr << "Mapa 1 background music could not be started." << std::endl;
+        }
+
+        parrySoundOpen = parrySound.open(resolveAssetPath("assets/audio/royal-guard.mp3"));
+        if (!parrySoundOpen) {
+            std::cerr << "Mapa 1 parry sound could not be loaded." << std::endl;
+        }
+    }
+
+    void shutdownAudio() {
+        if (backgroundMusicOpen) {
+            backgroundMusic.close();
+        }
+        if (parrySoundOpen) {
+            parrySound.close();
+        }
+        backgroundMusicOpen = false;
+        backgroundMusicPlaying = false;
+        parrySoundOpen = false;
+    }
 
     std::shared_ptr<Texture2D> textureFor(const std::string& path) {
         if (path.empty()) {
@@ -373,6 +552,18 @@ struct Mapa1::Impl {
         return texture;
     }
 
+    std::vector<MapMaterial> runtimeMaterialsFor(const std::vector<LoadedMaterial>& materials) {
+        std::vector<MapMaterial> runtimeMaterials;
+        runtimeMaterials.reserve(materials.size());
+        for (const LoadedMaterial& material : materials) {
+            MapMaterial runtimeMaterial;
+            runtimeMaterial.color = glm::vec4(material.diffuseColor, material.opacity);
+            runtimeMaterial.texture = textureFor(material.diffuseTexturePath);
+            runtimeMaterials.push_back(std::move(runtimeMaterial));
+        }
+        return runtimeMaterials;
+    }
+
     bool loadWorldModel(const std::string& path) {
         WorldModel world;
         world.model = ModelLoader::loadModel(resolveAssetPath(path));
@@ -380,13 +571,7 @@ struct Mapa1::Impl {
             return false;
         }
 
-        world.materials.reserve(world.model.materials.size());
-        for (const LoadedMaterial& material : world.model.materials) {
-            MapMaterial runtimeMaterial;
-            runtimeMaterial.color = glm::vec4(material.diffuseColor, material.opacity);
-            runtimeMaterial.texture = textureFor(material.diffuseTexturePath);
-            world.materials.push_back(std::move(runtimeMaterial));
-        }
+        world.materials = runtimeMaterialsFor(world.model.materials);
 
         worldModels.push_back(std::move(world));
         return true;
@@ -450,7 +635,7 @@ struct Mapa1::Impl {
         std::cout << "Mapa 1 terrain bounds: X[" << terrainMin.x << ", " << terrainMax.x
             << "] Z[" << terrainMin.z << ", " << terrainMax.z << "]" << std::endl;
         std::cout << "Mapa 1 parkour platforms: " << extraPlatforms.size() - 1 << std::endl;
-        std::cout << "Mapa 1 controls: A/D and W jump in 2D, WASD and Space jump in 3D, Tab switches view, Esc returns to menu." << std::endl;
+        std::cout << "Mapa 1 controls: A/D and W jump in 2D, WASD and Space jump in 3D, mouse aims and shoots in 2D, hold mouse to charge, F parries, Tab switches view, Esc returns to menu." << std::endl;
     }
 
     glm::vec3 platformTopCenter(size_t index) const {
@@ -496,6 +681,47 @@ struct Mapa1::Impl {
             }
         }
         return false;
+    }
+
+    bool findTerrainEnemyPosition(const glm::vec2& anchor, glm::vec3& position) const {
+        if (!findTerrainCoinPosition(anchor, position)) {
+            return false;
+        }
+
+        position.y -= 0.72f;
+        return true;
+    }
+
+    void resetEnemies() {
+        enemies.clear();
+        const std::array<glm::vec2, 10> enemyAnchors = {
+            glm::vec2(-27.0f, -7.0f),
+            glm::vec2(-20.0f, 5.0f),
+            glm::vec2(-14.0f, -2.0f),
+            glm::vec2(-8.0f, 6.0f),
+            glm::vec2(6.0f, -5.0f),
+            glm::vec2(11.0f, 6.0f),
+            glm::vec2(16.0f, -7.0f),
+            glm::vec2(22.0f, 5.0f),
+            glm::vec2(28.0f, -3.0f),
+            glm::vec2(35.0f, 7.0f)
+        };
+
+        for (size_t i = 0; i < enemyAnchors.size(); ++i) {
+            DemonEnemy enemy;
+            if (!findTerrainEnemyPosition(enemyAnchors[i], enemy.position)) {
+                std::cerr << "Mapa 1 could not place an enemy near X:" << enemyAnchors[i].x
+                    << " Z:" << enemyAnchors[i].y << "." << std::endl;
+                continue;
+            }
+
+            enemy.spawnPosition = enemy.position;
+            enemy.shotCooldown = 0.55f + static_cast<float>(i) * 0.34f;
+            enemy.animationTime = static_cast<float>(i) * 0.17f;
+            enemies.push_back(enemy);
+        }
+
+        std::cout << "Mapa 1 Thalassa-style enemies: " << enemies.size() << std::endl;
     }
 
     void resetMission() {
@@ -719,17 +945,458 @@ struct Mapa1::Impl {
     }
 
     void loseLife() {
+        playerInvulnerability = PlayerInvulnerabilityTime;
+        clearProjectilesRequested = true;
+        playerHealth = PlayerMaximumHealth;
         --lives;
         if (lives <= 0) {
             lives = StartingLives;
             resetPlayer(true);
             resetMission();
+            resetEnemiesRequested = true;
             showStatus("GAME OVER - se reinicio el mapa. Vidas: 3");
             return;
         }
 
         resetPlayer(false);
         showStatus("MORISTE - vidas restantes: " + std::to_string(lives));
+    }
+
+    float gameplayDistance(const glm::vec3& from, const glm::vec3& to) const {
+        if (!mode3D) {
+            return std::abs(to.x - from.x);
+        }
+
+        return glm::length(glm::vec2(to.x - from.x, to.z - from.z));
+    }
+
+    bool touchesGameplayTarget(const glm::vec3& from, const glm::vec3& to, float horizontalRadius, float verticalRadius) const {
+        return gameplayDistance(from, to) <= horizontalRadius &&
+            std::abs(from.y - to.y) <= verticalRadius;
+    }
+
+    bool tryMoveEnemy(DemonEnemy& enemy, const glm::vec2& step) const {
+        if (glm::length(step) < 0.00001f) {
+            return false;
+        }
+
+        const float nextX = enemy.position.x + step.x;
+        const float nextZ = enemy.position.z + step.y;
+        float nextHeight = -100.0f;
+        if (!terrainHeight(nextX, nextZ, nextHeight) ||
+            std::abs(nextHeight - enemy.position.y) > EnemyMaximumStepHeight) {
+            return false;
+        }
+
+        enemy.position = {nextX, nextHeight, nextZ};
+        return true;
+    }
+
+    void showCombatRestriction(float now) {
+        combatHintUntil = std::max(combatHintUntil, now + 3.8f);
+        showStatus("CAMBIA A 2D CON TAB PARA DETENER A LOS ENEMIGOS");
+    }
+
+    void spawnEnemyProjectile(const DemonEnemy& enemy, float now) {
+        glm::vec3 origin = enemy.position + glm::vec3(0.0f, 0.58f, 0.0f);
+        glm::vec3 target(posX, posY + 0.58f, posZ);
+        if (!mode3D) {
+            target.z = origin.z;
+        }
+
+        glm::vec3 direction = target - origin;
+        if (glm::length(direction) < 0.0001f) {
+            direction = {enemy.facingLeft ? -1.0f : 1.0f, 0.0f, 0.0f};
+        } else {
+            direction = glm::normalize(direction);
+        }
+
+        projectiles.push_back({origin, direction * EnemyShotSpeed, ProjectileLifetime, false});
+        if (mode3D) {
+            showCombatRestriction(now);
+        }
+    }
+
+    glm::vec3 mouseAimDirection(GLFWwindow* window) const {
+        int width = 0;
+        int height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+        if (width <= 0 || height <= 0) {
+            return playerAimDirection;
+        }
+
+        double mouseX = 0.0;
+        double mouseY = 0.0;
+        glfwGetCursorPos(window, &mouseX, &mouseY);
+        const float aspect = static_cast<float>(width) / static_cast<float>(height);
+        const glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
+        const glm::mat4 view = glm::translate(glm::mat4(1.0f), {0.0f, -cameraOffsetY, -3.0f});
+        const glm::vec4 viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
+        const glm::vec3 nearPoint = glm::unProject(
+            glm::vec3(static_cast<float>(mouseX), static_cast<float>(height) - static_cast<float>(mouseY), 0.0f),
+            view,
+            projection,
+            viewport);
+        const glm::vec3 farPoint = glm::unProject(
+            glm::vec3(static_cast<float>(mouseX), static_cast<float>(height) - static_cast<float>(mouseY), 1.0f),
+            view,
+            projection,
+            viewport);
+        const glm::vec3 ray = farPoint - nearPoint;
+        const float planeZ = 0.22f;
+        const float amount = std::abs(ray.z) > 0.0001f ? (planeZ - nearPoint.z) / ray.z : 0.0f;
+        const glm::vec3 cursorPosition = nearPoint + ray * amount;
+        glm::vec3 direction = cursorPosition - glm::vec3(0.0f, posY + 0.62f, planeZ);
+        direction.z = 0.0f;
+        if (glm::length(direction) < 0.05f) {
+            return playerAimDirection;
+        }
+        return glm::normalize(direction);
+    }
+
+    void spawnPlayerProjectile(const glm::vec3& direction, bool charged) {
+        const float speed = charged ? ChargedPlayerShotSpeed : PlayerShotSpeed;
+        projectiles.push_back({
+            {posX + direction.x * 0.48f, posY + 0.62f + direction.y * 0.28f, posZ},
+            direction * speed,
+            ProjectileLifetime,
+            true,
+            charged ? EnemyMaximumHealth : 1,
+            charged
+        });
+    }
+
+    void damagePlayer(float now) {
+        if (playerInvulnerability > 0.0f) {
+            return;
+        }
+
+        const bool wasMode3D = mode3D;
+        playerInvulnerability = PlayerInvulnerabilityTime;
+        playerHealth = std::max(0, playerHealth - 1);
+        if (playerHealth <= 0) {
+            loseLife();
+        } else {
+            showStatus("DANO RECIBIDO - salud: " + std::to_string(playerHealth) + "/" + std::to_string(PlayerMaximumHealth));
+        }
+        if (wasMode3D) {
+            showCombatRestriction(now);
+        }
+    }
+
+    void updateEnemies(float dt, float now) {
+        const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
+        for (DemonEnemy& enemy : enemies) {
+            enemy.animationTime += dt;
+            if (!enemy.alive) {
+                enemy.state = EnemyState::Dying;
+                continue;
+            }
+
+            enemy.shotCooldown = std::max(0.0f, enemy.shotCooldown - dt);
+            enemy.hurtTime = std::max(0.0f, enemy.hurtTime - dt);
+            const glm::vec3 enemyCenter = enemy.position + glm::vec3(0.0f, 0.48f, 0.0f);
+            const float distance = gameplayDistance(enemyCenter, playerCenter);
+            if (distance > EnemyDetectionRange) {
+                enemy.state = EnemyState::Idle;
+                continue;
+            }
+
+            const glm::vec2 rawDirection(
+                posX - enemy.position.x,
+                mode3D ? posZ - enemy.position.z : 0.0f);
+            if (glm::length(rawDirection) > 0.0001f) {
+                const glm::vec2 direction = glm::normalize(rawDirection);
+                enemy.facingLeft = direction.x < 0.0f;
+
+                if (distance > EnemyStopDistance) {
+                    const glm::vec2 step = direction * EnemyMoveSpeed * dt;
+                    if (!tryMoveEnemy(enemy, step)) {
+                        tryMoveEnemy(enemy, {step.x, 0.0f});
+                        if (mode3D) {
+                            tryMoveEnemy(enemy, {0.0f, step.y});
+                        }
+                    }
+                }
+            }
+
+            enemy.state = enemy.hurtTime > 0.0f
+                ? EnemyState::Hurt
+                : (enemy.shotCooldown > EnemyShotCooldown - 0.55f
+                    ? EnemyState::Attack
+                    : EnemyState::Chase);
+            if (distance <= EnemyAttackRange && enemy.shotCooldown <= 0.0f) {
+                enemy.state = EnemyState::Attack;
+                enemy.animationTime = 0.0f;
+                enemy.shotCooldown = EnemyShotCooldown;
+                spawnEnemyProjectile(enemy, now);
+            }
+
+            const glm::vec3 movedEnemyCenter = enemy.position + glm::vec3(0.0f, 0.48f, 0.0f);
+            if (touchesGameplayTarget(movedEnemyCenter, playerCenter, 0.60f, 0.82f)) {
+                damagePlayer(now);
+            }
+        }
+    }
+
+    int remainingEnemyCount() const {
+        return static_cast<int>(std::count_if(enemies.begin(), enemies.end(), [](const DemonEnemy& enemy) {
+            return enemy.alive;
+        }));
+    }
+
+    bool parryEnemyProjectile(float now) {
+        if (parryUntil <= 0.0f || now > parryUntil) {
+            return false;
+        }
+
+        parryUntil = 0.0f;
+        parryEffectUntil = now + ParryEffectTime;
+        if (parrySoundOpen) {
+            parrySound.playOnce();
+        }
+        showStatus("PARRY PERFECTO");
+        return true;
+    }
+
+    void updateProjectiles(float dt, float now) {
+        for (size_t i = 0; i < projectiles.size();) {
+            Projectile& projectile = projectiles[i];
+            projectile.position += projectile.velocity * dt;
+            projectile.lifetime -= dt;
+            bool remove = projectile.lifetime <= 0.0f;
+
+            float terrain = -100.0f;
+            if (!remove && terrainHeight(projectile.position.x, projectile.position.z, terrain) &&
+                projectile.position.y <= terrain + 0.08f) {
+                remove = true;
+            }
+
+            if (!remove && projectile.fromPlayer) {
+                for (DemonEnemy& enemy : enemies) {
+                    if (!enemy.alive) {
+                        continue;
+                    }
+
+                    const glm::vec3 enemyCenter = enemy.position + glm::vec3(0.0f, 0.48f, 0.0f);
+                    if (touchesGameplayTarget(projectile.position, enemyCenter, 0.58f, 0.72f)) {
+                        enemy.health = std::max(0, enemy.health - projectile.damage);
+                        enemy.animationTime = 0.0f;
+                        if (enemy.health <= 0) {
+                            enemy.alive = false;
+                            enemy.state = EnemyState::Dying;
+                            showStatus("ENEMIGO DETENIDO - restantes: " + std::to_string(remainingEnemyCount()));
+                        } else {
+                            enemy.state = EnemyState::Hurt;
+                            enemy.hurtTime = 0.36f;
+                            showStatus("GOLPE AL ENEMIGO - resistencia: " + std::to_string(enemy.health) + "/" + std::to_string(EnemyMaximumHealth));
+                        }
+                        remove = true;
+                        break;
+                    }
+                }
+            } else if (!remove) {
+                const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
+                if (touchesGameplayTarget(projectile.position, playerCenter, 0.34f, 0.58f)) {
+                    if (!parryEnemyProjectile(now)) {
+                        damagePlayer(now);
+                    }
+                    remove = true;
+                }
+            }
+
+            if (remove) {
+                projectiles.erase(projectiles.begin() + static_cast<std::ptrdiff_t>(i));
+            } else {
+                ++i;
+            }
+        }
+    }
+
+    void tryPlayerAttack(const glm::vec3& direction, bool charged, float now) {
+        playerAttackCooldown = PlayerAttackCooldown;
+        if (mode3D) {
+            showCombatRestriction(now);
+        } else {
+            spawnPlayerProjectile(direction, charged);
+        }
+    }
+
+    void stopChargingPlayerAttack() {
+        chargingPlayerAttack = false;
+        playerChargeTime = 0.0f;
+    }
+
+    void handlePlayerAttack(GLFWwindow* window, float dt, float now) {
+        const bool attackDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+        if (!mode3D) {
+            playerAimDirection = mouseAimDirection(window);
+            if (playerAimDirection.x < -0.05f) {
+                playerAngle = 180.0f;
+            } else if (playerAimDirection.x > 0.05f) {
+                playerAngle = 0.0f;
+            }
+        }
+
+        if (mode3D) {
+            if (attackDown && !mouseAttackPressed) {
+                showCombatRestriction(now);
+            }
+            stopChargingPlayerAttack();
+        } else {
+            if (attackDown && !mouseAttackPressed && playerAttackCooldown <= 0.0f) {
+                chargingPlayerAttack = true;
+                playerChargeTime = 0.0f;
+            }
+            if (attackDown && chargingPlayerAttack) {
+                playerChargeTime = std::min(PlayerChargeTime, playerChargeTime + dt);
+            }
+            if (!attackDown && mouseAttackPressed && chargingPlayerAttack) {
+                tryPlayerAttack(playerAimDirection, playerChargeTime >= PlayerChargeTime, now);
+                stopChargingPlayerAttack();
+            }
+        }
+        mouseAttackPressed = attackDown;
+    }
+
+    void handleParry(GLFWwindow* window, float now) {
+        const bool parryDown = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
+        if (parryDown && !parryPressed) {
+            parryUntil = now + ParryWindow;
+        }
+        parryPressed = parryDown;
+    }
+
+    bool runCombatSmokeTest() {
+        if (enemies.size() < 3) {
+            std::cerr << "Mapa 1 combat smoke test needs at least 3 enemies." << std::endl;
+            return false;
+        }
+
+        glm::vec3 nearbyPosition;
+        if (!findTerrainEnemyPosition({posX + 2.0f, posZ}, nearbyPosition)) {
+            std::cerr << "Mapa 1 combat smoke test could not find nearby terrain." << std::endl;
+            return false;
+        }
+
+        mode3D = false;
+        projectiles.clear();
+        lives = StartingLives;
+        playerHealth = PlayerMaximumHealth;
+        playerInvulnerability = 0.0f;
+        enemies[0].position = nearbyPosition;
+        enemies[0].alive = true;
+        enemies[0].health = EnemyMaximumHealth;
+        enemies[0].shotCooldown = 0.0f;
+        updateEnemies(0.0f, 0.0f);
+        const bool enemyAttacksIn2D = std::any_of(projectiles.begin(), projectiles.end(), [](const Projectile& projectile) {
+            return !projectile.fromPlayer;
+        });
+
+        projectiles.clear();
+        auto hitPlayer = [&](float now) {
+            playerInvulnerability = 0.0f;
+            projectiles.push_back({
+                {posX, posY + 0.58f, posZ},
+                {},
+                ProjectileLifetime,
+                false,
+                1,
+                false
+            });
+            updateProjectiles(0.0f, now);
+        };
+        hitPlayer(1.0f);
+        const bool firstHitLeavesTwoHealth = playerHealth == 2 && lives == StartingLives;
+        hitPlayer(2.0f);
+        const bool secondHitLeavesOneHealth = playerHealth == 1 && lives == StartingLives;
+        hitPlayer(3.0f);
+        const bool thirdHitCostsOneLife = playerHealth == PlayerMaximumHealth && lives == StartingLives - 1;
+
+        projectiles.clear();
+        clearProjectilesRequested = false;
+        playerHealth = PlayerMaximumHealth;
+        parryUntil = 4.50f;
+        parryEffectUntil = 0.0f;
+        const bool parryActivationStaysQuiet = parryEffectUntil <= 0.0f;
+        hitPlayer(4.0f);
+        const bool perfectParryShowsEffect = parryEffectUntil > 4.0f;
+        const bool parryBlocksDamage =
+            playerHealth == PlayerMaximumHealth &&
+            parryUntil == 0.0f &&
+            parryActivationStaysQuiet &&
+            perfectParryShowsEffect;
+
+        projectiles.clear();
+        auto hitEnemy = [&](DemonEnemy& enemy, int damage, bool charged, float now) {
+            projectiles.push_back({
+                enemy.position + glm::vec3(0.0f, 0.48f, 0.0f),
+                {},
+                ProjectileLifetime,
+                true,
+                damage,
+                charged
+            });
+            updateProjectiles(0.0f, now);
+        };
+        enemies[0].position = nearbyPosition;
+        enemies[0].alive = true;
+        enemies[0].health = EnemyMaximumHealth;
+        hitEnemy(enemies[0], 1, false, 5.0f);
+        const bool enemySurvivesFirstNormalHit = enemies[0].alive && enemies[0].health == 2;
+        hitEnemy(enemies[0], 1, false, 5.1f);
+        const bool enemySurvivesSecondNormalHit = enemies[0].alive && enemies[0].health == 1;
+        hitEnemy(enemies[0], 1, false, 5.2f);
+        const bool thirdNormalHitDefeatsEnemy = !enemies[0].alive;
+
+        enemies[1].position = nearbyPosition;
+        enemies[1].alive = true;
+        enemies[1].health = EnemyMaximumHealth;
+        hitEnemy(enemies[1], EnemyMaximumHealth, true, 5.3f);
+        const bool chargedShotDefeatsEnemy = !enemies[1].alive;
+
+        mode3D = true;
+        projectiles.clear();
+        combatHintUntil = 0.0f;
+        playerAttackCooldown = 0.0f;
+        tryPlayerAttack({1.0f, 0.0f, 0.0f}, false, 6.0f);
+        const bool playerAttackBlockedIn3D = projectiles.empty() && combatHintUntil > 6.0f;
+
+        projectiles.clear();
+        combatHintUntil = 0.0f;
+        enemies[2].position = nearbyPosition;
+        enemies[2].alive = true;
+        enemies[2].health = EnemyMaximumHealth;
+        enemies[2].shotCooldown = 0.0f;
+        updateEnemies(0.0f, 7.0f);
+        const bool enemyStillAttacksIn3D =
+            combatHintUntil > 7.0f &&
+            std::any_of(projectiles.begin(), projectiles.end(), [](const Projectile& projectile) {
+                return !projectile.fromPlayer;
+            });
+
+        const bool passed =
+            enemyAttacksIn2D &&
+            firstHitLeavesTwoHealth &&
+            secondHitLeavesOneHealth &&
+            thirdHitCostsOneLife &&
+            parryBlocksDamage &&
+            enemySurvivesFirstNormalHit &&
+            enemySurvivesSecondNormalHit &&
+            thirdNormalHitDefeatsEnemy &&
+            chargedShotDefeatsEnemy &&
+            playerAttackBlockedIn3D &&
+            enemyStillAttacksIn3D;
+        std::cout << "Mapa 1 combat smoke test: " << (passed ? "PASS" : "FAIL")
+            << " | enemy attacks 2D: " << enemyAttacksIn2D
+            << " | player health: " << (firstHitLeavesTwoHealth && secondHitLeavesOneHealth && thirdHitCostsOneLife)
+            << " | parry: " << parryBlocksDamage
+            << " | perfect-only message: " << (parryActivationStaysQuiet && perfectParryShowsEffect)
+            << " | normal damage: " << (enemySurvivesFirstNormalHit && enemySurvivesSecondNormalHit && thirdNormalHitDefeatsEnemy)
+            << " | charged shot: " << chargedShotDefeatsEnemy
+            << " | player blocked 3D: " << playerAttackBlockedIn3D
+            << " | enemy attacks 3D: " << enemyStillAttacksIn3D << std::endl;
+        return passed;
     }
 
     bool isMoving(GLFWwindow* window) const {
@@ -757,6 +1424,7 @@ struct Mapa1::Impl {
         }
         title << (mode3D ? "Paper Mario 3D" : "Paper Mario 2D")
             << " | Vidas:" << lives
+            << " | Salud:" << playerHealth << "/" << PlayerMaximumHealth
             << " | Monedas:" << collectedCoins << "/" << TotalCoins
             << " | X:" << posX
             << " Y:" << posY;
@@ -769,12 +1437,15 @@ struct Mapa1::Impl {
 
     void update(GLFWwindow* window, float deltaTime) {
         const float dt = std::clamp(deltaTime, 0.0f, 0.05f);
+        const float now = static_cast<float>(glfwGetTime());
         if (messageTime > 0.0f) {
             messageTime = std::max(0.0f, messageTime - dt);
             if (messageTime <= 0.0f) {
                 statusMessage.clear();
             }
         }
+        playerAttackCooldown = std::max(0.0f, playerAttackCooldown - dt);
+        playerInvulnerability = std::max(0.0f, playerInvulnerability - dt);
         updateTitle(window, dt);
         if (completed) {
             return;
@@ -783,6 +1454,7 @@ struct Mapa1::Impl {
         const bool tabDown = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
         if (tabDown && !tabPressed) {
             mode3D = !mode3D;
+            stopChargingPlayerAttack();
             if (!mode3D) {
                 posZ = 0.0f;
                 playerAngle = 0.0f;
@@ -790,6 +1462,8 @@ struct Mapa1::Impl {
             std::cout << "Mapa 1 view changed to " << (mode3D ? "3D." : "2D.") << std::endl;
         }
         tabPressed = tabDown;
+        handlePlayerAttack(window, dt, now);
+        handleParry(window, now);
 
         const bool movingNow = isMoving(window);
         if (movingNow) {
@@ -865,7 +1539,17 @@ struct Mapa1::Impl {
             loseLife();
         }
 
-        updateMission(static_cast<float>(glfwGetTime()));
+        updateEnemies(dt, now);
+        updateProjectiles(dt, now);
+        if (resetEnemiesRequested) {
+            resetEnemies();
+            resetEnemiesRequested = false;
+        }
+        if (clearProjectilesRequested) {
+            projectiles.clear();
+            clearProjectilesRequested = false;
+        }
+        updateMission(now);
 
         const float targetCameraY = std::clamp(
             (posY - CameraBaseHeight) * CameraVerticalTracking,
@@ -906,6 +1590,26 @@ struct Mapa1::Impl {
         shader.setInt("tex0", 0);
         texture.bind();
         mesh.draw();
+    }
+
+    glm::mat4 normalizedSwordMatrix(const glm::vec3& position, const glm::vec3& velocity, float length) const {
+        const glm::vec3 extents = projectileSwordModel.maxBounds - projectileSwordModel.minBounds;
+        const float maximumExtent = std::max({extents.x, extents.y, extents.z, 0.001f});
+        const glm::vec3 center = (projectileSwordModel.minBounds + projectileSwordModel.maxBounds) * 0.5f;
+
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
+        if (glm::length(velocity) > 0.0001f) {
+            model *= glm::mat4_cast(rotationBetweenVectors(glm::vec3(0.0f, -1.0f, 0.0f), velocity));
+        }
+        model = glm::scale(model, glm::vec3(length / maximumExtent));
+        model = glm::translate(model, -center);
+        return model;
+    }
+
+    void drawSwordModel(const glm::mat4& model, const glm::vec4& color) {
+        for (const LoadedMesh& mesh : projectileSwordModel.meshes) {
+            drawColoredMesh(mesh.mesh, model, color);
+        }
     }
 
     float renderedDepth(float depth, bool projectIn2D) const {
@@ -977,6 +1681,93 @@ struct Mapa1::Impl {
         }
     }
 
+    void drawEnemies() {
+        for (const DemonEnemy& enemy : enemies) {
+            const std::vector<Mesh>* frames = &enemyIdleMeshes;
+            float framesPerSecond = 8.0f;
+            bool clampLastFrame = false;
+            if (!enemy.alive) {
+                if (enemy.animationTime > 1.05f) {
+                    continue;
+                }
+                frames = &enemyDeathMeshes;
+                framesPerSecond = 9.0f;
+                clampLastFrame = true;
+            } else if (enemy.state == EnemyState::Attack) {
+                frames = &enemyAttackMeshes;
+                framesPerSecond = 9.0f;
+                clampLastFrame = true;
+            } else if (enemy.state == EnemyState::Hurt) {
+                frames = &enemyHurtMeshes;
+                framesPerSecond = 9.0f;
+                clampLastFrame = true;
+            } else if (enemy.state == EnemyState::Chase) {
+                frames = &enemyRunMeshes;
+                framesPerSecond = 9.0f;
+            }
+
+            if (frames->empty()) {
+                continue;
+            }
+
+            size_t frameIndex = static_cast<size_t>(enemy.animationTime * framesPerSecond);
+            frameIndex = clampLastFrame
+                ? std::min(frameIndex, frames->size() - 1)
+                : frameIndex % frames->size();
+
+            const float renderZ = renderedDepth(enemy.position.z, true) - posZ + (!mode3D ? 0.16f : 0.0f);
+            glm::mat4 model = glm::translate(
+                glm::mat4(1.0f),
+                {enemy.position.x - posX, enemy.position.y, renderZ});
+            const float angle = mode3D
+                ? (enemy.facingLeft ? 270.0f : 90.0f)
+                : (enemy.facingLeft ? 180.0f : 0.0f);
+            model = glm::rotate(model, glm::radians(angle), {0.0f, 1.0f, 0.0f});
+            drawTexturedMesh((*frames)[frameIndex], model, enemyTexture, {0.92f, 0.16f, 0.12f, 1.0f});
+        }
+    }
+
+    void drawProjectiles() {
+        for (const Projectile& projectile : projectiles) {
+            const float renderZ = renderedDepth(projectile.position.z, true) - posZ + (!mode3D ? 0.28f : 0.0f);
+            const float length = ProjectileSwordLength * (projectile.charged ? 1.55f : 1.0f);
+            const glm::mat4 model = normalizedSwordMatrix(
+                {projectile.position.x - posX, projectile.position.y, renderZ},
+                projectile.velocity,
+                length);
+            drawSwordModel(
+                model,
+                projectile.fromPlayer
+                    ? glm::vec4(0.18f, 0.66f, 1.00f, 1.0f)
+                    : glm::vec4(1.00f, 0.16f, 0.10f, 1.0f));
+        }
+    }
+
+    void drawCombatEffects(float now) {
+        if (chargingPlayerAttack && !mode3D) {
+            const float ratio = std::clamp(playerChargeTime / PlayerChargeTime, 0.0f, 1.0f);
+            const float previewLength = ProjectileSwordLength * (0.42f + ratio * 1.13f);
+            const glm::vec3 offset = playerAimDirection * (0.42f + previewLength * 0.34f);
+            const glm::mat4 model = normalizedSwordMatrix(
+                {offset.x, posY + 0.62f + offset.y, 0.36f},
+                playerAimDirection,
+                previewLength);
+            drawSwordModel(model, {0.18f, 0.66f, 1.00f, 1.0f});
+        }
+
+        if (now <= parryEffectUntil) {
+            const float pulse = 1.0f + std::sin(now * 22.0f) * 0.10f;
+            glm::mat4 model = glm::translate(
+                glm::mat4(1.0f),
+                mode3D ? glm::vec3(-0.08f, posY + 0.58f, 0.0f) : glm::vec3(0.0f, posY + 0.58f, 0.38f));
+            if (mode3D) {
+                model = glm::rotate(model, glm::half_pi<float>(), {0.0f, 1.0f, 0.0f});
+            }
+            model = glm::scale(model, glm::vec3(pulse));
+            drawColoredMesh(parryRingMesh, model, {0.22f, 1.00f, 0.94f, 0.86f});
+        }
+    }
+
     void drawWorld() {
         glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), {-posX, -1.0f, -posZ});
         modelMatrix = glm::scale(modelMatrix, glm::vec3(MapScale));
@@ -1005,19 +1796,29 @@ struct Mapa1::Impl {
     void drawPlayer() {
         const float step = wasMoving ? std::sin(static_cast<float>(glfwGetTime()) * 14.0f) : 0.0f;
         const float bounce = wasMoving ? std::fabs(step) * 0.035f : 0.0f;
-        const float tilt = wasMoving ? step * 4.0f : 0.0f;
+        const bool airborne = !grounded;
+        const float jumpStrength = airborne ? std::clamp(std::abs(velocityY) / JumpSpeed, 0.0f, 1.0f) : 0.0f;
+        const float walkTilt = wasMoving ? step * 4.0f : 0.0f;
+        const float jumpTilt = airborne ? (velocityY >= 0.0f ? -10.0f : 8.0f) * jumpStrength : 0.0f;
+        const glm::vec3 jumpScale = airborne
+            ? glm::vec3(1.0f - jumpStrength * 0.06f, 1.0f + jumpStrength * 0.10f, 1.0f)
+            : glm::vec3(1.0f);
+        const size_t textureIndex = airborne
+            ? static_cast<size_t>(velocityY >= 0.0f ? 2 : 4)
+            : static_cast<size_t>(currentFrame);
 
         glm::mat4 model = glm::translate(glm::mat4(1.0f), {0.0f, posY + bounce, 0.22f});
         model = glm::rotate(model, glm::radians(playerAngle), {0.0f, 1.0f, 0.0f});
-        model = glm::rotate(model, glm::radians(tilt), {0.0f, 0.0f, 1.0f});
+        model = glm::rotate(model, glm::radians(walkTilt + jumpTilt), {0.0f, 0.0f, 1.0f});
+        model = glm::scale(model, jumpScale);
         shader.setMat4("model", model);
         shader.setInt("modoRender", 0);
         shader.setInt("tex0", 0);
-        playerTextures[static_cast<size_t>(currentFrame)].bind();
+        playerTextures[textureIndex].bind();
         playerMesh.draw();
     }
 
-    bool initialize() {
+    bool initialize(bool enableAudio) {
         if (initialized) {
             return true;
         }
@@ -1033,11 +1834,16 @@ struct Mapa1::Impl {
             "assets/mapa1/player/vergil_walk3.png",
             "assets/mapa1/player/vergil_walk4.png"
         };
-        for (size_t i = 0; i < playerPaths.size(); ++i) {
-            if (!playerTextures[i].loadFromFile(resolveAssetPath(playerPaths[i]))) {
-                std::cerr << "Mapa 1 player texture could not be loaded: " << playerPaths[i] << std::endl;
+        for (size_t index = 0; index < playerPaths.size(); ++index) {
+            if (!playerTextures[index].loadFromFile(resolveAssetPath(playerPaths[index]))) {
+                std::cerr << "Mapa 1 player texture could not be loaded: " << playerPaths[index] << std::endl;
                 return false;
             }
+        }
+        projectileSwordModel = ModelLoader::loadModel(resolveAssetPath("assets/items/vergil_summoned_sword/scene.gltf"));
+        if (projectileSwordModel.meshes.empty()) {
+            std::cerr << "Mapa 1 summoned sword projectile could not be loaded." << std::endl;
+            return false;
         }
 
         if (!skyboxTexture.loadFromFile(resolveAssetPath("assets/mapa1/skybox/R.jpg"))) {
@@ -1050,9 +1856,19 @@ struct Mapa1::Impl {
             std::cerr << "Mapa 1 parkour textures could not be loaded." << std::endl;
             return false;
         }
+        if (!enemyTexture.loadFromFile(resolveAssetPath("assets/mapa1/enemies/Demon_Spritesheet.png"))) {
+            std::cerr << "Mapa 1 enemy texture could not be loaded." << std::endl;
+            return false;
+        }
         skyboxTexture.bind();
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        enemyTexture.bind();
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -1076,6 +1892,44 @@ struct Mapa1::Impl {
         platformMesh = Mesh::cube();
         coinMesh = Mesh::cylinder(32, 0.14f, 0.42f);
         starMesh = createStarMesh();
+        parryRingMesh = createParryRingMesh();
+
+        const std::array<AtlasFrame, 7> enemyIdleFrames = {
+            AtlasFrame{7, 19, 15, 13}, AtlasFrame{39, 19, 15, 13}, AtlasFrame{71, 19, 15, 13},
+            AtlasFrame{103, 19, 15, 13}, AtlasFrame{135, 19, 15, 13}, AtlasFrame{167, 19, 15, 13},
+            AtlasFrame{199, 19, 15, 13}
+        };
+        const std::array<AtlasFrame, 7> enemyRunFrames = {
+            AtlasFrame{7, 49, 15, 14}, AtlasFrame{39, 49, 15, 14}, AtlasFrame{71, 49, 15, 14},
+            AtlasFrame{103, 50, 15, 14}, AtlasFrame{135, 49, 15, 14}, AtlasFrame{167, 49, 15, 14},
+            AtlasFrame{199, 49, 15, 14}
+        };
+        const std::array<AtlasFrame, 6> enemyAttackFrames = {
+            AtlasFrame{8, 83, 16, 13}, AtlasFrame{40, 83, 16, 13}, AtlasFrame{71, 83, 16, 13},
+            AtlasFrame{103, 83, 16, 13}, AtlasFrame{135, 83, 16, 13}, AtlasFrame{167, 83, 16, 13}
+        };
+        const std::array<AtlasFrame, 4> enemyHurtFrames = {
+            AtlasFrame{8, 115, 15, 13}, AtlasFrame{40, 115, 15, 13},
+            AtlasFrame{72, 115, 15, 13}, AtlasFrame{104, 115, 15, 13}
+        };
+        const std::array<AtlasFrame, 9> enemyDeathFrames = {
+            AtlasFrame{8, 147, 15, 13}, AtlasFrame{40, 147, 15, 13}, AtlasFrame{72, 147, 15, 13},
+            AtlasFrame{104, 147, 15, 13}, AtlasFrame{135, 147, 15, 13}, AtlasFrame{167, 147, 15, 13},
+            AtlasFrame{194, 147, 15, 13}, AtlasFrame{218, 147, 15, 13}, AtlasFrame{239, 147, 15, 13}
+        };
+        auto buildEnemyMeshes = [](const auto& frames, std::vector<Mesh>& meshes) {
+            meshes.clear();
+            meshes.reserve(frames.size());
+            for (const AtlasFrame& frame : frames) {
+                meshes.push_back(createSpriteMesh(frame, 0.88f, 0.82f, 256, 192));
+            }
+        };
+        buildEnemyMeshes(enemyIdleFrames, enemyIdleMeshes);
+        buildEnemyMeshes(enemyRunFrames, enemyRunMeshes);
+        buildEnemyMeshes(enemyAttackFrames, enemyAttackMeshes);
+        buildEnemyMeshes(enemyHurtFrames, enemyHurtMeshes);
+        buildEnemyMeshes(enemyDeathFrames, enemyDeathMeshes);
+
         buildTerrainCollisions();
         if (terrainTriangles.empty()) {
             std::cerr << "Mapa 1 did not generate walkable terrain." << std::endl;
@@ -1090,10 +1944,32 @@ struct Mapa1::Impl {
         animationTime = 0.0f;
         wasMoving = false;
         tabPressed = false;
+        mouseAttackPressed = false;
+        chargingPlayerAttack = false;
+        parryPressed = false;
+        resetEnemiesRequested = false;
+        clearProjectilesRequested = false;
+        combatHintUntil = 0.0f;
+        playerAttackCooldown = 0.0f;
+        playerChargeTime = 0.0f;
+        playerInvulnerability = 0.0f;
+        parryUntil = 0.0f;
+        parryEffectUntil = 0.0f;
+        playerAimDirection = {1.0f, 0.0f, 0.0f};
+        playerHealth = PlayerMaximumHealth;
+        projectiles.clear();
         resetPlayer(true);
         resetMission();
+        resetEnemies();
+        if (enemies.size() != 10) {
+            std::cerr << "Mapa 1 expected 10 enemies but created " << enemies.size() << "." << std::endl;
+            return false;
+        }
         if (!validateParkourMission()) {
             return false;
+        }
+        if (enableAudio) {
+            initializeAudio();
         }
         initialized = true;
         return true;
@@ -1129,20 +2005,26 @@ struct Mapa1::Impl {
         drawWorld();
         drawParkourPlatforms();
         drawMissionItems(static_cast<float>(glfwGetTime()));
+        drawEnemies();
+        drawProjectiles();
+        drawCombatEffects(static_cast<float>(glfwGetTime()));
         drawPlayer();
     }
 
     void shutdown() {
+        shutdownAudio();
         terrainTriangles.clear();
         worldModels.clear();
         textureCache.clear();
         for (Texture2D& texture : playerTextures) {
             texture = Texture2D{};
         }
+        projectileSwordModel = {};
         skyboxTexture = Texture2D{};
         coinIconTexture = Texture2D{};
         platformSideTexture = Texture2D{};
         platformTopTexture = Texture2D{};
+        enemyTexture = Texture2D{};
         playerMesh = Mesh{};
         skyboxMesh = Mesh{};
         pipeBodyMesh = Mesh{};
@@ -1151,8 +2033,16 @@ struct Mapa1::Impl {
         platformMesh = Mesh{};
         coinMesh = Mesh{};
         starMesh = Mesh{};
+        parryRingMesh = Mesh{};
+        enemyIdleMeshes.clear();
+        enemyRunMeshes.clear();
+        enemyAttackMeshes.clear();
+        enemyHurtMeshes.clear();
+        enemyDeathMeshes.clear();
         coins.clear();
         star = {};
+        enemies.clear();
+        projectiles.clear();
         shader = Shader{};
         initialized = false;
     }
@@ -1164,8 +2054,12 @@ Mapa1::Mapa1()
 
 Mapa1::~Mapa1() = default;
 
-bool Mapa1::initialize() {
-    return m_impl->initialize();
+bool Mapa1::initialize(bool enableAudio) {
+    return m_impl->initialize(enableAudio);
+}
+
+bool Mapa1::runCombatSmokeTest() {
+    return m_impl->runCombatSmokeTest();
 }
 
 void Mapa1::render(GLFWwindow* window, float deltaTime) {
@@ -1192,8 +2086,36 @@ bool Mapa1::showStarMessage(float timeSeconds) const {
     return timeSeconds <= m_impl->starMessageUntil;
 }
 
+bool Mapa1::showCombatHint(float timeSeconds) const {
+    return timeSeconds <= m_impl->combatHintUntil;
+}
+
 bool Mapa1::levelComplete() const {
     return m_impl->completed;
+}
+
+int Mapa1::remainingEnemyCount() const {
+    return m_impl->remainingEnemyCount();
+}
+
+int Mapa1::currentHealth() const {
+    return m_impl->playerHealth;
+}
+
+int Mapa1::maximumHealth() const {
+    return PlayerMaximumHealth;
+}
+
+float Mapa1::chargeRatio() const {
+    return std::clamp(m_impl->playerChargeTime / PlayerChargeTime, 0.0f, 1.0f);
+}
+
+bool Mapa1::chargingAttack() const {
+    return m_impl->chargingPlayerAttack;
+}
+
+bool Mapa1::parryActive(float timeSeconds) const {
+    return timeSeconds <= m_impl->parryEffectUntil;
 }
 
 const Texture2D& Mapa1::coinIconTexture() const {
