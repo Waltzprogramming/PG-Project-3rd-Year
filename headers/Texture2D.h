@@ -16,6 +16,7 @@ public:
     ~Texture2D();
 
     bool loadFromFile(const std::string& path, bool srgb = false);
+    bool loadFromMemory(const unsigned char* bytes, int length, bool srgb = false);
     void createFromRGBA(int width, int height, const unsigned char* pixels, bool srgb = false);
     void createChecker(int width, int height, const glm::vec3& a, const glm::vec3& b, int cellSize);
     void createLava(int width, int height);

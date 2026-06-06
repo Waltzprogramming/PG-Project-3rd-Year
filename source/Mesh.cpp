@@ -173,6 +173,48 @@ Mesh Mesh::cone(int segments, float height, float radius) {
     return mesh;
 }
 
+Mesh Mesh::sphere(int segments, int rings, float radius) {
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+
+    segments = std::max(segments, 8);
+    rings = std::max(rings, 4);
+
+    for (int ring = 0; ring <= rings; ++ring) {
+        const float v = static_cast<float>(ring) / static_cast<float>(rings);
+        const float phi = v * glm::pi<float>();
+        const float y = std::cos(phi) * radius;
+        const float ringRadius = std::sin(phi) * radius;
+
+        for (int segment = 0; segment <= segments; ++segment) {
+            const float u = static_cast<float>(segment) / static_cast<float>(segments);
+            const float theta = u * glm::two_pi<float>();
+            const float x = std::cos(theta) * ringRadius;
+            const float z = std::sin(theta) * ringRadius;
+            const glm::vec3 position{x, y, z};
+            const glm::vec3 normal = glm::length(position) > 0.0001f
+                ? glm::normalize(position)
+                : glm::vec3(0.0f, 1.0f, 0.0f);
+            vertices.push_back(makeVertex(position, normal, {u, 1.0f - v}));
+        }
+    }
+
+    const int stride = segments + 1;
+    for (int ring = 0; ring < rings; ++ring) {
+        for (int segment = 0; segment < segments; ++segment) {
+            const unsigned int a = static_cast<unsigned int>(ring * stride + segment);
+            const unsigned int b = a + 1;
+            const unsigned int c = a + static_cast<unsigned int>(stride);
+            const unsigned int d = c + 1;
+            indices.insert(indices.end(), {a, c, b, b, c, d});
+        }
+    }
+
+    Mesh mesh;
+    mesh.upload(vertices, indices);
+    return mesh;
+}
+
 Mesh Mesh::ramp() {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;

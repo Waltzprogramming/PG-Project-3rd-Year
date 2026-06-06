@@ -3,6 +3,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <array>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -13,8 +14,6 @@
 
 namespace {
 constexpr int MaxLights = 24;
-const std::filesystem::path WorldDirectory = std::filesystem::path("assets") / "Mundos" / "FreezeezyPeak";
-const std::filesystem::path ParentWorldDirectory = std::filesystem::path("..") / ".." / "assets" / "Mundos" / "FreezeezyPeak";
 
 std::string lowerExtension(const std::filesystem::path& path) {
     std::string extension = path.extension().string();
@@ -22,6 +21,17 @@ std::string lowerExtension(const std::filesystem::path& path) {
         return static_cast<char>(std::tolower(value));
     });
     return extension;
+}
+
+std::string lowerCopy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+bool containsToken(const std::string& text, const char* token) {
+    return text.find(token) != std::string::npos;
 }
 
 glm::mat4 transform(glm::vec3 position, glm::vec3 rotation, glm::vec3 scale) {
@@ -34,7 +44,7 @@ glm::mat4 transform(glm::vec3 position, glm::vec3 rotation, glm::vec3 scale) {
     return model;
 }
 
-std::filesystem::path resolveTexturePath(const std::string& rawPath) {
+std::filesystem::path resolveTexturePath(const std::string& rawPath, const std::filesystem::path& worldDirectory, const std::filesystem::path& parentWorldDirectory) {
     if (rawPath.empty()) {
         return {};
     }
@@ -43,10 +53,10 @@ std::filesystem::path resolveTexturePath(const std::string& rawPath) {
     const std::filesystem::path fileName = original.filename();
     const std::filesystem::path candidates[] = {
         original,
-        WorldDirectory / "textures" / fileName,
-        WorldDirectory / fileName,
-        ParentWorldDirectory / "textures" / fileName,
-        ParentWorldDirectory / fileName
+        worldDirectory / "textures" / fileName,
+        worldDirectory / fileName,
+        parentWorldDirectory / "textures" / fileName,
+        parentWorldDirectory / fileName
     };
 
     for (const auto& candidate : candidates) {
@@ -73,13 +83,15 @@ void bindMaterial(const Shader& shader, const Material& material) {
 }
 }
 
-void Environment::create() {
+void Environment::create(const std::string& levelDirectory, bool loadImportedTextures) {
     m_objects.clear();
     m_levelParts.clear();
     m_lights.clear();
     m_collisionPreview.clear();
     m_loadedTextures.clear();
     m_hasReferenceLevel = false;
+    m_levelDirectory = levelDirectory;
+    m_loadImportedTextures = loadImportedTextures;
     m_worldMin = glm::vec3(0.0f);
     m_worldMax = glm::vec3(0.0f);
     m_recommendedSpawn = {0.0f, 6.0f, 0.0f};
@@ -87,20 +99,42 @@ void Environment::create() {
     createMaterials();
 
     if (!loadReferenceLevel()) {
-        std::cerr << "Freezeezy Peak model could not be loaded from assets/Mundos/FreezeezyPeak." << std::endl;
+        std::cerr << "Level model could not be loaded from " << levelDirectory << "." << std::endl;
     }
 }
 
-void Environment::render(const Shader& sceneShader, const Shader& lavaShader, float timeSeconds) const {
+void Environment::render(const Shader& sceneShader, const Shader& lavaShader, float timeSeconds, const glm::vec3& cameraPosition) const {
+    const bool marioMap4 = m_levelDirectory.find("mapamian") != std::string::npos ||
+        m_levelDirectory.find("mapa verde") != std::string::npos ||
+        m_levelDirectory.find("mapa 4") != std::string::npos;
     if (m_hasReferenceLevel) {
-        renderReferenceLevel(sceneShader);
+        sceneShader.use();
+        sceneShader.setFloat("uTime", timeSeconds);
+        sceneShader.setMat4("uModel", m_levelTransform);
+        for (const ImportedLevelPart& part : m_levelParts) {
+            if (marioMap4 && !shouldRenderBounds(part.sourceBounds, cameraPosition, 3.6f)) {
+                continue;
+            }
+            bindMaterial(sceneShader, part.material);
+            part.mesh.draw();
+        }
     }
 
+    const Shader* activeShader = nullptr;
     for (const SceneObject& object : m_objects) {
+        const float padding = object.surface == GameplaySurface::Decoration
+            ? (marioMap4 ? 2.1f : 3.5f)
+            : (marioMap4 ? 5.0f : 8.0f);
+        if (marioMap4 && !shouldRenderBounds(worldBounds(object), cameraPosition, padding)) {
+            continue;
+        }
         const Shader& shader = object.lava ? lavaShader : sceneShader;
-        shader.use();
+        if (activeShader != &shader) {
+            shader.use();
+            shader.setFloat("uTime", timeSeconds);
+            activeShader = &shader;
+        }
         shader.setMat4("uModel", modelMatrix(object));
-        shader.setFloat("uTime", timeSeconds);
 
         if (object.lava) {
             shader.setVec3("uBaseColor", object.material.baseColor);
@@ -235,15 +269,24 @@ void Environment::buildCastle() {
 
 bool Environment::loadReferenceLevel() {
     std::vector<std::filesystem::path> candidates;
+    const std::filesystem::path sourcePath = std::filesystem::path(m_levelDirectory);
+    const std::filesystem::path worldDirectory = std::filesystem::is_regular_file(sourcePath) ? sourcePath.parent_path() : sourcePath;
+    const std::filesystem::path parentWorldDirectory = std::filesystem::path("..") / ".." / worldDirectory;
     const std::filesystem::path roots[] = {
-        WorldDirectory,
-        ParentWorldDirectory
+        worldDirectory,
+        parentWorldDirectory
     };
     const std::string preferredExtensions[] = {
+        ".glb",
+        ".gltf",
         ".obj",
         ".dae",
         ".fbx"
     };
+
+    if (std::filesystem::exists(sourcePath) && std::filesystem::is_regular_file(sourcePath)) {
+        candidates.push_back(sourcePath);
+    }
 
     for (const auto& root : roots) {
         if (!std::filesystem::exists(root)) {
@@ -259,31 +302,84 @@ bool Environment::loadReferenceLevel() {
         }
     }
 
+    const bool rawMapamianPath = m_levelDirectory.find("mapamian") != std::string::npos;
+    const bool marioMap4Path =
+        rawMapamianPath ||
+        m_levelDirectory.find("mapa verde") != std::string::npos ||
+        m_levelDirectory.find("mapa 4") != std::string::npos;
+
     LoadedModel selected;
     int selectedTextureCount = -1;
 
-    for (const auto& candidate : candidates) {
-        if (!std::filesystem::exists(candidate)) {
-            continue;
+    if (marioMap4Path) {
+        for (const auto& candidate : candidates) {
+            if (!std::filesystem::exists(candidate)) {
+                continue;
+            }
+
+            selected = ModelLoader::loadModel(candidate.string());
+            if (!selected.meshes.empty()) {
+                selectedTextureCount = static_cast<int>(std::count_if(selected.materials.begin(), selected.materials.end(), [](const LoadedMaterial& material) {
+                    return !material.diffuseTexturePath.empty();
+                }));
+                break;
+            }
         }
+    } else {
+        for (const auto& candidate : candidates) {
+            if (!std::filesystem::exists(candidate)) {
+                continue;
+            }
 
-        LoadedModel model = ModelLoader::loadModel(candidate.string());
-        if (model.meshes.empty()) {
-            continue;
-        }
+            LoadedModel model = ModelLoader::loadModel(candidate.string());
+            if (model.meshes.empty()) {
+                continue;
+            }
 
-        const int textureCount = static_cast<int>(std::count_if(model.materials.begin(), model.materials.end(), [](const LoadedMaterial& material) {
-            return !material.diffuseTexturePath.empty();
-        }));
+            const int textureCount = static_cast<int>(std::count_if(model.materials.begin(), model.materials.end(), [](const LoadedMaterial& material) {
+                return !material.diffuseTexturePath.empty();
+            }));
 
-        if (selected.meshes.empty() || textureCount > selectedTextureCount) {
-            selected = std::move(model);
-            selectedTextureCount = textureCount;
+            if (selected.meshes.empty() || textureCount > selectedTextureCount) {
+                selected = std::move(model);
+                selectedTextureCount = textureCount;
+            }
         }
     }
 
     if (selected.meshes.empty()) {
         return false;
+    }
+
+    const bool rawMapamian = rawMapamianPath;
+    const bool marioMap4 = marioMap4Path;
+
+    if (rawMapamian) {
+        const std::filesystem::path mainPath = std::filesystem::path(selected.sourcePath);
+        const std::filesystem::path rootDirectory = mainPath.parent_path();
+        auto appendSiblingModel = [&](const char* siblingName) {
+            const std::filesystem::path siblingPath = rootDirectory / siblingName;
+            if (!std::filesystem::exists(siblingPath) || siblingPath == mainPath) {
+                return;
+            }
+
+            LoadedModel sibling = ModelLoader::loadModel(siblingPath.string());
+            if (sibling.meshes.empty()) {
+                return;
+            }
+
+            const unsigned int materialOffset = static_cast<unsigned int>(selected.materials.size());
+            selected.materials.insert(selected.materials.end(), sibling.materials.begin(), sibling.materials.end());
+            for (LoadedMesh& mesh : sibling.meshes) {
+                mesh.materialIndex += materialOffset;
+                selected.meshes.push_back(std::move(mesh));
+            }
+            selected.minBounds = glm::min(selected.minBounds, sibling.minBounds);
+            selected.maxBounds = glm::max(selected.maxBounds, sibling.maxBounds);
+        };
+
+        appendSiblingModel("CourseSelectWallW1.dae");
+        appendSiblingModel("CourseSelectWaveW1.dae");
     }
 
     m_levelMin = selected.minBounds;
@@ -304,15 +400,51 @@ bool Environment::loadReferenceLevel() {
     float bestSpawnScore = std::numeric_limits<float>::lowest();
     for (LoadedMesh& mesh : selected.meshes) {
         Material material;
+        std::string importedMaterialName;
+        std::string importedTexturePath;
         if (mesh.materialIndex < selected.materials.size()) {
             const LoadedMaterial& imported = selected.materials[mesh.materialIndex];
+            importedMaterialName = imported.name;
+            importedTexturePath = imported.diffuseTexturePath;
             material.baseColor = imported.diffuseColor;
             material.opacity = imported.opacity;
-            material.texture = textureForPath(imported.diffuseTexturePath);
+            if (m_loadImportedTextures) {
+                material.texture = textureForPath(imported.diffuseTexturePath);
+                if ((!material.texture || !material.texture->valid()) && !imported.name.empty()) {
+                    const std::filesystem::path materialFallback =
+                        std::filesystem::path("assets") / "mapa 4" / "textures" / (imported.name + "_baseColor.png");
+                    if (std::filesystem::exists(materialFallback)) {
+                        auto fallbackTexture = std::make_shared<Texture2D>();
+                        if (fallbackTexture->loadFromFile(materialFallback.string(), false)) {
+                            material.texture = fallbackTexture;
+                            m_loadedTextures.push_back(fallbackTexture);
+                        }
+                    }
+                }
+                if ((!material.texture || !material.texture->valid()) && !imported.embeddedTextureData.empty()) {
+                    auto embedded = std::make_shared<Texture2D>();
+                    if (imported.embeddedTextureCompressed) {
+                        if (embedded->loadFromMemory(imported.embeddedTextureData.data(), static_cast<int>(imported.embeddedTextureData.size()), false)) {
+                            material.texture = embedded;
+                            m_loadedTextures.push_back(embedded);
+                        }
+                    } else if (imported.embeddedTextureWidth > 0 && imported.embeddedTextureHeight > 0) {
+                        embedded->createFromRGBA(imported.embeddedTextureWidth, imported.embeddedTextureHeight, imported.embeddedTextureData.data(), false);
+                        material.texture = embedded;
+                        m_loadedTextures.push_back(embedded);
+                    }
+                }
+            }
         }
-        material.roughness = 0.9f;
+        material.roughness = rawMapamian ? 0.9f : (marioMap4 ? 0.82f : 0.9f);
         material.checkerStrength = 0.0f;
-        material.fogAmount = 0.42f;
+        material.fogAmount = rawMapamian ? 0.42f : (marioMap4 ? 0.18f : 0.42f);
+
+        const std::string surfaceKey = lowerCopy(mesh.name + " " + importedMaterialName + " " + importedTexturePath);
+        const bool waterLike = containsToken(surfaceKey, "sea");
+        const bool shadowLike = containsToken(surfaceKey, "kage") || containsToken(surfaceKey, "shadow");
+        const bool undersideLike = containsToken(surfaceKey, "under");
+        const bool excludedFromGameplay = marioMap4 && (waterLike || shadowLike || undersideLike);
 
         ImportedLevelPart part;
         part.name = mesh.name;
@@ -322,11 +454,15 @@ bool Environment::loadReferenceLevel() {
         part.mesh = std::move(mesh.mesh);
         if (mesh.collisionBoxes.empty()) {
             const Bounds fallbackBounds = transformedLevelBounds(mesh.minBounds, mesh.maxBounds);
-            m_collisionPreview.push_back(fallbackBounds);
+            if (!excludedFromGameplay) {
+                m_collisionPreview.push_back(fallbackBounds);
+            }
         } else {
             for (const auto& box : mesh.collisionBoxes) {
                 const Bounds bounds = transformedLevelBounds(box.minBounds, box.maxBounds);
-                m_collisionPreview.push_back(bounds);
+                if (!excludedFromGameplay) {
+                    m_collisionPreview.push_back(bounds);
+                }
                 m_worldMin = glm::min(m_worldMin, bounds.center - bounds.halfExtent);
                 m_worldMax = glm::max(m_worldMax, bounds.center + bounds.halfExtent);
 
@@ -334,7 +470,7 @@ bool Environment::loadReferenceLevel() {
                 const float top = bounds.center.y + bounds.halfExtent.y;
                 const float distanceFromCenter = glm::length(glm::vec2(bounds.center.x, bounds.center.z));
                 const bool floorLike = std::abs(box.normal.y) > 0.55f && bounds.halfExtent.y < 0.22f && horizontalArea > 0.20f;
-                if (floorLike && top > 0.2f) {
+                if (!excludedFromGameplay && floorLike && top > 0.2f) {
                     const float score = horizontalArea - top * 0.22f - distanceFromCenter * 0.035f;
                     if (score > bestSpawnScore) {
                         bestSpawnScore = score;
@@ -353,32 +489,30 @@ bool Environment::loadReferenceLevel() {
         m_recommendedSpawn = {levelBounds.center.x, m_worldMin.y + 5.0f, levelBounds.center.z};
     }
 
-    m_lights.push_back({{0.0f, 11.0f, 7.0f}, {0.62f, 0.78f, 1.0f}, 1.6f, 34.0f});
-    m_lights.push_back({{-12.0f, 6.5f, -8.0f}, {0.95f, 0.82f, 0.58f}, 1.1f, 18.0f});
-    m_lights.push_back({{12.0f, 6.5f, -8.0f}, {0.95f, 0.82f, 0.58f}, 1.1f, 18.0f});
-    m_lights.push_back({{0.0f, 5.5f, -18.0f}, {0.42f, 0.66f, 1.0f}, 0.9f, 22.0f});
+    if (!marioMap4) {
+        m_lights.push_back({{0.0f, 11.0f, 7.0f}, {0.62f, 0.78f, 1.0f}, 1.6f, 34.0f});
+        m_lights.push_back({{-12.0f, 6.5f, -8.0f}, {0.95f, 0.82f, 0.58f}, 1.1f, 18.0f});
+        m_lights.push_back({{12.0f, 6.5f, -8.0f}, {0.95f, 0.82f, 0.58f}, 1.1f, 18.0f});
+        m_lights.push_back({{0.0f, 5.5f, -18.0f}, {0.42f, 0.66f, 1.0f}, 0.9f, 22.0f});
+    }
 
     m_hasReferenceLevel = true;
-    std::cout << "Loaded Freezeezy Peak world: " << selected.sourcePath << std::endl;
+    std::cout << "Loaded world: " << selected.sourcePath << std::endl;
     std::cout << "Meshes: " << m_levelParts.size() << ", materials: " << selected.materials.size() << ", textured materials: " << selectedTextureCount << std::endl;
     return true;
 }
 
-void Environment::renderReferenceLevel(const Shader& sceneShader) const {
-    sceneShader.use();
-    sceneShader.setMat4("uModel", m_levelTransform);
-    for (const ImportedLevelPart& part : m_levelParts) {
-        bindMaterial(sceneShader, part.material);
-        part.mesh.draw();
-    }
-}
+void Environment::renderReferenceLevel(const Shader&) const {}
 
 std::shared_ptr<Texture2D> Environment::textureForPath(const std::string& path) {
     if (path.empty()) {
         return nullptr;
     }
 
-    const std::filesystem::path resolvedPath = resolveTexturePath(path);
+    const std::filesystem::path sourcePath = std::filesystem::path(m_levelDirectory);
+    const std::filesystem::path worldDirectory = std::filesystem::is_regular_file(sourcePath) ? sourcePath.parent_path() : sourcePath;
+    const std::filesystem::path parentWorldDirectory = std::filesystem::path("..") / ".." / worldDirectory;
+    const std::filesystem::path resolvedPath = resolveTexturePath(path, worldDirectory, parentWorldDirectory);
     const std::string normalizedPath = resolvedPath.string();
 
     for (const auto& texture : m_loadedTextures) {
@@ -484,4 +618,10 @@ Bounds Environment::transformedLevelBounds(const glm::vec3& minBounds, const glm
     bounds.center = (worldMin + worldMax) * 0.5f;
     bounds.halfExtent = (worldMax - worldMin) * 0.5f;
     return bounds;
+}
+
+bool Environment::shouldRenderBounds(const Bounds& bounds, const glm::vec3& cameraPosition, float padding) const {
+    const glm::vec3 allowed = bounds.halfExtent + glm::vec3(44.0f + padding, 26.0f + padding, 44.0f + padding);
+    const glm::vec3 delta = glm::abs(bounds.center - cameraPosition);
+    return delta.x <= allowed.x && delta.y <= allowed.y && delta.z <= allowed.z;
 }

@@ -4,6 +4,7 @@
 
 #include <glm/glm.hpp>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,10 @@ struct LoadedMaterial {
     glm::vec3 diffuseColor{1.0f};
     float opacity{1.0f};
     std::string diffuseTexturePath;
+    std::vector<std::uint8_t> embeddedTextureData;
+    int embeddedTextureWidth{0};
+    int embeddedTextureHeight{0};
+    bool embeddedTextureCompressed{false};
 };
 
 struct LoadedModel {

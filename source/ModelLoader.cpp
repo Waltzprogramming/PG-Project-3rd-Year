@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <cstdlib>
+#include <unordered_map>
 
 namespace {
 glm::vec3 toGlm(const aiVector3D& value) {
@@ -45,7 +47,12 @@ std::string texturePathForMaterial(const aiMaterial* material, const std::filesy
 
     for (aiTextureType type : types) {
         if (material->GetTextureCount(type) > 0 && material->GetTexture(type, 0, &texturePath) == AI_SUCCESS) {
-            std::filesystem::path path(decodePath(texturePath.C_Str()));
+            const std::string decoded = decodePath(texturePath.C_Str());
+            if (!decoded.empty() && decoded[0] == '*') {
+                return decoded;
+            }
+
+            std::filesystem::path path(decoded);
             if (path.is_relative()) {
                 path = directory / path;
             }
@@ -55,7 +62,44 @@ std::string texturePathForMaterial(const aiMaterial* material, const std::filesy
     return {};
 }
 
-LoadedMaterial readMaterial(const aiMaterial* material, const std::filesystem::path& directory) {
+void assignEmbeddedTexture(const aiScene* scene, LoadedMaterial& loaded) {
+    if (scene == nullptr || loaded.diffuseTexturePath.empty() || loaded.diffuseTexturePath[0] != '*') {
+        return;
+    }
+
+    const char* begin = loaded.diffuseTexturePath.c_str() + 1;
+    char* end = nullptr;
+    const long textureIndex = std::strtol(begin, &end, 10);
+    if (end == begin || textureIndex < 0 || static_cast<unsigned int>(textureIndex) >= scene->mNumTextures) {
+        return;
+    }
+
+    const aiTexture* texture = scene->mTextures[textureIndex];
+    if (texture == nullptr) {
+        return;
+    }
+
+    if (texture->mHeight == 0) {
+        const auto* bytes = reinterpret_cast<const std::uint8_t*>(texture->pcData);
+        loaded.embeddedTextureData.assign(bytes, bytes + texture->mWidth);
+        loaded.embeddedTextureCompressed = true;
+    } else {
+        loaded.embeddedTextureWidth = static_cast<int>(texture->mWidth);
+        loaded.embeddedTextureHeight = static_cast<int>(texture->mHeight);
+        loaded.embeddedTextureData.resize(static_cast<size_t>(texture->mWidth) * static_cast<size_t>(texture->mHeight) * 4u);
+        for (unsigned int i = 0; i < texture->mWidth * texture->mHeight; ++i) {
+            const aiTexel& texel = texture->pcData[i];
+            const size_t offset = static_cast<size_t>(i) * 4u;
+            loaded.embeddedTextureData[offset + 0] = texel.r;
+            loaded.embeddedTextureData[offset + 1] = texel.g;
+            loaded.embeddedTextureData[offset + 2] = texel.b;
+            loaded.embeddedTextureData[offset + 3] = texel.a;
+        }
+        loaded.embeddedTextureCompressed = false;
+    }
+}
+
+LoadedMaterial readMaterial(const aiScene* scene, const aiMaterial* material, const std::filesystem::path& directory) {
     LoadedMaterial loaded;
 
     aiString name;
@@ -80,6 +124,7 @@ LoadedMaterial readMaterial(const aiMaterial* material, const std::filesystem::p
     }
 
     loaded.diffuseTexturePath = texturePathForMaterial(material, directory);
+    assignEmbeddedTexture(scene, loaded);
     if (loaded.opacity <= 0.001f) {
         loaded.opacity = 1.0f;
     }
@@ -218,7 +263,7 @@ LoadedModel ModelLoader::loadModel(const std::string& path) {
     const std::filesystem::path directory = std::filesystem::path(path).parent_path();
     model.materials.reserve(scene->mNumMaterials);
     for (unsigned int i = 0; i < scene->mNumMaterials; ++i) {
-        model.materials.push_back(readMaterial(scene->mMaterials[i], directory));
+        model.materials.push_back(readMaterial(scene, scene->mMaterials[i], directory));
     }
 
     model.meshes.reserve(scene->mNumMeshes);

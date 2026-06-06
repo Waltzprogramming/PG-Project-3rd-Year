@@ -37,6 +37,7 @@ public:
     static Mesh plane();
     static Mesh cylinder(int segments, float height = 1.0f, float radius = 0.5f);
     static Mesh cone(int segments, float height = 1.0f, float radius = 0.5f);
+    static Mesh sphere(int segments, int rings, float radius = 0.5f);
     static Mesh ramp();
 
 private:

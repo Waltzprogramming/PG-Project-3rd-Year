@@ -62,14 +62,15 @@ struct ImportedLevelPart {
 
 class Environment {
 public:
-    void create();
-    void render(const Shader& sceneShader, const Shader& lavaShader, float timeSeconds) const;
+    void create(const std::string& levelDirectory = "assets/Mundos/FreezeezyPeak", bool loadImportedTextures = true);
+    void render(const Shader& sceneShader, const Shader& lavaShader, float timeSeconds, const glm::vec3& cameraPosition) const;
 
     const std::vector<PointLight>& lights() const { return m_lights; }
     const std::vector<Bounds>& collisionPreview() const { return m_collisionPreview; }
     const glm::vec3& recommendedSpawnPoint() const { return m_recommendedSpawn; }
     const glm::vec3& worldMin() const { return m_worldMin; }
     const glm::vec3& worldMax() const { return m_worldMax; }
+    const std::string& levelSource() const { return m_levelDirectory; }
 
 private:
     void createMaterials();
@@ -89,12 +90,15 @@ private:
     glm::mat4 modelMatrix(const SceneObject& object) const;
     Bounds worldBounds(const SceneObject& object) const;
     Bounds transformedLevelBounds(const glm::vec3& minBounds, const glm::vec3& maxBounds) const;
+    bool shouldRenderBounds(const Bounds& bounds, const glm::vec3& cameraPosition, float padding) const;
 
     std::vector<SceneObject> m_objects;
     std::vector<ImportedLevelPart> m_levelParts;
     std::vector<PointLight> m_lights;
     std::vector<Bounds> m_collisionPreview;
     std::vector<std::shared_ptr<Texture2D>> m_loadedTextures;
+    std::string m_levelDirectory;
+    bool m_loadImportedTextures{true};
     glm::mat4 m_levelTransform{1.0f};
     glm::vec3 m_levelMin{0.0f};
     glm::vec3 m_levelMax{0.0f};
