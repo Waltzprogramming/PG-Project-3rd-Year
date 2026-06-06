@@ -51,6 +51,25 @@ bool Texture2D::loadFromFile(const std::string& path, bool srgb) {
     return true;
 }
 
+bool Texture2D::loadFromMemory(const unsigned char* bytes, int length, bool srgb) {
+    if (bytes == nullptr || length <= 0) {
+        return false;
+    }
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char* pixels = stbi_load_from_memory(bytes, length, &width, &height, &channels, 4);
+    if (!pixels) {
+        return false;
+    }
+    uploadRGBA(width, height, pixels, srgb);
+    m_sourcePath.clear();
+    stbi_image_free(pixels);
+    return true;
+}
+
 void Texture2D::createFromRGBA(int width, int height, const unsigned char* pixels, bool srgb) {
     uploadRGBA(width, height, pixels, srgb);
     m_sourcePath.clear();

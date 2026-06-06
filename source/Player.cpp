@@ -4,6 +4,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -33,10 +34,16 @@ std::filesystem::path resolvePath(const std::string& rawPath) {
     const std::filesystem::path fileName = original.filename();
     const std::filesystem::path candidates[] = {
         original,
+        std::filesystem::path("assets") / "characters" / "deadpool" / "textures" / fileName,
+        std::filesystem::path("assets") / "mapa 4" / "luffy" / "textures" / fileName,
         std::filesystem::path("assets") / "characters" / fileName,
+        std::filesystem::path("assets") / "characters" / "luffy" / "textures" / fileName,
         std::filesystem::path("assets") / "textures" / "characters" / fileName,
+        std::filesystem::path("..") / ".." / "assets" / "characters" / "deadpool" / "textures" / fileName,
+        std::filesystem::path("..") / ".." / "assets" / "mapa 4" / "luffy" / "textures" / fileName,
         std::filesystem::path("..") / ".." / original,
         std::filesystem::path("..") / ".." / "assets" / "characters" / fileName,
+        std::filesystem::path("..") / ".." / "assets" / "characters" / "luffy" / "textures" / fileName,
         std::filesystem::path("..") / ".." / "assets" / "textures" / "characters" / fileName
     };
 
@@ -46,6 +53,14 @@ std::filesystem::path resolvePath(const std::string& rawPath) {
         }
     }
     return original;
+}
+
+std::string normalizeAssetKey(std::string path) {
+    std::replace(path.begin(), path.end(), '\\', '/');
+    std::transform(path.begin(), path.end(), path.begin(), [](unsigned char value) {
+        return static_cast<char>(std::tolower(value));
+    });
+    return path;
 }
 }
 
@@ -75,7 +90,7 @@ bool Player::load(const std::string& modelPath) {
                 const LoadedMaterial& material = model.materials[mesh.materialIndex];
                 part.material.baseColor = material.diffuseColor;
                 part.material.opacity = material.opacity;
-                part.material.texture = loadTexture(material.diffuseTexturePath);
+                part.material.texture = loadTexture(material);
             }
             part.material.roughness = 1.0f;
             part.material.checkerStrength = 0.0f;
@@ -87,15 +102,31 @@ bool Player::load(const std::string& modelPath) {
 
     m_modelCenter = (m_modelMin + m_modelMax) * 0.5f;
     const float modelHeight = std::max(m_modelMax.y - m_modelMin.y, 0.001f);
-    const float desiredHeight = 0.76f;
+    const std::string normalizedModelPath = normalizeAssetKey(resolvePath(modelPath).string());
+    m_deadpoolVariant = normalizedModelPath.find("assets/characters/deadpool") != std::string::npos;
+    m_marioMapVariant =
+        normalizedModelPath.find("assets/mapa 4/luffy") != std::string::npos ||
+        m_deadpoolVariant;
+    const float desiredHeight = m_deadpoolVariant ? 0.62f : (m_marioMapVariant ? 0.50f : 0.76f);
     m_modelScale = desiredHeight / modelHeight;
-    m_collisionHalf = {0.16f, desiredHeight * 0.5f, 0.12f};
+    m_collisionHalf = m_deadpoolVariant
+        ? glm::vec3(0.17f, desiredHeight * 0.5f, 0.13f)
+        : (m_marioMapVariant
+            ? glm::vec3(0.14f, desiredHeight * 0.5f, 0.11f)
+            : glm::vec3(0.16f, desiredHeight * 0.5f, 0.12f));
+    m_modelYawOffset = 0.0f;
     return true;
 }
 
 void Player::spawnAt(const glm::vec3& feetPosition) {
     m_position = feetPosition;
     m_spawnPoint = feetPosition;
+    m_velocity = {0.0f, 0.0f, 0.0f};
+    m_grounded = false;
+}
+
+void Player::teleportTo(const glm::vec3& feetPosition) {
+    m_position = feetPosition;
     m_velocity = {0.0f, 0.0f, 0.0f};
     m_grounded = false;
 }
@@ -158,11 +189,19 @@ void Player::updateHorizontalVelocity(const PlayerInput& input, float deltaTime)
         desiredDirection = glm::normalize(desiredDirection);
     }
 
-    if (glm::length(desiredDirection) > 0.01f) {
+    if (input.mode == PlayMode::Mode2D) {
+        if (input.move.x > 0.01f) {
+            m_facingYaw = glm::half_pi<float>();
+        } else if (input.move.x < -0.01f) {
+            m_facingYaw = -glm::half_pi<float>();
+        }
+    } else if (glm::length(desiredDirection) > 0.01f) {
         m_facingYaw = std::atan2(desiredDirection.x, desiredDirection.z);
     }
 
-    const float maxSpeed = input.mode == PlayMode::Mode3D ? 4.25f : 4.65f;
+    const float maxSpeed = m_marioMapVariant
+        ? (input.mode == PlayMode::Mode3D ? 2.55f : 2.85f)
+        : (input.mode == PlayMode::Mode3D ? 4.25f : 4.65f);
     const glm::vec3 targetVelocity = desiredDirection * maxSpeed;
     const float acceleration = m_grounded ? 30.0f : 12.0f;
     const float deceleration = m_grounded ? 18.0f : 5.0f;
@@ -228,7 +267,7 @@ void Player::keepInsideWorld(const glm::vec3& worldMin, const glm::vec3& worldMa
 glm::mat4 Player::modelMatrix() const {
     glm::mat4 model(1.0f);
     model = glm::translate(model, m_position);
-    model = glm::rotate(model, m_facingYaw, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, m_facingYaw + m_modelYawOffset, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(m_modelScale));
     model = glm::translate(model, {-m_modelCenter.x, -m_modelMin.y, -m_modelCenter.z});
     return model;
@@ -266,4 +305,29 @@ std::shared_ptr<Texture2D> Player::loadTexture(const std::string& path) {
     }
     m_textures.push_back(texture);
     return texture;
+}
+
+std::shared_ptr<Texture2D> Player::loadTexture(const LoadedMaterial& material) {
+    auto texture = loadTexture(material.diffuseTexturePath);
+    if (texture && texture->valid()) {
+        return texture;
+    }
+
+    if (material.embeddedTextureData.empty()) {
+        return nullptr;
+    }
+
+    auto embedded = std::make_shared<Texture2D>();
+    if (material.embeddedTextureCompressed) {
+        if (!embedded->loadFromMemory(material.embeddedTextureData.data(), static_cast<int>(material.embeddedTextureData.size()), false)) {
+            return nullptr;
+        }
+    } else if (material.embeddedTextureWidth > 0 && material.embeddedTextureHeight > 0) {
+        embedded->createFromRGBA(material.embeddedTextureWidth, material.embeddedTextureHeight, material.embeddedTextureData.data(), false);
+    } else {
+        return nullptr;
+    }
+
+    m_textures.push_back(embedded);
+    return embedded;
 }

@@ -4,6 +4,10 @@
 
 #include "AudioPlayer.h"
 #include "Environment.h"
+#include "GameRuntime.h"
+#include "GameSystems.h"
+#include "GameUI.h"
+#include "Map4.h"
 #include "Mapa1.h"
 #include "Player.h"
 #include "Shader.h"
@@ -18,6 +22,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -26,11 +31,12 @@
 #include <string>
 #include <vector>
 
-namespace {
+#define MAP4_IMPLEMENTATION
+#include "Map4.cpp"
+
 constexpr int WindowWidth = 1280;
 constexpr int WindowHeight = 720;
 constexpr int MaxLights = 24;
-constexpr int MissionCoinTotal = 10;
 
 enum class EstadoJuego {
     MENU_PRINCIPAL,
@@ -38,135 +44,8 @@ enum class EstadoJuego {
     COMO_JUGAR,
     CREDITOS,
     MUNDO_1,
-    MUNDO_2
-};
-
-struct Rect {
-    float x{0.0f};
-    float y{0.0f};
-    float width{0.0f};
-    float height{0.0f};
-};
-
-struct TextSprite {
-    std::shared_ptr<Texture2D> texture;
-    glm::vec2 size{0.0f};
-};
-
-struct MenuContext {
-    Shader shader;
-    Texture2D whiteTexture;
-    Texture2D logoTexture;
-    Texture2D cloudTexture;
-    Texture2D backgroundTexture;
-    GLuint vao{0};
-    GLuint vbo{0};
-    double notificationUntil{0.0};
-
-    TextSprite jugar;
-    TextSprite comoJugar;
-    TextSprite creditos;
-    TextSprite salir;
-    TextSprite mundo1;
-    TextSprite mundo2;
-    TextSprite mundo3;
-    TextSprite mundo4;
-    TextSprite volver;
-    TextSprite tituloComoJugar;
-    TextSprite textoComoJugar;
-    TextSprite tituloCreditos;
-    TextSprite textoCreditos;
-    TextSprite noDisponible;
-    std::array<TextSprite, MissionCoinTotal + 1> coinCounters;
-    std::array<TextSprite, MissionCoinTotal + 1> coinMessages;
-    TextSprite estrellaLista;
-    TextSprite nivelCompletado;
-    TextSprite combateSolo2D;
-    TextSprite vidaJugador;
-    TextSprite cargandoAtaque;
-    TextSprite parryActivo;
-    TextSprite promptHablarToad;
-    TextSprite nombreToad;
-    TextSprite dialogoToad;
-};
-
-struct MissionRenderablePart {
-    Mesh mesh;
-    Material material;
-    glm::vec3 localPosition{0.0f};
-    glm::vec3 localRotation{0.0f};
-    glm::vec3 localScale{1.0f};
-};
-
-struct Coin {
-    glm::vec3 position{0.0f};
-    bool collected{false};
-    float phase{0.0f};
-};
-
-struct Star {
-    glm::vec3 position{0.0f};
-    bool active{false};
-};
-
-class MissionManager {
-public:
-    bool initialize();
-    void reset(const Environment& environment, const glm::vec3& playerSpawn);
-    void generarMonedas(const Environment& environment, const glm::vec3& playerSpawn);
-    void update(const Player& player, float timeSeconds);
-    void render(const Shader& shader, float timeSeconds) const;
-
-    int collectedCount() const { return m_collectedCount; }
-    int messageCount() const { return m_messageCount; }
-    bool showCoinMessage(float timeSeconds) const { return timeSeconds <= static_cast<float>(m_coinMessageUntil); }
-    bool showStarMessage(float timeSeconds) const { return timeSeconds <= static_cast<float>(m_starMessageUntil); }
-    bool starFocusActive(float timeSeconds) const { return timeSeconds <= static_cast<float>(m_starFocusUntil); }
-    glm::vec3 starPosition() const { return m_star.position; }
-    bool levelComplete() const { return m_levelComplete; }
-    const Texture2D& coinIconTexture() const { return m_coinIcon; }
-
-private:
-    bool loadCoinModel();
-    bool loadStarModel();
-    std::shared_ptr<Texture2D> loadMissionTexture(const std::string& path);
-    Mesh createStarMesh() const;
-    Bounds coinBounds(const Coin& coin) const;
-    Bounds starBounds() const;
-    glm::mat4 coinModelMatrix(const Coin& coin, float timeSeconds) const;
-    glm::mat4 starModelMatrix(float timeSeconds) const;
-    bool validCoinPosition(const glm::vec3& position, const std::vector<Bounds>& colliders, const std::vector<Coin>& placed, const glm::vec3& playerSpawn, const glm::vec3& worldMin, const glm::vec3& worldMax, float minCoinDistance) const;
-    void recolectarMoneda(Coin& coin, float timeSeconds);
-    void mostrarMensajeMonedaTemporal(float timeSeconds);
-    void activarEstrella(float timeSeconds);
-    void completarNivel(float timeSeconds);
-
-    std::vector<MissionRenderablePart> m_coinParts;
-    std::vector<MissionRenderablePart> m_starParts;
-    std::vector<std::shared_ptr<Texture2D>> m_textures;
-    Texture2D m_coinIcon;
-    Mesh m_fallbackCoinMesh;
-    Mesh m_starMesh;
-    Material m_fallbackCoinMaterial;
-    Material m_starMaterial;
-    glm::vec3 m_coinModelMin{0.0f};
-    glm::vec3 m_coinModelMax{0.0f, 1.0f, 0.0f};
-    glm::vec3 m_coinModelCenter{0.0f};
-    glm::vec3 m_starModelMin{0.0f};
-    glm::vec3 m_starModelMax{0.0f, 1.0f, 0.0f};
-    glm::vec3 m_starModelCenter{0.0f};
-    float m_coinModelScale{1.0f};
-    float m_starModelScale{0.95f};
-    std::vector<Coin> m_coins;
-    Star m_star;
-    int m_collectedCount{0};
-    int m_messageCount{0};
-    double m_coinMessageUntil{0.0};
-    double m_starMessageUntil{0.0};
-    double m_starFocusUntil{0.0};
-    double m_victoryTime{0.0};
-    bool m_initialized{false};
-    bool m_levelComplete{false};
+    MUNDO_2,
+    MUNDO_4
 };
 
 class ToadNpc {
@@ -222,6 +101,8 @@ bool lastJumpKey = false;
 bool lastEscapeKey = false;
 bool lastInteractKey = false;
 bool lastMouseButton = false;
+bool lastTeleportKey = false;
+bool lastShieldKey = false;
 float cameraYawDegrees = 0.0f;
 float cameraPitchDegrees = 18.0f;
 float locked2DDepth = 0.0f;
@@ -229,9 +110,21 @@ glm::vec3 gameplayCameraPosition{0.0f, 6.0f, 14.0f};
 glm::vec3 gameplayCameraTarget{0.0f, 2.0f, 0.0f};
 bool cameraInitialized = false;
 
+bool environmentUsable(const Environment& environment) {
+    // Comprueba si un mapa cargó colisiones y límites válidos antes de usarlo en juego.
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    return !environment.collisionPreview().empty() &&
+        worldMax.x > worldMin.x &&
+        worldMax.y > worldMin.y &&
+        worldMax.z > worldMin.z;
+}
+
 std::string resolveAssetPath(const std::string& path) {
+    // Busca assets en varias raíces del proyecto para tolerar diferencias de ejecución.
     const std::filesystem::path requested(path);
     const std::filesystem::path candidates[] = {
+        // Se prueban varias raíces porque el juego puede ejecutarse desde distintos directorios.
         requested,
         std::filesystem::path("..") / ".." / requested,
         std::filesystem::path("Laboratorio") / requested
@@ -243,6 +136,82 @@ std::string resolveAssetPath(const std::string& path) {
         }
     }
     return path;
+}
+
+std::string resolveFirstExistingAsset(const std::initializer_list<std::string>& paths) {
+    // Devuelve la primera ruta real disponible dentro de una lista de candidatos.
+    for (const std::string& path : paths) {
+        // Este helper evita repetir comprobaciones manuales al elegir assets alternativos.
+        const std::string resolved = resolveAssetPath(path);
+        if (std::filesystem::exists(resolved)) {
+            return resolved;
+        }
+    }
+    return paths.size() > 0 ? resolveAssetPath(*paths.begin()) : std::string();
+}
+
+std::shared_ptr<Texture2D> loadTextureFromMaterial(
+    const LoadedMaterial& material,
+    const std::filesystem::path& modelPath,
+    std::vector<std::shared_ptr<Texture2D>>& cache) {
+    // Resuelve texturas externas o embebidas sin duplicar cargas en memoria.
+    auto loadByResolvedPath = [&](const std::filesystem::path& candidate) -> std::shared_ptr<Texture2D> {
+        if (candidate.empty() || !std::filesystem::exists(candidate)) {
+            return nullptr;
+        }
+
+        const std::string normalized = std::filesystem::weakly_canonical(candidate).string();
+        for (const auto& cached : cache) {
+            if (cached && cached->sourcePath() == normalized) {
+                return cached;
+            }
+        }
+
+        auto texture = std::make_shared<Texture2D>();
+        if (!texture->loadFromFile(normalized, false)) {
+            return nullptr;
+        }
+        cache.push_back(texture);
+        return texture;
+    };
+
+    if (!material.diffuseTexturePath.empty()) {
+        const std::filesystem::path original(material.diffuseTexturePath);
+        const std::filesystem::path fileName = original.filename();
+        const std::filesystem::path modelDir = modelPath.parent_path();
+        const std::filesystem::path candidates[] = {
+            original,
+            modelDir / fileName,
+            modelDir / "textures" / fileName,
+            std::filesystem::path(resolveAssetPath((std::filesystem::path("assets") / "Mundos" / fileName).string())),
+            std::filesystem::path(resolveAssetPath((std::filesystem::path("assets") / "mapa 4" / fileName).string()))
+        };
+
+        for (const auto& candidate : candidates) {
+            auto resolved = loadByResolvedPath(candidate);
+            if (resolved && resolved->valid()) {
+                return resolved;
+            }
+        }
+    }
+
+    if (material.embeddedTextureData.empty()) {
+        return nullptr;
+    }
+
+    auto embedded = std::make_shared<Texture2D>();
+    if (material.embeddedTextureCompressed) {
+        if (!embedded->loadFromMemory(material.embeddedTextureData.data(), static_cast<int>(material.embeddedTextureData.size()), false)) {
+            return nullptr;
+        }
+    } else if (material.embeddedTextureWidth > 0 && material.embeddedTextureHeight > 0) {
+        embedded->createFromRGBA(material.embeddedTextureWidth, material.embeddedTextureHeight, material.embeddedTextureData.data(), false);
+    } else {
+        return nullptr;
+    }
+
+    cache.push_back(embedded);
+    return embedded;
 }
 
 unsigned char toByte(float value) {
@@ -258,12 +227,14 @@ std::wstring formatCoinProgress(int count) {
 }
 
 bool boundsIntersect(const Bounds& a, const Bounds& b) {
+    // Intersección AABB reutilizada por colisiones simples del runtime.
     const glm::vec3 delta = glm::abs(a.center - b.center);
     const glm::vec3 total = a.halfExtent + b.halfExtent;
     return delta.x < total.x && delta.y < total.y && delta.z < total.z;
 }
 
 void bindSceneMaterial(const Shader& shader, const Material& material) {
+    // Centraliza el envío de materiales para que todos los renderizados usen el mismo contrato del shader.
     shader.setVec3("uMaterial.baseColor", material.baseColor);
     shader.setVec3("uMaterial.emissive", material.emissive);
     shader.setFloat("uMaterial.roughness", material.roughness);
@@ -277,7 +248,11 @@ void bindSceneMaterial(const Shader& shader, const Material& material) {
     }
 }
 
+glm::mat4 localPartMatrix(const MissionRenderablePart& part);
+
+
 glm::mat4 localPartMatrix(const MissionRenderablePart& part) {
+    // Construye la transformación local de una pieza importada dentro de un modelo compuesto.
     glm::mat4 model(1.0f);
     model = glm::translate(model, part.localPosition);
     model = glm::rotate(model, glm::radians(part.localRotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -288,8 +263,10 @@ glm::mat4 localPartMatrix(const MissionRenderablePart& part) {
 }
 
 TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::vec3& color, int maxWidth, bool multiline, bool bold) {
+    // Rasteriza texto con GDI a una textura OpenGL reutilizable para HUD y menús.
     TextSprite sprite;
     HDC screenDc = GetDC(nullptr);
+    // El texto del HUD se genera una vez como textura para que dibujarlo luego sea barato.
     if (screenDc == nullptr) {
         return sprite;
     }
@@ -314,7 +291,6 @@ TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::v
     }
 
     HGDIOBJ previousFont = SelectObject(memoryDc, font);
-
     const UINT format = DT_CENTER | DT_NOCLIP | (multiline ? DT_WORDBREAK : (DT_SINGLELINE | DT_VCENTER));
     RECT measure{0, 0, maxWidth, 4096};
     DrawTextW(memoryDc, text.c_str(), -1, &measure, format | DT_CALCRECT);
@@ -322,8 +298,8 @@ TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::v
     const int padding = std::max(8, fontSize / 3);
     const int measuredWidth = static_cast<int>(measure.right - measure.left);
     const int measuredHeight = static_cast<int>(measure.bottom - measure.top);
-    const int width = std::max(8, std::min(maxWidth + padding * 2, measuredWidth + padding * 2));
-    const int height = std::max(fontSize + padding * 2, measuredHeight + padding * 2);
+    const int width = std::max(measuredWidth + padding * 2, padding * 2 + 1);
+    const int height = std::max(measuredHeight + padding * 2, padding * 2 + 1);
 
     BITMAPINFO bitmapInfo{};
     bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -346,38 +322,22 @@ TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::v
     }
 
     HGDIOBJ previousBitmap = SelectObject(memoryDc, bitmap);
-    if (previousBitmap == nullptr || previousBitmap == HGDI_ERROR) {
-        DeleteObject(bitmap);
-        if (previousFont != nullptr && previousFont != HGDI_ERROR) {
-            SelectObject(memoryDc, previousFont);
-        }
-        DeleteObject(font);
-        DeleteDC(memoryDc);
-        ReleaseDC(nullptr, screenDc);
-        return sprite;
-    }
-
-    RECT fillRect{0, 0, width, height};
-    HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
-    FillRect(memoryDc, &fillRect, blackBrush);
-    DeleteObject(blackBrush);
-
+    std::memset(rawPixels, 0, static_cast<size_t>(width * height * 4));
     SetBkMode(memoryDc, TRANSPARENT);
     SetTextColor(memoryDc, RGB(255, 255, 255));
-    RECT drawRect{padding, padding, width - padding, height - padding};
-    DrawTextW(memoryDc, text.c_str(), -1, &drawRect, format);
+    RECT drawArea{padding, padding, width - padding, height - padding};
+    DrawTextW(memoryDc, text.c_str(), -1, &drawArea, format);
 
     std::vector<unsigned char> rgba(static_cast<size_t>(width * height * 4), 0);
     const unsigned char* source = static_cast<const unsigned char*>(rawPixels);
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            const size_t sourceOffset = static_cast<size_t>((y * width + x) * 4);
-            const unsigned char intensity = std::max({source[sourceOffset + 0], source[sourceOffset + 1], source[sourceOffset + 2]});
-            const size_t destOffset = sourceOffset;
-            rgba[destOffset + 0] = toByte(color.r);
-            rgba[destOffset + 1] = toByte(color.g);
-            rgba[destOffset + 2] = toByte(color.b);
-            rgba[destOffset + 3] = intensity;
+            const size_t offset = static_cast<size_t>((y * width + x) * 4);
+            const unsigned char intensity = std::max({source[offset + 0], source[offset + 1], source[offset + 2]});
+            rgba[offset + 0] = toByte(color.r);
+            rgba[offset + 1] = toByte(color.g);
+            rgba[offset + 2] = toByte(color.b);
+            rgba[offset + 3] = intensity;
         }
     }
 
@@ -406,15 +366,19 @@ Rect scaleRect(const Rect& rect, float scale) {
     return {rect.x + (rect.width - newWidth) * 0.5f, rect.y + (rect.height - newHeight) * 0.5f, newWidth, newHeight};
 }
 
-bool pointInRect(const Rect& rect, const glm::vec2& point) {
-    return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
+void beginUiFrame(MenuContext& menu, int width, int height) {
+    // Prepara una proyección 2D común para todo el HUD y los menús.
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    menu.shader.use();
+    menu.shader.setMat4("uProjection", glm::ortho(0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f));
+    glBindVertexArray(menu.vao);
 }
 
-void drawTexture(MenuContext& menu, const Texture2D& texture, const Rect& rect, const glm::vec4& tint, bool flipY = false) {
-    if (!texture.valid()) {
-        return;
-    }
-
+void drawTexture(MenuContext& menu, const Texture2D& texture, const Rect& rect, const glm::vec4& tint, bool textured, bool flipY = true) {
+    // Helper base para dibujar sprites, fondos y texto rasterizado en pantalla.
+    const Texture2D& activeTexture = (textured && texture.valid()) ? texture : menu.whiteTexture;
     const float topV = flipY ? 1.0f : 0.0f;
     const float bottomV = flipY ? 0.0f : 1.0f;
     const float vertices[] = {
@@ -426,91 +390,101 @@ void drawTexture(MenuContext& menu, const Texture2D& texture, const Rect& rect, 
         rect.x, rect.y + rect.height, 0.0f, bottomV
     };
 
-    menu.shader.use();
-    menu.shader.setVec4("uTint", tint);
-    texture.bind(0);
-    menu.shader.setInt("uTexture", 0);
-    glBindVertexArray(menu.vao);
     glBindBuffer(GL_ARRAY_BUFFER, menu.vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+    activeTexture.bind(0);
+    menu.shader.setInt("uTexture", 0);
+    menu.shader.setVec4("uTint", tint);
     glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindVertexArray(0);
 }
 
 void drawRect(MenuContext& menu, const Rect& rect, const glm::vec4& color) {
-    drawTexture(menu, menu.whiteTexture, rect, color);
+    // Los paneles sólidos del HUD salen de este helper para mantener la estética consistente.
+    drawTexture(menu, menu.whiteTexture, rect, color, false);
 }
 
-void drawText(MenuContext& menu, const TextSprite& text, float x, float y, const glm::vec4& tint = glm::vec4(1.0f)) {
+void drawText(MenuContext& menu, const TextSprite& text, float x, float y, const glm::vec4& tint) {
+    // El texto ya llega pre-renderizado como textura; aquí solo se posiciona y tiñe.
     if (!text.texture || !text.texture->valid()) {
+        // Si el sprite no se pudo rasterizar, simplemente no se dibuja.
         return;
     }
-    drawTexture(menu, *text.texture, {x, y, text.size.x, text.size.y}, tint);
+    drawTexture(menu, *text.texture, {x, y, text.size.x, text.size.y}, tint, true, false);
 }
 
-bool drawButton(MenuContext& menu, const TextSprite& text, const Rect& rect, const glm::vec2& mouse, bool clicked, bool enabled = true) {
-    const bool hovered = enabled && pointInRect(rect, mouse);
-    const Rect drawArea = scaleRect(rect, hovered ? 1.055f : 1.0f);
-    drawRect(menu, {drawArea.x + 7.0f, drawArea.y + 8.0f, drawArea.width, drawArea.height}, {0.02f, 0.05f, 0.12f, 0.38f});
-    drawRect(menu, {drawArea.x - 4.0f, drawArea.y - 4.0f, drawArea.width + 8.0f, drawArea.height + 8.0f},
-        hovered ? glm::vec4(1.0f, 0.92f, 0.36f, 0.98f) : glm::vec4(0.12f, 0.33f, 0.54f, 0.96f));
+void drawPanel(MenuContext& menu, const Rect& rect) {
+    // Panel temático base usado por tutoriales, victoria y diálogos.
+    // El borde dorado y la sombra se reutilizan en casi toda la interfaz del juego.
+    drawRect(menu, {rect.x + 7.0f, rect.y + 8.0f, rect.width, rect.height}, {0.01f, 0.02f, 0.05f, 0.45f});
+    drawRect(menu, {rect.x - 4.0f, rect.y - 4.0f, rect.width + 8.0f, rect.height + 8.0f}, {1.0f, 0.80f, 0.20f, 0.98f});
+    drawRect(menu, rect, {0.08f, 0.16f, 0.30f, 0.94f});
+}
+
+bool drawButton(MenuContext& menu, const TextSprite& text, const Rect& rect, const glm::vec2& mouse, bool clicked, float timeSeconds, bool enabled = true) {
+    // Los botones comparten hover, escalado y brillo para que el menú se sienta consistente.
+    const bool hovered =
+        enabled &&
+        mouse.x >= rect.x && mouse.x <= rect.x + rect.width &&
+        mouse.y >= rect.y && mouse.y <= rect.y + rect.height;
+    const float hoverPulse = hovered ? (0.5f + 0.5f * std::sin(timeSeconds * 8.0f)) : 0.0f;
+    const Rect drawArea = scaleRect(rect, hovered ? 1.04f : 1.0f);
+    const float textX = drawArea.x + (drawArea.width - text.size.x) * 0.5f;
+    const float textY = drawArea.y + (drawArea.height - text.size.y) * 0.5f;
+
+    drawRect(menu, {drawArea.x + 6.0f, drawArea.y + 7.0f, drawArea.width, drawArea.height}, {0.01f, 0.02f, 0.05f, 0.45f});
     drawRect(menu, drawArea, enabled
         ? (hovered ? glm::vec4(1.0f, 0.56f, 0.20f, 0.98f) : glm::vec4(0.16f, 0.57f, 0.86f, 0.96f))
         : glm::vec4(0.30f, 0.35f, 0.40f, 0.72f));
 
-    const float textX = drawArea.x + (drawArea.width - text.size.x) * 0.5f;
-    const float textY = drawArea.y + (drawArea.height - text.size.y) * 0.5f - 1.0f;
-    drawText(menu, text, textX, textY, enabled ? glm::vec4(1.0f) : glm::vec4(0.72f, 0.78f, 0.82f, 0.85f));
+    if (hovered) {
+        const float glowInset = 5.0f + hoverPulse * 2.0f;
+        drawRect(menu,
+            {drawArea.x + glowInset, drawArea.y + glowInset, drawArea.width - glowInset * 2.0f, drawArea.height - glowInset * 2.0f},
+            {1.0f, 0.86f, 0.34f, 0.10f + hoverPulse * 0.08f});
+
+        const float shineWidth = drawArea.width * 0.18f;
+        const float shineTravel = std::fmod(timeSeconds * 150.0f, drawArea.width + shineWidth * 2.0f) - shineWidth;
+        drawRect(menu,
+            {drawArea.x + shineTravel, drawArea.y + 4.0f, shineWidth, std::max(0.0f, drawArea.height - 8.0f)},
+            {1.0f, 0.98f, 0.86f, 0.12f});
+    }
+
+    drawText(menu, text, textX, textY, enabled
+        ? (hovered ? glm::vec4(1.0f, 0.99f, 0.94f, 1.0f) : glm::vec4(1.0f))
+        : glm::vec4(0.72f, 0.78f, 0.82f, 0.85f));
     return hovered && clicked;
 }
 
-void beginUiFrame(MenuContext& menu, int width, int height) {
-    glDisable(GL_DEPTH_TEST);
-    menu.shader.use();
-    menu.shader.setMat4("uProjection", glm::ortho(0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, -1.0f, 1.0f));
-}
-
-void drawFloatingCloud(MenuContext& menu, float x, float y, float width, float timeSeconds, float phase, float alpha) {
-    const float aspect = menu.cloudTexture.width() > 0
-        ? static_cast<float>(menu.cloudTexture.height()) / static_cast<float>(menu.cloudTexture.width())
-        : 0.58f;
+void drawDecorCloud(MenuContext& menu, float x, float y, float width, float alpha, float phase, float timeSeconds) {
+    // Nubes decorativas animadas para que el menú no se vea estático.
+    if (!menu.cloudTexture.valid() || menu.cloudTexture.width() <= 0) {
+        // La decoración es opcional; si falta la textura el menú sigue funcionando.
+        return;
+    }
+    const float aspect = static_cast<float>(menu.cloudTexture.height()) / static_cast<float>(menu.cloudTexture.width());
     const float height = width * aspect;
     const float bob = std::sin(timeSeconds * 1.15f + phase) * 8.0f;
     drawTexture(menu, menu.cloudTexture, {x, y + bob, width, height}, {1.0f, 1.0f, 1.0f, alpha}, true);
 }
 
 void drawMenuBackground(MenuContext& menu, int width, int height, float timeSeconds, bool showLogo = true) {
+    // Compone el fondo principal del menú a partir de textura base, nubes y logo.
     if (menu.backgroundTexture.valid()) {
         drawTexture(menu, menu.backgroundTexture, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, glm::vec4(1.0f), true);
     } else {
-        drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.37f, 0.43f, 0.78f, 1.0f});
+        drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.08f, 0.18f, 0.30f, 1.0f});
     }
-    drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.04f, 0.06f, 0.16f, 0.16f});
 
-    if (showLogo) {
-        drawFloatingCloud(menu, width * 0.05f, 82.0f, std::min(width * 0.23f, 290.0f), timeSeconds, 0.0f, 0.64f);
-        drawFloatingCloud(menu, width * 0.72f, 92.0f, std::min(width * 0.25f, 310.0f), timeSeconds, 1.7f, 0.62f);
-        drawFloatingCloud(menu, width * 0.17f, 286.0f, std::min(width * 0.16f, 200.0f), timeSeconds, 3.1f, 0.36f);
-        drawFloatingCloud(menu, width * 0.69f, 292.0f, std::min(width * 0.17f, 215.0f), timeSeconds, 4.4f, 0.34f);
+    drawDecorCloud(menu, 82.0f, 84.0f, 184.0f, 0.78f, 0.0f, timeSeconds);
+    drawDecorCloud(menu, static_cast<float>(width) - 264.0f, 132.0f, 208.0f, 0.68f, 1.8f, timeSeconds);
+    drawDecorCloud(menu, static_cast<float>(width) * 0.5f - 120.0f, static_cast<float>(height) - 182.0f, 240.0f, 0.48f, 3.2f, timeSeconds);
 
-        const float logoAspect = menu.logoTexture.width() > 0
-            ? static_cast<float>(menu.logoTexture.height()) / static_cast<float>(menu.logoTexture.width())
-            : 0.62f;
-        const float logoWidth = std::min(static_cast<float>(width) * 0.46f, 560.0f);
-        const float logoHeight = logoWidth * logoAspect;
-        const float logoX = (static_cast<float>(width) - logoWidth) * 0.5f;
-        const float logoY = 30.0f + std::sin(timeSeconds * 1.15f) * 7.0f;
-        drawTexture(menu, menu.logoTexture, {logoX, logoY, logoWidth, logoHeight}, {1.0f, 1.0f, 1.0f, 1.0f}, true);
-    } else {
-        drawFloatingCloud(menu, -42.0f, 66.0f, std::min(width * 0.24f, 300.0f), timeSeconds, 0.3f, 0.42f);
-        drawFloatingCloud(menu, width * 0.76f, 64.0f, std::min(width * 0.24f, 300.0f), timeSeconds, 2.2f, 0.40f);
+    if (showLogo && menu.logoTexture.valid()) {
+        const float logoWidth = std::min(static_cast<float>(width) * 0.36f, 420.0f);
+        const float aspect = static_cast<float>(menu.logoTexture.height()) / std::max(1, menu.logoTexture.width());
+        const float logoHeight = logoWidth * aspect;
+        drawTexture(menu, menu.logoTexture, centeredRect(width * 0.5f, 48.0f, logoWidth, logoHeight), glm::vec4(1.0f), true);
     }
-}
-
-void drawPanel(MenuContext& menu, const Rect& rect) {
-    drawRect(menu, {rect.x + 10.0f, rect.y + 12.0f, rect.width, rect.height}, {0.02f, 0.04f, 0.10f, 0.35f});
-    drawRect(menu, {rect.x - 6.0f, rect.y - 6.0f, rect.width + 12.0f, rect.height + 12.0f}, {1.0f, 0.88f, 0.36f, 0.96f});
-    drawRect(menu, rect, {0.08f, 0.24f, 0.42f, 0.92f});
 }
 
 void drawUnavailableMessage(MenuContext& menu, int width, int height, float timeSeconds) {
@@ -525,6 +499,7 @@ void drawUnavailableMessage(MenuContext& menu, int width, int height, float time
 }
 
 bool MissionManager::initialize() {
+    // Carga una sola vez los recursos visuales de monedas y estrella del objetivo principal.
     if (m_initialized) {
         return true;
     }
@@ -534,7 +509,7 @@ bool MissionManager::initialize() {
     m_starMesh = createStarMesh();
 
     m_fallbackCoinMaterial.baseColor = {1.0f, 0.74f, 0.08f};
-    m_fallbackCoinMaterial.emissive = {0.85f, 0.42f, 0.04f};
+    m_fallbackCoinMaterial.emissive = {0.0f, 0.0f, 0.0f};
     m_fallbackCoinMaterial.roughness = 0.38f;
     m_fallbackCoinMaterial.fogAmount = 0.18f;
 
@@ -550,6 +525,7 @@ bool MissionManager::initialize() {
 }
 
 void MissionManager::reset(const Environment& environment, const glm::vec3& playerSpawn) {
+    // Reinicia el progreso del nivel y vuelve a poblar el objetivo coleccionable.
     m_collectedCount = 0;
     m_messageCount = 0;
     m_coinMessageUntil = 0.0;
@@ -557,11 +533,13 @@ void MissionManager::reset(const Environment& environment, const glm::vec3& play
     m_starFocusUntil = 0.0;
     m_victoryTime = 0.0;
     m_levelComplete = false;
+    m_marioMapStyle = isMarioMapa4Environment(environment);
     m_star = {};
     generarMonedas(environment, playerSpawn);
 }
 
 void MissionManager::generarMonedas(const Environment& environment, const glm::vec3& playerSpawn) {
+    // Distribuye las monedas sobre superficies válidas del mapa evitando zonas imposibles.
     struct SurfaceCandidate {
         Bounds bounds;
         float top{0.0f};
@@ -573,21 +551,274 @@ void MissionManager::generarMonedas(const Environment& environment, const glm::v
     const auto& colliders = environment.collisionPreview();
     const glm::vec3 worldMin = environment.worldMin();
     const glm::vec3 worldMax = environment.worldMax();
-    const float reachableMinTop = playerSpawn.y - 1.10f;
-    const float reachableMaxTop = playerSpawn.y + 1.05f;
+    const bool marioMapStyle = isMarioMapa4Environment(environment);
+    const float reachableMinTop = marioMapStyle ? playerSpawn.y - 0.45f : playerSpawn.y - 1.10f;
+    const float reachableMaxTop = marioMapStyle ? playerSpawn.y + 1.35f : playerSpawn.y + 1.05f;
 
     for (const Bounds& collider : colliders) {
         const float top = collider.center.y + collider.halfExtent.y;
         const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
-        const bool floorLike = collider.halfExtent.y <= 0.30f && area >= 0.35f && collider.halfExtent.x >= 0.24f && collider.halfExtent.z >= 0.24f;
+        const bool floorLike = collider.halfExtent.y <= 0.32f && area >= 0.20f && collider.halfExtent.x >= 0.18f && collider.halfExtent.z >= 0.18f;
         const bool reachableHeight = top >= reachableMinTop && top <= reachableMaxTop;
-        if (floorLike && reachableHeight && top >= worldMin.y - 0.15f && top <= worldMax.y + 0.5f) {
+        const bool stableMarioSurface = !marioMapStyle ||
+            (area >= 0.95f && collider.halfExtent.x >= 0.42f && collider.halfExtent.z >= 0.42f);
+        if (floorLike && reachableHeight && stableMarioSurface && top >= worldMin.y - 0.15f && top <= worldMax.y + 0.5f) {
             surfaces.push_back({collider, top, area});
         }
     }
 
     std::mt19937 rng(2242);
     std::uniform_real_distribution<float> jitter(-0.32f, 0.32f);
+    const bool useSharedCoinPlacement = !marioMapStyle;
+
+    if (!useSharedCoinPlacement && isMarioMapa4Environment(environment) && !surfaces.empty()) {
+        struct CoinCandidate {
+            glm::vec3 position{0.0f};
+            float coverScore{0.0f};
+            float spawnDistance{0.0f};
+            float surfaceArea{0.0f};
+            float mapProgress{0.0f};
+        };
+
+        std::sort(surfaces.begin(), surfaces.end(), [](const SurfaceCandidate& a, const SurfaceCandidate& b) {
+            if (a.bounds.center.x == b.bounds.center.x) {
+                return a.area > b.area;
+            }
+            return a.bounds.center.x < b.bounds.center.x;
+        });
+
+        std::vector<SurfaceCandidate> orderedSurfaces;
+        orderedSurfaces.reserve(surfaces.size());
+        for (const SurfaceCandidate& surface : surfaces) {
+            if (orderedSurfaces.empty()) {
+                orderedSurfaces.push_back(surface);
+                continue;
+            }
+
+            const SurfaceCandidate& previous = orderedSurfaces.back();
+            const float dx = std::abs(surface.bounds.center.x - previous.bounds.center.x);
+            const float dz = std::abs(surface.bounds.center.z - previous.bounds.center.z);
+            if (dx > 1.9f || dz > 0.45f || surface.area > previous.area + 0.25f) {
+                orderedSurfaces.push_back(surface);
+            }
+        }
+
+        auto buildCandidate = [&](const SurfaceCandidate& surface, float xBias, float zBias) {
+            const float safeX = std::max(surface.bounds.halfExtent.x - 0.55f, 0.0f);
+            const float safeZ = std::max(surface.bounds.halfExtent.z - 0.55f, 0.0f);
+            CoinCandidate candidate;
+            candidate.position = {
+                surface.bounds.center.x + safeX * xBias,
+                surface.top + 0.62f,
+                surface.bounds.center.z + safeZ * zBias
+            };
+            candidate.spawnDistance = glm::length(glm::vec2(candidate.position.x - playerSpawn.x, candidate.position.z - playerSpawn.z));
+            candidate.surfaceArea = surface.area;
+
+            const float mapWidth = std::max(worldMax.x - worldMin.x, 1.0f);
+            candidate.mapProgress = std::clamp((candidate.position.x - worldMin.x) / mapWidth, 0.0f, 1.0f);
+
+            const glm::vec2 fromSpawn = glm::vec2(candidate.position.x - playerSpawn.x, candidate.position.z - playerSpawn.z);
+            glm::vec2 awayFromSpawn = glm::length(fromSpawn) > 0.001f ? glm::normalize(fromSpawn) : glm::vec2(1.0f, 0.0f);
+
+            for (const Bounds& other : colliders) {
+                const float otherTop = other.center.y + other.halfExtent.y;
+                if (otherTop <= candidate.position.y + 0.28f) {
+                    continue;
+                }
+
+                const glm::vec2 toObstacle{other.center.x - candidate.position.x, other.center.z - candidate.position.z};
+                const float horizontalDistance = glm::length(toObstacle);
+                if (horizontalDistance > 2.8f) {
+                    continue;
+                }
+
+                const glm::vec2 obstacleDirection = horizontalDistance > 0.001f
+                    ? toObstacle / horizontalDistance
+                    : glm::vec2(0.0f, 0.0f);
+                const float alignment = std::max(glm::dot(obstacleDirection, awayFromSpawn), 0.0f);
+                const float widthWeight = std::max(other.halfExtent.x, other.halfExtent.z);
+                const float heightWeight = std::clamp(other.halfExtent.y * 0.9f, 0.0f, 3.0f);
+                candidate.coverScore += (3.0f - horizontalDistance) * (0.45f + alignment * 0.85f) + widthWeight * 0.16f + heightWeight * 0.28f;
+            }
+
+            return candidate;
+        };
+
+        auto tryAcceptCandidate = [&](const CoinCandidate& candidate, float minCoinDistance) {
+            if (!validCoinPosition(candidate.position, colliders, m_coins, playerSpawn, worldMin, worldMax, minCoinDistance)) {
+                return false;
+            }
+
+            Coin coin;
+            coin.position = candidate.position;
+            coin.phase = static_cast<float>(m_coins.size()) * 0.73f;
+            m_coins.push_back(coin);
+            return true;
+        };
+
+        const std::array<glm::vec2, 12> placementBiases = {
+            glm::vec2(0.0f, 0.0f),
+            glm::vec2(-0.72f, 0.0f),
+            glm::vec2(0.72f, 0.0f),
+            glm::vec2(-0.50f, 0.42f),
+            glm::vec2(0.50f, -0.42f),
+            glm::vec2(-0.82f, 0.52f),
+            glm::vec2(0.82f, -0.52f),
+            glm::vec2(-0.24f, -0.64f),
+            glm::vec2(0.24f, 0.64f),
+            glm::vec2(-0.58f, -0.58f),
+            glm::vec2(0.58f, 0.58f),
+            glm::vec2(0.0f, 0.72f)
+        };
+
+        std::vector<CoinCandidate> candidates;
+        candidates.reserve(orderedSurfaces.size() * placementBiases.size());
+        for (const SurfaceCandidate& surface : orderedSurfaces) {
+            for (const glm::vec2& bias : placementBiases) {
+                CoinCandidate candidate = buildCandidate(surface, bias.x, bias.y);
+                if (candidate.spawnDistance >= 4.8f &&
+                    validCoinPosition(candidate.position, colliders, m_coins, playerSpawn, worldMin, worldMax, 0.95f)) {
+                    candidates.push_back(candidate);
+                }
+            }
+        }
+
+        std::vector<CoinCandidate> visibleCandidates = candidates;
+        std::vector<CoinCandidate> hiddenCandidates = candidates;
+
+        std::sort(visibleCandidates.begin(), visibleCandidates.end(), [](const CoinCandidate& a, const CoinCandidate& b) {
+            if (a.coverScore == b.coverScore) {
+                if (a.spawnDistance == b.spawnDistance) {
+                    return a.mapProgress < b.mapProgress;
+                }
+                return a.spawnDistance > b.spawnDistance;
+            }
+            return a.coverScore < b.coverScore;
+        });
+
+        std::sort(hiddenCandidates.begin(), hiddenCandidates.end(), [](const CoinCandidate& a, const CoinCandidate& b) {
+            if (a.coverScore == b.coverScore) {
+                if (a.spawnDistance == b.spawnDistance) {
+                    return a.mapProgress < b.mapProgress;
+                }
+                return a.spawnDistance > b.spawnDistance;
+            }
+            return a.coverScore > b.coverScore;
+        });
+
+        const size_t visibleTarget = 5;
+        const size_t hiddenTarget = 5;
+        size_t visibleCount = 0;
+        size_t hiddenCount = 0;
+        size_t leftCount = 0;
+        size_t rightCount = 0;
+        const float splitX = (worldMin.x + worldMax.x) * 0.5f;
+
+        auto registerSide = [&](const glm::vec3& position) {
+            if (position.x <= splitX) {
+                ++leftCount;
+            } else {
+                ++rightCount;
+            }
+        };
+
+        auto sideBalanced = [&](const glm::vec3& position) {
+            const bool leftSide = position.x <= splitX;
+            if (leftSide) {
+                return leftCount <= rightCount + 1;
+            }
+            return rightCount <= leftCount + 1;
+        };
+
+        for (const CoinCandidate& candidate : visibleCandidates) {
+            if (visibleCount >= visibleTarget) {
+                break;
+            }
+            if (candidate.coverScore > 1.75f) {
+                continue;
+            }
+            if (!sideBalanced(candidate.position)) {
+                continue;
+            }
+            if (tryAcceptCandidate(candidate, 1.8f)) {
+                ++visibleCount;
+                registerSide(candidate.position);
+            }
+        }
+
+        for (const CoinCandidate& candidate : hiddenCandidates) {
+            if (hiddenCount >= hiddenTarget || m_coins.size() >= MissionCoinTotal) {
+                break;
+            }
+            if (candidate.coverScore < 0.95f) {
+                continue;
+            }
+            if (!sideBalanced(candidate.position)) {
+                continue;
+            }
+            if (tryAcceptCandidate(candidate, 1.45f)) {
+                ++hiddenCount;
+                registerSide(candidate.position);
+            }
+        }
+
+        if (m_coins.size() < MissionCoinTotal) {
+            std::vector<CoinCandidate> balancedCandidates = candidates;
+            std::sort(balancedCandidates.begin(), balancedCandidates.end(), [](const CoinCandidate& a, const CoinCandidate& b) {
+                const float scoreA = a.spawnDistance * 0.28f + a.surfaceArea * 0.16f - std::abs(a.coverScore - 1.35f);
+                const float scoreB = b.spawnDistance * 0.28f + b.surfaceArea * 0.16f - std::abs(b.coverScore - 1.35f);
+                return scoreA > scoreB;
+            });
+
+            for (const CoinCandidate& candidate : balancedCandidates) {
+                if (m_coins.size() >= MissionCoinTotal) {
+                    break;
+                }
+                if (!sideBalanced(candidate.position)) {
+                    continue;
+                }
+                if (tryAcceptCandidate(candidate, 1.05f)) {
+                    registerSide(candidate.position);
+                }
+            }
+        }
+
+        if (m_coins.size() < MissionCoinTotal) {
+            std::vector<SurfaceCandidate> rescueSurfaces = orderedSurfaces;
+            std::sort(rescueSurfaces.begin(), rescueSurfaces.end(), [&](const SurfaceCandidate& a, const SurfaceCandidate& b) {
+                const float scoreA = a.area * 0.42f + glm::length(glm::vec2(a.bounds.center.x - playerSpawn.x, a.bounds.center.z - playerSpawn.z)) * 0.18f;
+                const float scoreB = b.area * 0.42f + glm::length(glm::vec2(b.bounds.center.x - playerSpawn.x, b.bounds.center.z - playerSpawn.z)) * 0.18f;
+                return scoreA > scoreB;
+            });
+
+            for (const SurfaceCandidate& surface : rescueSurfaces) {
+                if (m_coins.size() >= MissionCoinTotal) {
+                    break;
+                }
+                for (const glm::vec2& bias : placementBiases) {
+                    CoinCandidate candidate = buildCandidate(surface, bias.x, bias.y);
+                    if (candidate.spawnDistance < 4.0f) {
+                        continue;
+                    }
+                    if (!sideBalanced(candidate.position)) {
+                        continue;
+                    }
+                    if (tryAcceptCandidate(candidate, 0.82f)) {
+                        registerSide(candidate.position);
+                        if (m_coins.size() >= MissionCoinTotal) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        m_star.position = m_coins.empty() ? playerSpawn + glm::vec3(2.2f, 1.2f, 0.0f) : m_coins.back().position + glm::vec3(0.0f, 0.18f, 0.0f);
+        m_star.active = false;
+        std::cout << "Mapa 4 generated coins: " << m_coins.size() << " (visible " << visibleCount << ", hidden " << hiddenCount << ")" << std::endl;
+        return;
+    }
 
     auto percentile = [](std::vector<float> values, float amount) {
         if (values.empty()) {
@@ -709,11 +940,79 @@ void MissionManager::generarMonedas(const Environment& environment, const glm::v
         }
     }
 
+    if (m_coins.size() < MissionCoinTotal) {
+        std::vector<SurfaceCandidate> fallbackSurfaces;
+        for (const Bounds& collider : colliders) {
+            const float top = collider.center.y + collider.halfExtent.y;
+            const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
+            const bool usableFloor = collider.halfExtent.y <= 0.45f && area >= 0.20f;
+            const bool stableMarioSurface = !m_marioMapStyle ||
+                (area >= 0.95f && collider.halfExtent.x >= 0.42f && collider.halfExtent.z >= 0.42f &&
+                    top >= playerSpawn.y - 0.45f && top <= playerSpawn.y + 1.35f);
+            if (usableFloor && stableMarioSurface && top >= worldMin.y - 0.2f && top <= worldMax.y + 0.5f) {
+                fallbackSurfaces.push_back({collider, top, area});
+            }
+        }
+
+        std::sort(fallbackSurfaces.begin(), fallbackSurfaces.end(), [&](const SurfaceCandidate& a, const SurfaceCandidate& b) {
+            const float distanceA = glm::length(glm::vec2(a.bounds.center.x - playerSpawn.x, a.bounds.center.z - playerSpawn.z));
+            const float distanceB = glm::length(glm::vec2(b.bounds.center.x - playerSpawn.x, b.bounds.center.z - playerSpawn.z));
+            if (m_marioMapStyle) {
+                return distanceA > distanceB;
+            }
+            return distanceA < distanceB;
+        });
+
+        const glm::vec3 fallbackMin(minX, worldMin.y, minZ);
+        const glm::vec3 fallbackMax(maxX, worldMax.y, maxZ);
+        for (const SurfaceCandidate& surface : fallbackSurfaces) {
+            if (m_coins.size() >= MissionCoinTotal) {
+                break;
+            }
+
+            const float ring = 2.4f + static_cast<float>(m_coins.size()) * 0.55f;
+            const float angle = static_cast<float>(m_coins.size()) * glm::two_pi<float>() / static_cast<float>(MissionCoinTotal);
+            glm::vec3 position{
+                surface.bounds.center.x + std::cos(angle) * std::min(ring, std::max(surface.bounds.halfExtent.x - 0.55f, 0.0f)),
+                surface.top + 0.58f,
+                surface.bounds.center.z + std::sin(angle) * std::min(ring, std::max(surface.bounds.halfExtent.z - 0.55f, 0.0f))
+            };
+
+            if (!validCoinPosition(position, colliders, m_coins, playerSpawn, fallbackMin, fallbackMax, m_marioMapStyle ? 3.0f : 1.2f)) {
+                continue;
+            }
+
+            Coin coin;
+            coin.position = position;
+            coin.phase = static_cast<float>(m_coins.size()) * 0.73f;
+            m_coins.push_back(coin);
+        }
+
+        if (m_marioMapStyle && m_coins.size() < MissionCoinTotal) {
+            for (const SurfaceCandidate& surface : fallbackSurfaces) {
+                if (m_coins.size() >= MissionCoinTotal) {
+                    break;
+                }
+
+                const glm::vec3 position{surface.bounds.center.x, surface.top + 0.58f, surface.bounds.center.z};
+                if (!validCoinPosition(position, colliders, m_coins, playerSpawn, fallbackMin, fallbackMax, 2.0f)) {
+                    continue;
+                }
+
+                Coin coin;
+                coin.position = position;
+                coin.phase = static_cast<float>(m_coins.size()) * 0.73f;
+                m_coins.push_back(coin);
+            }
+        }
+    }
+
     m_star.position = m_coins.empty() ? playerSpawn + glm::vec3(2.2f, 1.2f, 0.0f) : m_coins.front().position + glm::vec3(0.0f, 0.18f, 0.0f);
     m_star.active = false;
 }
 
 void MissionManager::update(const Player& player, float timeSeconds) {
+    // Detecta recolección de monedas, activa la estrella y resuelve la victoria del nivel.
     if (m_levelComplete) {
         return;
     }
@@ -731,11 +1030,14 @@ void MissionManager::update(const Player& player, float timeSeconds) {
     }
 }
 
-void MissionManager::render(const Shader& shader, float timeSeconds) const {
+void MissionManager::render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const {
+    // Dibuja las monedas y la estrella activa usando los modelos cargados o su fallback procedural.
     if (!m_initialized) {
         return;
     }
 
+    shader.use();
+    shader.setFloat("uTime", timeSeconds);
     for (const Coin& coin : m_coins) {
         if (coin.collected) {
             continue;
@@ -744,17 +1046,13 @@ void MissionManager::render(const Shader& shader, float timeSeconds) const {
         glm::mat4 model = coinModelMatrix(coin, timeSeconds);
         if (!m_coinParts.empty()) {
             for (const MissionRenderablePart& part : m_coinParts) {
-                shader.use();
                 shader.setMat4("uModel", model * localPartMatrix(part));
-                shader.setFloat("uTime", timeSeconds);
                 bindSceneMaterial(shader, part.material);
                 part.mesh.draw();
             }
         } else {
             model = glm::rotate(model, glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
-            shader.use();
             shader.setMat4("uModel", model);
-            shader.setFloat("uTime", timeSeconds);
             bindSceneMaterial(shader, m_fallbackCoinMaterial);
             m_fallbackCoinMesh.draw();
         }
@@ -764,16 +1062,12 @@ void MissionManager::render(const Shader& shader, float timeSeconds) const {
         const glm::mat4 model = starModelMatrix(timeSeconds);
         if (!m_starParts.empty()) {
             for (const MissionRenderablePart& part : m_starParts) {
-                shader.use();
                 shader.setMat4("uModel", model * localPartMatrix(part));
-                shader.setFloat("uTime", timeSeconds);
                 bindSceneMaterial(shader, part.material);
                 part.mesh.draw();
             }
         } else {
-            shader.use();
             shader.setMat4("uModel", model);
-            shader.setFloat("uTime", timeSeconds);
             bindSceneMaterial(shader, m_starMaterial);
             m_starMesh.draw();
         }
@@ -781,7 +1075,20 @@ void MissionManager::render(const Shader& shader, float timeSeconds) const {
 }
 
 bool MissionManager::loadCoinModel() {
-    LoadedModel model = ModelLoader::loadModel(resolveAssetPath("assets/items/Coin/Coin.dae"));
+    // Prioriza el modelo clásico de moneda y conserva fallbacks para mapas especiales.
+    LoadedModel model = ModelLoader::loadModel(resolveFirstExistingAsset({
+        "assets/items/Coin/Coin.dae",
+        "assets/mapa 4/moneda/source/moneda_1.gltf",
+        "assets/mapa 4/Moneda/source/moneda_1.gltf",
+        "assets/mapa 4/GoldCoin.glb",
+        "assets/mapa 4/gold coin.glb",
+        "assets/GoldCoin.glb",
+        "assets/gold coin.glb",
+        "assets/coin/source/model.gltf"
+    }));
+    if (model.meshes.empty()) {
+        model = ModelLoader::loadModel(resolveAssetPath("assets/items/Coin/Coin.dae"));
+    }
     if (model.meshes.empty()) {
         std::cerr << "Coin model could not be loaded. Using procedural fallback coin." << std::endl;
         return false;
@@ -792,7 +1099,7 @@ bool MissionManager::loadCoinModel() {
     m_coinModelCenter = (m_coinModelMin + m_coinModelMax) * 0.5f;
     const glm::vec3 size = m_coinModelMax - m_coinModelMin;
     const float maxExtent = std::max({size.x, size.y, size.z, 0.001f});
-    m_coinModelScale = 0.62f / maxExtent;
+    m_coinModelScale = 0.78f / maxExtent;
 
     m_coinParts.clear();
     m_coinParts.reserve(model.meshes.size());
@@ -802,13 +1109,23 @@ bool MissionManager::loadCoinModel() {
             const LoadedMaterial& material = model.materials[mesh.materialIndex];
             part.material.baseColor = material.diffuseColor;
             part.material.opacity = material.opacity;
-            part.material.texture = loadMissionTexture(material.diffuseTexturePath);
+            part.material.texture = loadMissionTexture(material);
         } else {
             part.material.baseColor = {1.0f, 0.72f, 0.05f};
         }
-        part.material.emissive = {0.72f, 0.36f, 0.04f};
-        part.material.roughness = 0.42f;
-        part.material.fogAmount = 0.16f;
+        if (!part.material.texture) {
+            part.material.texture = loadFirstAvailableTexture({
+                "assets/items/Coin/cointex.png",
+                "assets/mapa 4/moneda/textures/gltf_embedded_0.png",
+                "assets/mapa 4/Moneda/textures/gltf_embedded_0.png",
+                "assets/mapa 4/GoldCoin.glb",
+                "assets/mapa 4/gold coin.glb",
+                "assets/coin/textures/gltf_embedded_0.png"
+            });
+        }
+        part.material.emissive = {0.0f, 0.0f, 0.0f};
+        part.material.roughness = 0.30f;
+        part.material.fogAmount = 0.08f;
         part.mesh = std::move(mesh.mesh);
         m_coinParts.push_back(std::move(part));
     }
@@ -816,6 +1133,7 @@ bool MissionManager::loadCoinModel() {
 }
 
 bool MissionManager::loadStarModel() {
+    // La estrella final del nivel también usa fallback procedural si falta el asset.
     LoadedModel model = ModelLoader::loadModel(resolveAssetPath("assets/items/CrystalStars/Crystal Stars/goldstar.obj"));
     if (model.meshes.empty()) {
         std::cerr << "Crystal star model could not be loaded. Using procedural fallback star." << std::endl;
@@ -859,8 +1177,16 @@ std::shared_ptr<Texture2D> MissionManager::loadMissionTexture(const std::string&
     const std::filesystem::path fileName = original.filename();
     const std::filesystem::path candidates[] = {
         original,
+        std::filesystem::path("assets") / "mapa 4" / "moneda" / "textures" / fileName,
+        std::filesystem::path("assets") / "mapa 4" / "moneda" / "source" / fileName,
+        std::filesystem::path("assets") / "mapa 4" / fileName,
+        std::filesystem::path("assets") / "coin" / "textures" / fileName,
         std::filesystem::path("assets") / "items" / "Coin" / fileName,
         std::filesystem::path("assets") / "items" / "CrystalStars" / "Crystal Stars" / fileName,
+        std::filesystem::path("..") / ".." / "assets" / "mapa 4" / "moneda" / "textures" / fileName,
+        std::filesystem::path("..") / ".." / "assets" / "mapa 4" / "moneda" / "source" / fileName,
+        std::filesystem::path("..") / ".." / "assets" / "mapa 4" / fileName,
+        std::filesystem::path("..") / ".." / "assets" / "coin" / "textures" / fileName,
         std::filesystem::path("..") / ".." / "assets" / "items" / "Coin" / fileName,
         std::filesystem::path("..") / ".." / "assets" / "items" / "CrystalStars" / "Crystal Stars" / fileName
     };
@@ -886,6 +1212,41 @@ std::shared_ptr<Texture2D> MissionManager::loadMissionTexture(const std::string&
     }
     m_textures.push_back(texture);
     return texture;
+}
+
+std::shared_ptr<Texture2D> MissionManager::loadMissionTexture(const LoadedMaterial& material) {
+    auto texture = loadMissionTexture(material.diffuseTexturePath);
+    if (texture && texture->valid()) {
+        return texture;
+    }
+
+    if (material.embeddedTextureData.empty()) {
+        return nullptr;
+    }
+
+    auto embedded = std::make_shared<Texture2D>();
+    if (material.embeddedTextureCompressed) {
+        if (!embedded->loadFromMemory(material.embeddedTextureData.data(), static_cast<int>(material.embeddedTextureData.size()), false)) {
+            return nullptr;
+        }
+    } else if (material.embeddedTextureWidth > 0 && material.embeddedTextureHeight > 0) {
+        embedded->createFromRGBA(material.embeddedTextureWidth, material.embeddedTextureHeight, material.embeddedTextureData.data(), false);
+    } else {
+        return nullptr;
+    }
+
+    m_textures.push_back(embedded);
+    return embedded;
+}
+
+std::shared_ptr<Texture2D> MissionManager::loadFirstAvailableTexture(const std::vector<std::string>& paths) {
+    for (const std::string& path : paths) {
+        auto texture = loadMissionTexture(path);
+        if (texture && texture->valid()) {
+            return texture;
+        }
+    }
+    return nullptr;
 }
 
 Mesh MissionManager::createStarMesh() const {
@@ -934,6 +1295,7 @@ glm::mat4 MissionManager::coinModelMatrix(const Coin& coin, float timeSeconds) c
     const float bob = std::sin(timeSeconds * 2.2f + coin.phase) * 0.10f;
     model = glm::translate(model, coin.position + glm::vec3(0.0f, bob, 0.0f));
     model = glm::rotate(model, timeSeconds * 4.8f + coin.phase, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
     model = glm::scale(model, glm::vec3(m_coinModelScale));
     model = glm::translate(model, -m_coinModelCenter);
     return model;
@@ -954,7 +1316,8 @@ bool MissionManager::validCoinPosition(const glm::vec3& position, const std::vec
         return false;
     }
 
-    if (glm::length(glm::vec2(position.x - playerSpawn.x, position.z - playerSpawn.z)) < 2.4f) {
+    const float minimumSpawnDistance = m_marioMapStyle ? 6.8f : 2.4f;
+    if (glm::length(glm::vec2(position.x - playerSpawn.x, position.z - playerSpawn.z)) < minimumSpawnDistance) {
         return false;
     }
 
@@ -964,7 +1327,31 @@ bool MissionManager::validCoinPosition(const glm::vec3& position, const std::vec
         }
     }
 
-    const Bounds candidate{position, {0.30f, 0.38f, 0.30f}};
+    const float expectedFloorY = position.y - 0.58f;
+    bool supportedByFloor = false;
+    for (const Bounds& collider : colliders) {
+        const float top = collider.center.y + collider.halfExtent.y;
+        const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
+        const bool floorLike = collider.halfExtent.y <= 0.32f && area >= 0.20f;
+        const bool insideSupport =
+            position.x >= collider.center.x - collider.halfExtent.x - 0.10f &&
+            position.x <= collider.center.x + collider.halfExtent.x + 0.10f &&
+            position.z >= collider.center.z - collider.halfExtent.z - 0.10f &&
+            position.z <= collider.center.z + collider.halfExtent.z + 0.10f;
+        if (!floorLike || !insideSupport) {
+            continue;
+        }
+
+        if (std::abs(top - expectedFloorY) <= 0.26f) {
+            supportedByFloor = true;
+            break;
+        }
+    }
+    if (!supportedByFloor) {
+        return false;
+    }
+
+    const Bounds candidate{position, m_marioMapStyle ? glm::vec3(0.22f, 0.30f, 0.22f) : glm::vec3(0.30f, 0.38f, 0.30f)};
     for (const Bounds& collider : colliders) {
         if (boundsIntersect(candidate, collider)) {
             return false;
@@ -990,7 +1377,11 @@ void MissionManager::recolectarMoneda(Coin& coin, float timeSeconds) {
     m_collectedCount = std::min(m_collectedCount + 1, MissionCoinTotal);
     mostrarMensajeMonedaTemporal(timeSeconds);
     if (m_collectedCount >= MissionCoinTotal) {
-        activarEstrella(timeSeconds);
+        if (m_completeOnAllCoins) {
+            completarNivel(timeSeconds);
+        } else {
+            activarEstrella(timeSeconds);
+        }
     }
 }
 
@@ -1016,45 +1407,72 @@ void MissionManager::completarNivel(float timeSeconds) {
     m_victoryTime = timeSeconds;
 }
 
+
+
 bool ToadNpc::initialize() {
+    // Prepara el NPC guía con modelo real o una versión de respaldo si falta el asset.
     if (m_initialized) {
         return true;
     }
 
-    LoadedModel model = ModelLoader::loadModel(resolveAssetPath("assets/npcs/RussT/Russ T/Russ T.dae"));
-    bool hasRenderableMesh = false;
-    if (model.meshes.empty()) {
-        buildFallbackModel();
-    } else {
-        m_modelMin = model.minBounds;
-        m_modelMax = model.maxBounds;
-        m_parts.reserve(model.meshes.size());
-        for (LoadedMesh& mesh : model.meshes) {
-            MissionRenderablePart part;
-            if (mesh.materialIndex < model.materials.size()) {
-                const LoadedMaterial& material = model.materials[mesh.materialIndex];
-                part.material.baseColor = material.diffuseColor;
-                part.material.opacity = material.opacity;
-                part.material.texture = loadNpcTexture(material.diffuseTexturePath);
-            } else {
-                part.material.baseColor = {1.0f, 0.92f, 0.78f};
-            }
-            part.material.roughness = 0.82f;
-            part.material.fogAmount = 0.22f;
-            part.mesh = std::move(mesh.mesh);
-            hasRenderableMesh = hasRenderableMesh || part.mesh.valid();
-            m_parts.push_back(std::move(part));
-        }
-        if (!hasRenderableMesh) {
-            buildFallbackModel();
+    buildFallbackModel();
+    m_initialized = true;
+    return true;
+}
+
+std::shared_ptr<Texture2D> ToadNpc::loadNpcTexture(const std::string& path) {
+    if (path.empty()) {
+        return nullptr;
+    }
+
+    const std::filesystem::path candidate = std::filesystem::path(resolveAssetPath(path));
+    if (!std::filesystem::exists(candidate)) {
+        return nullptr;
+    }
+
+    const std::string normalized = std::filesystem::weakly_canonical(candidate).string();
+    for (const auto& texture : m_textures) {
+        if (texture && texture->sourcePath() == normalized) {
+            return texture;
         }
     }
 
+    auto texture = std::make_shared<Texture2D>();
+    if (!texture->loadFromFile(normalized, false)) {
+        return nullptr;
+    }
+
+    m_textures.push_back(texture);
+    return texture;
+}
+
+void ToadNpc::buildFallbackModel() {
+    m_parts.clear();
+    auto makePart = [&](Mesh mesh, const glm::vec3& scale, const glm::vec3& position, const glm::vec3& color, const std::string& texturePath = std::string()) {
+        MissionRenderablePart part;
+        part.mesh = std::move(mesh);
+        part.localScale = scale;
+        part.localPosition = position;
+        part.material.baseColor = color;
+        part.material.roughness = 0.78f;
+        part.material.fogAmount = 0.20f;
+        part.material.texture = loadNpcTexture(texturePath);
+        m_parts.push_back(std::move(part));
+    };
+
+    makePart(Mesh::cube(), {0.62f, 0.52f, 0.62f}, {0.0f, 0.36f, 0.0f}, {0.96f, 0.92f, 0.85f}, "assets/npcs/RussT/Russ T/Toad (torso).png");
+    makePart(Mesh::cube(), {0.88f, 0.48f, 0.88f}, {0.0f, 0.98f, 0.0f}, {0.98f, 0.96f, 0.92f}, "assets/npcs/RussT/Russ T/Toad (head).png");
+    makePart(Mesh::cube(), {0.18f, 0.18f, 0.12f}, {-0.16f, 0.96f, 0.43f}, {0.08f, 0.08f, 0.10f}, "assets/npcs/RussT/Russ T/Toad (eyes).png");
+    makePart(Mesh::cube(), {0.18f, 0.18f, 0.12f}, {0.16f, 0.96f, 0.43f}, {0.08f, 0.08f, 0.10f}, "assets/npcs/RussT/Russ T/Toad (eyes).png");
+    makePart(Mesh::cube(), {0.18f, 0.34f, 0.18f}, {-0.34f, 0.46f, 0.0f}, {0.95f, 0.82f, 0.62f}, "assets/npcs/RussT/Russ T/Toad (hand).png");
+    makePart(Mesh::cube(), {0.18f, 0.34f, 0.18f}, {0.34f, 0.46f, 0.0f}, {0.95f, 0.82f, 0.62f}, "assets/npcs/RussT/Russ T/Toad (hand).png");
+    makePart(Mesh::cube(), {0.20f, 0.28f, 0.20f}, {-0.14f, 0.02f, 0.0f}, {0.54f, 0.26f, 0.16f}, "assets/npcs/RussT/Russ T/Toad (shoe).png");
+    makePart(Mesh::cube(), {0.20f, 0.28f, 0.20f}, {0.14f, 0.02f, 0.0f}, {0.54f, 0.26f, 0.16f}, "assets/npcs/RussT/Russ T/Toad (shoe).png");
+
+    m_modelMin = {-0.5f, -0.5f, -0.5f};
+    m_modelMax = {0.5f, 1.5f, 0.5f};
     m_modelCenter = (m_modelMin + m_modelMax) * 0.5f;
-    const float modelHeight = std::max(m_modelMax.y - m_modelMin.y, 0.001f);
-    m_modelScale = 0.98f / modelHeight;
-    m_initialized = true;
-    return true;
+    m_modelScale = 0.98f / std::max(m_modelMax.y - m_modelMin.y, 0.001f);
 }
 
 void ToadNpc::reset(const Environment& environment, const glm::vec3& playerSpawn) {
@@ -1086,77 +1504,13 @@ void ToadNpc::render(const Shader& shader, float timeSeconds) const {
     }
 
     const glm::mat4 model = modelMatrix(timeSeconds);
+    shader.use();
+    shader.setFloat("uTime", timeSeconds);
     for (const MissionRenderablePart& part : m_parts) {
-        shader.use();
         shader.setMat4("uModel", model * localPartMatrix(part));
-        shader.setFloat("uTime", timeSeconds);
         bindSceneMaterial(shader, part.material);
         part.mesh.draw();
     }
-}
-
-std::shared_ptr<Texture2D> ToadNpc::loadNpcTexture(const std::string& path) {
-    if (path.empty()) {
-        return nullptr;
-    }
-
-    const std::filesystem::path original(path);
-    const std::filesystem::path fileName = original.filename();
-    const std::filesystem::path candidates[] = {
-        original,
-        std::filesystem::path("assets") / "npcs" / "RussT" / "Russ T" / fileName,
-        std::filesystem::path("..") / ".." / "assets" / "npcs" / "RussT" / "Russ T" / fileName
-    };
-
-    std::filesystem::path resolved = original;
-    for (const auto& candidate : candidates) {
-        if (!candidate.empty() && std::filesystem::exists(candidate)) {
-            resolved = std::filesystem::weakly_canonical(candidate);
-            break;
-        }
-    }
-
-    const std::string normalized = resolved.string();
-    for (const auto& texture : m_textures) {
-        if (texture && texture->sourcePath() == normalized) {
-            return texture;
-        }
-    }
-
-    auto texture = std::make_shared<Texture2D>();
-    if (!texture->loadFromFile(normalized, false)) {
-        return nullptr;
-    }
-    m_textures.push_back(texture);
-    return texture;
-}
-
-void ToadNpc::buildFallbackModel() {
-    m_parts.clear();
-    m_modelMin = {-0.58f, 0.0f, -0.36f};
-    m_modelMax = {0.58f, 1.25f, 0.36f};
-
-    auto makePart = [&](Mesh mesh, const glm::vec3& color, const glm::vec3& position, const glm::vec3& scale) {
-        MissionRenderablePart part;
-        part.mesh = std::move(mesh);
-        part.material.baseColor = color;
-        part.material.roughness = 0.82f;
-        part.material.fogAmount = 0.22f;
-        part.localPosition = position;
-        part.localScale = scale;
-        m_parts.push_back(std::move(part));
-    };
-
-    makePart(Mesh::cylinder(28), {0.20f, 0.22f, 0.72f}, {0.0f, 0.36f, 0.0f}, {0.42f, 0.56f, 0.42f});
-    makePart(Mesh::cylinder(32), {1.0f, 0.86f, 0.66f}, {0.0f, 0.82f, 0.0f}, {0.43f, 0.36f, 0.43f});
-    makePart(Mesh::cylinder(36), {0.94f, 0.94f, 0.90f}, {0.0f, 1.12f, 0.0f}, {0.68f, 0.24f, 0.68f});
-    makePart(Mesh::cylinder(18), {0.22f, 0.38f, 0.92f}, {-0.30f, 1.20f, 0.17f}, {0.16f, 0.07f, 0.16f});
-    makePart(Mesh::cylinder(18), {0.22f, 0.38f, 0.92f}, {0.30f, 1.20f, 0.17f}, {0.16f, 0.07f, 0.16f});
-    makePart(Mesh::cube(), {0.02f, 0.02f, 0.025f}, {-0.13f, 0.88f, 0.34f}, {0.11f, 0.06f, 0.025f});
-    makePart(Mesh::cube(), {0.02f, 0.02f, 0.025f}, {0.13f, 0.88f, 0.34f}, {0.11f, 0.06f, 0.025f});
-    makePart(Mesh::cube(), {0.02f, 0.02f, 0.025f}, {0.0f, 0.88f, 0.35f}, {0.10f, 0.018f, 0.018f});
-    makePart(Mesh::cube(), {0.12f, 0.10f, 0.08f}, {-0.20f, 0.05f, 0.06f}, {0.24f, 0.11f, 0.34f});
-    makePart(Mesh::cube(), {0.12f, 0.10f, 0.08f}, {0.20f, 0.05f, 0.06f}, {0.24f, 0.11f, 0.34f});
 }
 
 glm::mat4 ToadNpc::modelMatrix(float timeSeconds) const {
@@ -1172,9 +1526,7 @@ glm::mat4 ToadNpc::modelMatrix(float timeSeconds) const {
 
 glm::vec3 ToadNpc::findSafePosition(const Environment& environment, const glm::vec3& playerSpawn) const {
     const auto& colliders = environment.collisionPreview();
-    const glm::vec3 worldMin = environment.worldMin();
-    const glm::vec3 worldMax = environment.worldMax();
-    const glm::vec2 fixedTarget{playerSpawn.x - 1.65f, playerSpawn.z + 1.35f};
+    const glm::vec2 target{playerSpawn.x - 1.65f, playerSpawn.z + 1.35f};
     glm::vec3 best = playerSpawn + glm::vec3(-1.65f, 0.05f, 1.35f);
     float bestScore = std::numeric_limits<float>::max();
 
@@ -1182,42 +1534,19 @@ glm::vec3 ToadNpc::findSafePosition(const Environment& environment, const glm::v
         const float top = collider.center.y + collider.halfExtent.y;
         const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
         const bool floorLike = collider.halfExtent.y <= 0.30f && area >= 0.45f && collider.halfExtent.x >= 0.28f && collider.halfExtent.z >= 0.28f;
-        if (!floorLike || top < worldMin.y - 0.15f || top > worldMax.y + 0.5f) {
+        if (!floorLike) {
             continue;
         }
 
         const float safeX = std::max(collider.halfExtent.x - 0.75f, 0.0f);
         const float safeZ = std::max(collider.halfExtent.z - 0.75f, 0.0f);
         glm::vec3 candidate{
-            std::clamp(fixedTarget.x, collider.center.x - safeX, collider.center.x + safeX),
+            std::clamp(target.x, collider.center.x - safeX, collider.center.x + safeX),
             top + 0.05f,
-            std::clamp(fixedTarget.y, collider.center.z - safeZ, collider.center.z + safeZ)
+            std::clamp(target.y, collider.center.z - safeZ, collider.center.z + safeZ)
         };
 
-        const bool insideWorld =
-            candidate.x > worldMin.x + 1.0f && candidate.x < worldMax.x - 1.0f &&
-            candidate.z > worldMin.z + 1.0f && candidate.z < worldMax.z - 1.0f;
-        const float spawnDistance = glm::length(glm::vec2(candidate.x - playerSpawn.x, candidate.z - playerSpawn.z));
-        if (!insideWorld || spawnDistance < 1.1f || spawnDistance > 3.6f) {
-            continue;
-        }
-
-        bool blockedAbove = false;
-        for (const Bounds& other : colliders) {
-            const bool horizontalOverlap =
-                std::abs(other.center.x - candidate.x) < other.halfExtent.x + 0.65f &&
-                std::abs(other.center.z - candidate.z) < other.halfExtent.z + 0.65f;
-            const float bottom = other.center.y - other.halfExtent.y;
-            if (horizontalOverlap && bottom > candidate.y + 0.45f && bottom < candidate.y + 2.5f) {
-                blockedAbove = true;
-                break;
-            }
-        }
-        if (blockedAbove) {
-            continue;
-        }
-
-        const float score = glm::length(glm::vec2(candidate.x, candidate.z) - fixedTarget) + std::abs(candidate.y - playerSpawn.y) * 0.8f;
+        const float score = glm::length(glm::vec2(candidate.x - target.x, candidate.z - target.y)) + std::abs(candidate.y - playerSpawn.y) * 0.4f;
         if (score < bestScore) {
             bestScore = score;
             best = candidate;
@@ -1240,6 +1569,7 @@ void drawSpinningCoinIcon(MenuContext& menu, const Texture2D& coinIcon, float x,
 
 template <typename Mission>
 void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int height, float timeSeconds) {
+    // Reúne contador, mensajes temporales y paneles de victoria del objetivo del nivel.
     beginUiFrame(menu, width, height);
 
     const int coinCount = std::clamp(mission.collectedCount(), 0, MissionCoinTotal);
@@ -1276,6 +1606,7 @@ void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int he
 }
 
 void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int height, float timeSeconds) {
+    // HUD de combate de Mapa 1 reutilizado como referencia visual para otros sistemas.
     beginUiFrame(menu, width, height);
     const Rect healthPanel{22.0f, 22.0f, 282.0f, 72.0f};
     drawRect(menu, {healthPanel.x + 6.0f, healthPanel.y + 7.0f, healthPanel.width, healthPanel.height}, {0.01f, 0.02f, 0.05f, 0.48f});
@@ -1321,7 +1652,34 @@ void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int he
     }
 }
 
+void drawSimpleHealthHud(MenuContext& menu, int currentHealth, int maximumHealth, int width, int height) {
+    // Variante mínima del HUD de vida para pantallas que no necesitan más información.
+    beginUiFrame(menu, width, height);
+    const Rect healthPanel{22.0f, 22.0f, 282.0f, 72.0f};
+    drawRect(menu, {healthPanel.x + 6.0f, healthPanel.y + 7.0f, healthPanel.width, healthPanel.height}, {0.01f, 0.02f, 0.05f, 0.48f});
+    drawRect(menu, healthPanel, {0.06f, 0.12f, 0.24f, 0.94f});
+    drawText(menu, menu.vidaJugador, healthPanel.x + 14.0f, healthPanel.y + 10.0f);
+    const float segmentWidth = 66.0f;
+    for (int index = 0; index < std::max(1, maximumHealth); ++index) {
+        const bool active = index < currentHealth;
+        drawRect(
+            menu,
+            {healthPanel.x + 14.0f + index * (segmentWidth + 9.0f), healthPanel.y + 43.0f, segmentWidth, 16.0f},
+            active ? glm::vec4(0.92f, 0.18f, 0.16f, 1.0f) : glm::vec4(0.20f, 0.23f, 0.30f, 0.90f));
+    }
+}
+
+void drawGameOverHud(MenuContext& menu, int width, int height) {
+    // Overlay simple para estados de derrota sin reconfigurar el resto del HUD.
+    beginUiFrame(menu, width, height);
+    drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.01f, 0.02f, 0.06f, 0.58f});
+    const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 72.0f, 560.0f, 144.0f);
+    drawPanel(menu, panel);
+    drawText(menu, menu.juegoTerminado, panel.x + (panel.width - menu.juegoTerminado.size.x) * 0.5f, panel.y + (panel.height - menu.juegoTerminado.size.y) * 0.5f);
+}
+
 void drawToadHud(MenuContext& menu, const ToadNpc& toad, int width, int height) {
+    // El HUD de Toad reutiliza paneles del menú para mantener coherencia visual.
     if (!toad.showPrompt() && !toad.dialogOpen()) {
         return;
     }
@@ -1342,6 +1700,7 @@ void drawToadHud(MenuContext& menu, const ToadNpc& toad, int width, int height) 
 }
 
 void mostrarMenuPrincipal(MenuContext& menu, int width, int height, float timeSeconds, const glm::vec2& mouse, bool clicked, GLFWwindow* window) {
+    // Menú principal del juego con la navegación visual base entre pantallas.
     beginUiFrame(menu, width, height);
     drawMenuBackground(menu, width, height, timeSeconds);
 
@@ -1349,22 +1708,23 @@ void mostrarMenuPrincipal(MenuContext& menu, int width, int height, float timeSe
     const float buttonHeight = 54.0f;
     const float centerX = width * 0.5f;
     const float startY = std::max(382.0f, height * 0.53f);
-    if (drawButton(menu, menu.jugar, centeredRect(centerX, startY, buttonWidth, buttonHeight), mouse, clicked)) {
+    if (drawButton(menu, menu.jugar, centeredRect(centerX, startY, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
         appState = EstadoJuego::MENU_MUNDOS;
         menu.notificationUntil = 0.0;
     }
-    if (drawButton(menu, menu.comoJugar, centeredRect(centerX, startY + 66.0f, buttonWidth, buttonHeight), mouse, clicked)) {
+    if (drawButton(menu, menu.comoJugar, centeredRect(centerX, startY + 66.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
         appState = EstadoJuego::COMO_JUGAR;
     }
-    if (drawButton(menu, menu.creditos, centeredRect(centerX, startY + 132.0f, buttonWidth, buttonHeight), mouse, clicked)) {
+    if (drawButton(menu, menu.creditos, centeredRect(centerX, startY + 132.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
         appState = EstadoJuego::CREDITOS;
     }
-    if (drawButton(menu, menu.salir, centeredRect(centerX, startY + 198.0f, buttonWidth, buttonHeight), mouse, clicked)) {
+    if (drawButton(menu, menu.salir, centeredRect(centerX, startY + 198.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
 }
 
 void mostrarMenuMundos(MenuContext& menu, int width, int height, float timeSeconds, const glm::vec2& mouse, bool clicked) {
+    // Pantalla de selección de mundos con el mismo sistema de botones del menú principal.
     beginUiFrame(menu, width, height);
     drawMenuBackground(menu, width, height, timeSeconds, false);
 
@@ -1375,21 +1735,22 @@ void mostrarMenuMundos(MenuContext& menu, int width, int height, float timeSecon
     const float buttonHeight = 54.0f;
     const float centerX = width * 0.5f;
     const float startY = 224.0f;
-    if (drawButton(menu, menu.mundo1, centeredRect(centerX, startY, buttonWidth, buttonHeight), mouse, clicked)) {
+    if (drawButton(menu, menu.mundo1, centeredRect(centerX, startY, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
         appState = EstadoJuego::MUNDO_1;
         menu.notificationUntil = 0.0;
     }
-    if (drawButton(menu, menu.mundo2, centeredRect(centerX, startY + 68.0f, buttonWidth, buttonHeight), mouse, clicked)) {
+    if (drawButton(menu, menu.mundo2, centeredRect(centerX, startY + 68.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
         appState = EstadoJuego::MUNDO_2;
         menu.notificationUntil = 0.0;
     }
-    if (drawButton(menu, menu.mundo3, centeredRect(centerX, startY + 136.0f, buttonWidth, buttonHeight), mouse, clicked)) {
+    if (drawButton(menu, menu.mundo3, centeredRect(centerX, startY + 136.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
         menu.notificationUntil = glfwGetTime() + 2.3;
     }
-    if (drawButton(menu, menu.mundo4, centeredRect(centerX, startY + 204.0f, buttonWidth, buttonHeight), mouse, clicked)) {
-        menu.notificationUntil = glfwGetTime() + 2.3;
+    if (drawButton(menu, menu.mundo4, centeredRect(centerX, startY + 204.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
+        appState = EstadoJuego::MUNDO_4;
+        menu.notificationUntil = 0.0;
     }
-    if (drawButton(menu, menu.volver, centeredRect(centerX, startY + 284.0f, buttonWidth, buttonHeight), mouse, clicked)) {
+    if (drawButton(menu, menu.volver, centeredRect(centerX, startY + 284.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
         appState = EstadoJuego::MENU_PRINCIPAL;
         menu.notificationUntil = 0.0;
     }
@@ -1397,6 +1758,7 @@ void mostrarMenuMundos(MenuContext& menu, int width, int height, float timeSecon
 }
 
 void mostrarComoJugar(MenuContext& menu, int width, int height, float timeSeconds, const glm::vec2& mouse, bool clicked) {
+    // Pantalla estática de instrucciones generales del juego.
     beginUiFrame(menu, width, height);
     drawMenuBackground(menu, width, height, timeSeconds, false);
 
@@ -1405,12 +1767,13 @@ void mostrarComoJugar(MenuContext& menu, int width, int height, float timeSecond
     drawText(menu, menu.tituloComoJugar, panel.x + (panel.width - menu.tituloComoJugar.size.x) * 0.5f, panel.y + 34.0f);
     drawText(menu, menu.textoComoJugar, panel.x + (panel.width - menu.textoComoJugar.size.x) * 0.5f, panel.y + 118.0f);
 
-    if (drawButton(menu, menu.volver, centeredRect(width * 0.5f, panel.y + panel.height - 83.0f, 260.0f, 55.0f), mouse, clicked)) {
+    if (drawButton(menu, menu.volver, centeredRect(width * 0.5f, panel.y + panel.height - 83.0f, 260.0f, 55.0f), mouse, clicked, timeSeconds)) {
         appState = EstadoJuego::MENU_PRINCIPAL;
     }
 }
 
 void mostrarCreditos(MenuContext& menu, int width, int height, float timeSeconds, const glm::vec2& mouse, bool clicked) {
+    // Créditos del proyecto presentados con el mismo layout base del resto del menú.
     beginUiFrame(menu, width, height);
     drawMenuBackground(menu, width, height, timeSeconds, false);
 
@@ -1419,12 +1782,13 @@ void mostrarCreditos(MenuContext& menu, int width, int height, float timeSeconds
     drawText(menu, menu.tituloCreditos, panel.x + (panel.width - menu.tituloCreditos.size.x) * 0.5f, panel.y + 38.0f);
     drawText(menu, menu.textoCreditos, panel.x + (panel.width - menu.textoCreditos.size.x) * 0.5f, panel.y + 120.0f);
 
-    if (drawButton(menu, menu.volver, centeredRect(width * 0.5f, panel.y + panel.height - 82.0f, 260.0f, 55.0f), mouse, clicked)) {
+    if (drawButton(menu, menu.volver, centeredRect(width * 0.5f, panel.y + panel.height - 82.0f, 260.0f, 55.0f), mouse, clicked, timeSeconds)) {
         appState = EstadoJuego::MENU_PRINCIPAL;
     }
 }
 
 void resetGameplayView(const Player& player) {
+    // Restaura la cámara libre y el estado de entrada para comenzar en 3D.
     currentMode = PlayMode::Mode3D;
     lastToggleKey = false;
     lastJumpKey = false;
@@ -1436,7 +1800,35 @@ void resetGameplayView(const Player& player) {
     locked2DDepth = player.position().z;
 }
 
+void drawShieldHud(MenuContext& menu, int width, int height, bool active) {
+    // Indicador visual breve para confirmar que el parry/escudo está activo.
+    if (!active) {
+        return;
+    }
+    beginUiFrame(menu, width, height);
+    const Rect shieldPanel = centeredRect(width * 0.5f, 28.0f, 210.0f, 46.0f);
+    drawRect(menu, {shieldPanel.x + 5.0f, shieldPanel.y + 6.0f, shieldPanel.width, shieldPanel.height}, {0.01f, 0.03f, 0.08f, 0.38f});
+    drawRect(menu, shieldPanel, {0.10f, 0.46f, 0.68f, 0.92f});
+    drawText(menu, menu.parryActivo,
+        shieldPanel.x + (shieldPanel.width - menu.parryActivo.size.x) * 0.5f,
+        shieldPanel.y + (shieldPanel.height - menu.parryActivo.size.y) * 0.5f);
+}
+
+void resetGameplayView2D(const Player& player) {
+    // Variante de reinicio que deja al jugador entrando directamente en 2D.
+    currentMode = PlayMode::Mode2D;
+    lastToggleKey = false;
+    lastJumpKey = false;
+    lastInteractKey = false;
+    cameraYawDegrees = 0.0f;
+    cameraPitchDegrees = 18.0f;
+    cameraInitialized = false;
+    firstMouse = true;
+    locked2DDepth = player.position().z;
+}
+
 bool iniciarMundo2(Mundo2Runtime& mundo2) {
+    // Carga el escenario, música, jugador y objetivos de Mundo 2 antes de entrar al bucle jugable.
     if (mundo2.initialized) {
         if (mundo2.musicOpen && !mundo2.musicPlaying) {
             mundo2.musicPlaying = mundo2.music.playLoop();
@@ -1461,13 +1853,14 @@ bool iniciarMundo2(Mundo2Runtime& mundo2) {
     resetGameplayView(mundo2.player);
 
     std::cout << "Mundo 2 ready. Collision volumes: " << mundo2.environment.collisionPreview().size() << std::endl;
-    std::cout << "Controls 3D: WASD move, mouse camera, Space jump, E switch to 2D, Esc back to menu." << std::endl;
-    std::cout << "Controls 2D: A/D move, Space jump, E switch to 3D." << std::endl;
+    std::cout << "Controls 3D: WASD move, mouse camera, Space jump, TAB switch to 2D, Esc back to menu." << std::endl;
+    std::cout << "Controls 2D: A/D move, Space jump, TAB switch to 3D." << std::endl;
     mundo2.initialized = true;
     return true;
 }
 
 void volverAlMenu(Mundo2Runtime& mundo2) {
+    // Detiene audio y reinicia la sesión de Mundo 2 al salir al menú.
     if (mundo2.musicOpen && mundo2.musicPlaying) {
         mundo2.music.stop();
         mundo2.musicPlaying = false;
@@ -1481,11 +1874,14 @@ void volverAlMenu(Mundo2Runtime& mundo2) {
 }
 
 void framebufferSizeCallback(GLFWwindow*, int width, int height) {
+    // Mantiene el viewport sincronizado con el tamaño real de la ventana.
     glViewport(0, 0, width, height);
 }
 
 void mouseCallback(GLFWwindow*, double x, double y) {
-    if (appState != EstadoJuego::MUNDO_2) {
+    // Solo actualiza deltas de mouse; la cámara decide después cómo usarlos.
+    if (appState != EstadoJuego::MUNDO_2 && appState != EstadoJuego::MUNDO_4) {
+        // Fuera de gameplay solo se resetea el mouse para no arrastrar deltas viejos.
         lastMouseX = x;
         lastMouseY = y;
         return;
@@ -1504,16 +1900,17 @@ void mouseCallback(GLFWwindow*, double x, double y) {
     if (currentMode == PlayMode::Mode3D) {
         cameraYawDegrees -= deltaX * 0.10f;
         cameraPitchDegrees += deltaY * 0.08f;
-        cameraPitchDegrees = std::clamp(cameraPitchDegrees, 10.0f, 34.0f);
+        cameraPitchDegrees = std::clamp(cameraPitchDegrees, appState == EstadoJuego::MUNDO_4 ? 8.0f : 10.0f, appState == EstadoJuego::MUNDO_4 ? 42.0f : 34.0f);
     }
 }
 
 void updateCursorMode(GLFWwindow* window) {
+    // Alterna entre cursor libre en menús y capturado durante la jugabilidad 3D.
     if (appState == lastCursorState) {
         return;
     }
 
-    if (appState == EstadoJuego::MUNDO_2) {
+    if (appState == EstadoJuego::MUNDO_2 || appState == EstadoJuego::MUNDO_4) {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         firstMouse = true;
     } else {
@@ -1522,7 +1919,8 @@ void updateCursorMode(GLFWwindow* window) {
     lastCursorState = appState;
 }
 
-void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2) {
+void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Mapa4Runtime& mapa4) {
+    // Agrupa los atajos globales del juego para no duplicar control por mapa.
     const bool escapeDown = glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
     if (escapeDown && !lastEscapeKey) {
         switch (appState) {
@@ -1542,13 +1940,17 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2) {
         case EstadoJuego::MUNDO_2:
             volverAlMenu(mundo2);
             break;
+        case EstadoJuego::MUNDO_4:
+            volverAlMenu(mapa4);
+            appState = EstadoJuego::MENU_PRINCIPAL;
+            break;
         }
     }
     lastEscapeKey = escapeDown;
 }
 
 PlayerInput buildPlayerInput(GLFWwindow* window, const Player& player) {
-    const bool toggleDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
+    const bool toggleDown = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
     if (toggleDown && !lastToggleKey) {
         if (currentMode == PlayMode::Mode3D) {
             currentMode = PlayMode::Mode2D;
@@ -1574,13 +1976,16 @@ PlayerInput buildPlayerInput(GLFWwindow* window, const Player& player) {
         input.move = glm::normalize(input.move);
     }
 
-    const bool jumpDown = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+    const bool jumpDown = currentMode == PlayMode::Mode2D
+        ? (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        : (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
     input.jumpPressed = jumpDown && !lastJumpKey;
     lastJumpKey = jumpDown;
     return input;
 }
 
 void updateGameplayCamera(const Player& player, const Environment& environment, const MissionManager& mission, float timeSeconds, float dt) {
+    // Ajusta una sola cámara para 2D y 3D según el modo activo y el contexto del nivel.
     const glm::vec3 playerTarget = player.position() + glm::vec3(0.0f, 0.50f, 0.0f);
     glm::vec3 desiredTarget = playerTarget;
     glm::vec3 desiredPosition;
@@ -1596,37 +2001,20 @@ void updateGameplayCamera(const Player& player, const Environment& environment, 
         desiredTarget = star + glm::vec3(0.0f, 0.34f, 0.0f);
         desiredPosition = desiredTarget + viewDirection * 4.8f + glm::vec3(0.0f, 2.15f, 0.0f);
     } else if (currentMode == PlayMode::Mode3D) {
+        const bool marioMap4 = isMarioMapa4Environment(environment);
         const float yaw = glm::radians(cameraYawDegrees);
         const float pitch = glm::radians(cameraPitchDegrees);
-        const float distance = 4.25f;
+        const float distance = marioMap4 ? 3.10f : 4.25f;
         const float horizontalDistance = std::cos(pitch) * distance;
         const glm::vec3 orbitOffset(
             std::sin(yaw) * horizontalDistance,
-            0.55f + std::sin(pitch) * distance,
+            (marioMap4 ? 0.38f : 0.55f) + std::sin(pitch) * distance,
             std::cos(yaw) * horizontalDistance);
+        desiredTarget = player.position() + glm::vec3(0.0f, marioMap4 ? 0.44f : 0.50f, 0.0f);
         desiredPosition = desiredTarget + orbitOffset;
     } else {
         desiredTarget = player.position() + glm::vec3(0.0f, 0.56f, 0.0f);
-        desiredPosition = desiredTarget + glm::vec3(0.0f, 1.28f, 6.2f);
-    }
-
-    auto clampToWorld = [&](glm::vec3 value, float margin) {
-        const glm::vec3 worldMin = environment.worldMin();
-        const glm::vec3 worldMax = environment.worldMax();
-        if (worldMax.x > worldMin.x + margin * 2.0f) {
-            value.x = std::clamp(value.x, worldMin.x + margin, worldMax.x - margin);
-        }
-        if (worldMax.z > worldMin.z + margin * 2.0f) {
-            value.z = std::clamp(value.z, worldMin.z + margin, worldMax.z - margin);
-        }
-        value.y = std::clamp(value.y, worldMin.y + 0.85f, worldMax.y + 4.0f);
-        return value;
-    };
-
-    desiredTarget = clampToWorld(desiredTarget, 1.05f);
-    desiredPosition = clampToWorld(desiredPosition, 0.78f);
-    if (glm::length(desiredPosition - desiredTarget) < 1.15f) {
-        desiredPosition = clampToWorld(desiredTarget + glm::vec3(0.0f, 1.65f, 2.25f), 0.78f);
+        desiredPosition = desiredTarget + glm::vec3(0.0f, 0.88f, isMarioMapa4Environment(environment) ? 3.35f : 6.2f);
     }
 
     const float smoothing = 1.0f - std::exp(-7.2f * dt);
@@ -1640,15 +2028,28 @@ void updateGameplayCamera(const Player& player, const Environment& environment, 
     }
 }
 
-void uploadCommonSceneUniforms(const Shader& shader, const Environment& environment, const glm::vec3& cameraPosition, const glm::mat4& view, const glm::mat4& projection, float timeSeconds) {
+void uploadCommonSceneUniforms(const Shader& shader, const Environment& environment, const glm::vec3& cameraPosition, const glm::mat4& view, const glm::mat4& projection, float timeSeconds, const glm::vec3* playerLightPosition = nullptr, float playerLightRatio = 1.0f, const std::vector<glm::vec3>* extraGlowLights = nullptr) {
+    // Envía al shader la cámara, la iluminación común y las variaciones especiales de cada mapa.
     shader.use();
     shader.setMat4("uView", view);
     shader.setMat4("uProjection", projection);
     shader.setVec3("uCameraPosition", cameraPosition);
-    shader.setVec3("uAmbientColor", {0.30f, 0.30f, 0.34f});
-    shader.setVec3("uDirectionalLight.direction", {-0.30f, -0.80f, -0.40f});
-    shader.setVec3("uDirectionalLight.color", {0.52f, 0.54f, 0.58f});
+    const bool marioMap4 = isMarioMapa4Environment(environment);
     shader.setFloat("uTime", timeSeconds);
+
+    if (marioMap4) {
+        shader.setVec3("uAmbientColor", {0.0f, 0.0f, 0.0f});
+        shader.setVec3("uDirectionalLight.direction", {-0.30f, -0.80f, -0.40f});
+        shader.setVec3("uDirectionalLight.color", {0.0f, 0.0f, 0.0f});
+        shader.setVec3("uFogColor", {0.01f, 0.02f, 0.04f});
+        shader.setFloat("uSceneExposure", 1.0f);
+    } else {
+        shader.setVec3("uAmbientColor", {0.30f, 0.30f, 0.34f});
+        shader.setVec3("uDirectionalLight.direction", {-0.30f, -0.80f, -0.40f});
+        shader.setVec3("uDirectionalLight.color", {0.52f, 0.54f, 0.58f});
+        shader.setVec3("uFogColor", {0.12f, 0.025f, 0.018f});
+        shader.setFloat("uSceneExposure", 1.0f);
+    }
 
     const auto& lights = environment.lights();
     const int count = std::min(static_cast<int>(lights.size()), MaxLights);
@@ -1661,9 +2062,29 @@ void uploadCommonSceneUniforms(const Shader& shader, const Environment& environm
         shader.setFloat(prefix + ".intensity", lights[i].intensity * flicker);
         shader.setFloat(prefix + ".radius", lights[i].radius);
     }
+
+    if (marioMap4) {
+        const int extraBase = count;
+        const int glowCount = 0;
+        const int extraCount = std::min((playerLightPosition ? 1 : 0) + glowCount, MaxLights - count);
+        shader.setInt("uPointLightCount", count + extraCount);
+        int nextLightIndex = extraBase;
+        if (playerLightPosition && nextLightIndex < count + extraCount) {
+            const std::string prefix = "uPointLights[" + std::to_string(nextLightIndex) + "]";
+            shader.setVec3(prefix + ".position", *playerLightPosition + glm::vec3(0.0f, 0.46f, currentMode == PlayMode::Mode2D ? 0.36f : 0.18f));
+            shader.setVec3(prefix + ".color", glm::vec3(0.94f, 0.88f, 0.72f));
+            const float lightScale = std::clamp(playerLightRatio, 0.0f, 1.0f);
+            const float intensity = lightScale * 1.18f;
+            const float radius = lightScale * 3.45f;
+            shader.setFloat(prefix + ".intensity", intensity);
+            shader.setFloat(prefix + ".radius", radius);
+            ++nextLightIndex;
+        }
+    }
 }
 
 bool initializeMenu(MenuContext& menu) {
+    // Crea texturas, fuentes rasterizadas y buffers de UI usados por todo el juego.
     menu.shader.load(resolveAssetPath("shaders/ui.vert"), resolveAssetPath("shaders/ui.frag"));
     if (menu.shader.id() == 0) {
         return false;
@@ -1719,9 +2140,12 @@ bool initializeMenu(MenuContext& menu) {
         menu.coinMessages[i] = createTextSprite(formatCoinProgress(i), 31, white, 132, false, true);
     }
     menu.estrellaLista = createTextSprite(L"\u00a1La estrella apareci\u00f3!", 29, titleColor, 400, false, true);
-    menu.nivelCompletado = createTextSprite(L"\u00a1Nivel completado!", 52, titleColor, 520, false, true);
+    menu.nivelCompletado = createTextSprite(L"\u00a1Nivel completado! \u00a1Ganaste!", 48, titleColor, 660, false, true);
+    menu.juegoTerminado = createTextSprite(L"Juego terminado", 52, titleColor, 520, false, true);
     menu.combateSolo2D = createTextSprite(L"\u00a1Peligro! Cambia a 2D con TAB para detener a los enemigos.", 27, white, 720, false, true);
     menu.vidaJugador = createTextSprite(L"VIDA", 25, white, 120, false, false);
+    menu.luzJugador = createTextSprite(L"LUZ", 25, white, 120, false, false);
+    menu.mapa4Hint = createTextSprite(L"Follow the light and find the golden coins", 20, white, 520, false, true);
     menu.cargandoAtaque = createTextSprite(L"CARGANDO TIRO", 21, white, 250, false, false);
     menu.parryActivo = createTextSprite(L"PARRY", 23, white, 150, false, true);
     menu.promptHablarToad = createTextSprite(L"Pulsa F para hablar", 28, white, 330, false, true);
@@ -1746,6 +2170,7 @@ void shutdownMenu(MenuContext& menu) {
 }
 
 void renderMundo2(GLFWwindow* window, Mundo2Runtime& mundo2, MenuContext& menu, const Shader& sceneShader, const Shader& lavaShader, float now) {
+    // Bucle principal de Mundo 2: entrada, actualización, cámara, render y HUD.
     const PlayerInput playerInput = buildPlayerInput(window, mundo2.player);
     const bool interactDown = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
     const bool interactPressed = interactDown && !lastInteractKey;
@@ -1773,13 +2198,12 @@ void renderMundo2(GLFWwindow* window, Mundo2Runtime& mundo2, MenuContext& menu, 
     lavaShader.setMat4("uProjection", projection);
     lavaShader.setFloat("uTime", now);
 
-    mundo2.environment.render(sceneShader, lavaShader, now);
-    mundo2.mission.render(sceneShader, now);
+    mundo2.environment.render(sceneShader, lavaShader, now, gameplayCameraPosition);
+    mundo2.mission.render(sceneShader, now, gameplayCameraPosition);
     mundo2.toad.render(sceneShader, now);
     mundo2.player.render(sceneShader);
     drawMissionHud(menu, mundo2.mission, width, height, now);
     drawToadHud(menu, mundo2.toad, width, height);
-}
 }
 
 int main(int argc, char** argv) {
@@ -1841,6 +2265,7 @@ int main(int argc, char** argv) {
 
     Mapa1 mapa1;
     Mundo2Runtime mundo2;
+    Mapa4Runtime mapa4;
 
     if (mapa1SmokeTest || mapa1CombatSmokeTest) {
         bool loaded = mapa1.initialize(false);
@@ -1862,7 +2287,7 @@ int main(int argc, char** argv) {
         lastFrame = now;
 
         updateCursorMode(window);
-        processAppInput(window, mapa1, mundo2);
+        processAppInput(window, mapa1, mundo2, mapa4);
 
         double cursorX = 0.0;
         double cursorY = 0.0;
@@ -1889,6 +2314,20 @@ int main(int argc, char** argv) {
             } else {
                 renderMundo2(window, mundo2, menu, sceneShader, lavaShader, now);
             }
+        } else if (appState == EstadoJuego::MUNDO_4) {
+            if (!iniciarMapa4(mapa4)) {
+                appState = EstadoJuego::MENU_MUNDOS;
+                menu.notificationUntil = glfwGetTime() + 2.3;
+            } else {
+                renderMapa4(window, mapa4, sceneShader, lavaShader, now);
+                drawMissionHud(menu, mapa4.mission, width, height, now);
+                drawSimpleHealthHud(menu, mapa4.health, mapa4.maxHealth, width, height);
+                renderMapa4Hud(menu, mapa4, width, height, now);
+                drawShieldHud(menu, width, height, mapa4.shieldActive);
+                if (mapa4.gameOver) {
+                    drawGameOverHud(menu, width, height);
+                }
+            }
         } else {
             glDisable(GL_DEPTH_TEST);
             glClearColor(0.16f, 0.50f, 0.80f, 1.0f);
@@ -1909,6 +2348,7 @@ int main(int argc, char** argv) {
                 break;
             case EstadoJuego::MUNDO_1:
             case EstadoJuego::MUNDO_2:
+            case EstadoJuego::MUNDO_4:
                 break;
             }
         }

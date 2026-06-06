@@ -13,6 +13,7 @@ public:
     bool open(const std::string& filePath);
     bool playLoop();
     bool playOnce();
+    bool setVolume(int volume);
     void stop();
     void close();
 

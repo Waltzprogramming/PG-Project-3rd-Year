@@ -3,7 +3,9 @@
 #include <Windows.h>
 #include <mmsystem.h>
 
+#include <algorithm>
 #include <atomic>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <utility>
@@ -38,6 +40,17 @@ bool sendMci(const std::wstring& command) {
     std::wcerr << L"MCI audio command failed: " << command << L" -> " << errorText << std::endl;
     return false;
 }
+
+std::wstring normalizeMciPath(const std::string& filePath) {
+    std::filesystem::path path(filePath);
+    if (!path.is_absolute()) {
+        path = std::filesystem::absolute(path);
+    }
+    path = path.lexically_normal();
+    std::wstring native = path.native();
+    std::replace(native.begin(), native.end(), L'/', L'\\');
+    return native;
+}
 }
 
 AudioPlayer::AudioPlayer()
@@ -55,12 +68,29 @@ AudioPlayer::~AudioPlayer() {
 bool AudioPlayer::open(const std::string& filePath) {
     close();
 
-    const std::wstring path = widen(filePath);
+    std::error_code errorCode;
+    std::filesystem::path resolved(filePath);
+    if (!resolved.is_absolute()) {
+        resolved = std::filesystem::absolute(resolved, errorCode);
+    }
+    resolved = resolved.lexically_normal();
+    if (!std::filesystem::exists(resolved, errorCode)) {
+        std::cerr << "Audio file does not exist: " << resolved.string() << std::endl;
+        return false;
+    }
+
+    const std::wstring path = normalizeMciPath(resolved.string());
     std::wstringstream command;
     command << L"open \"" << path << L"\" type mpegvideo alias " << m_alias;
     m_open = sendMci(command.str());
+    if (!m_open) {
+        std::wstringstream fallbackCommand;
+        fallbackCommand << L"open \"" << path << L"\" alias " << m_alias;
+        m_open = sendMci(fallbackCommand.str());
+    }
     if (m_open) {
         sendMci(L"set " + m_alias + L" time format milliseconds");
+        setVolume(900);
     }
     return m_open;
 }
@@ -82,6 +112,15 @@ bool AudioPlayer::playOnce() {
         return false;
     }
     return sendMci(L"play " + m_alias);
+}
+
+bool AudioPlayer::setVolume(int volume) {
+    if (!m_open) {
+        return false;
+    }
+
+    const int clampedVolume = std::clamp(volume, 0, 1000);
+    return sendMci(L"setaudio " + m_alias + L" volume to " + std::to_wstring(clampedVolume));
 }
 
 void AudioPlayer::stop() {

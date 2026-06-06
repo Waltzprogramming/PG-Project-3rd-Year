@@ -36,7 +36,9 @@ uniform PointLight uPointLights[MAX_LIGHTS];
 uniform int uPointLightCount;
 uniform vec3 uAmbientColor;
 uniform vec3 uCameraPosition;
+uniform vec3 uFogColor;
 uniform float uTime;
+uniform float uSceneExposure;
 
 out vec4 FragColor;
 
@@ -83,10 +85,9 @@ void main() {
     float heightShade = smoothstep(-1.2, 4.8, vWorldPosition.y);
     light *= mix(1.22, 0.86, heightShade);
 
-    vec3 color = albedo * light + uMaterial.emissive;
+    vec3 color = (albedo * light + uMaterial.emissive) * uSceneExposure;
     float fog = smoothstep(18.0, 78.0, length(uCameraPosition - vWorldPosition)) * uMaterial.fogAmount;
-    vec3 fogColor = vec3(0.12, 0.025, 0.018);
-    color = mix(color, fogColor, fog);
+    color = mix(color, uFogColor, fog);
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
