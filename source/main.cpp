@@ -7,6 +7,7 @@
 #include "GameRuntime.h"
 #include "GameSystems.h"
 #include "GameUI.h"
+#include "Map3.h"
 #include "Map4.h"
 #include "Mapa1.h"
 #include "Player.h"
@@ -45,6 +46,7 @@ enum class EstadoJuego {
     CREDITOS,
     MUNDO_1,
     MUNDO_2,
+    MUNDO_3,
     MUNDO_4
 };
 
@@ -1744,7 +1746,8 @@ void mostrarMenuMundos(MenuContext& menu, int width, int height, float timeSecon
         menu.notificationUntil = 0.0;
     }
     if (drawButton(menu, menu.mundo3, centeredRect(centerX, startY + 136.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
-        menu.notificationUntil = glfwGetTime() + 2.3;
+        appState = EstadoJuego::MUNDO_3;
+        menu.notificationUntil = 0.0;
     }
     if (drawButton(menu, menu.mundo4, centeredRect(centerX, startY + 204.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
         appState = EstadoJuego::MUNDO_4;
@@ -1880,7 +1883,7 @@ void framebufferSizeCallback(GLFWwindow*, int width, int height) {
 
 void mouseCallback(GLFWwindow*, double x, double y) {
     // Solo actualiza deltas de mouse; la cámara decide después cómo usarlos.
-    if (appState != EstadoJuego::MUNDO_2 && appState != EstadoJuego::MUNDO_4) {
+    if (appState != EstadoJuego::MUNDO_2 && appState != EstadoJuego::MUNDO_3 && appState != EstadoJuego::MUNDO_4) {
         // Fuera de gameplay solo se resetea el mouse para no arrastrar deltas viejos.
         lastMouseX = x;
         lastMouseY = y;
@@ -1910,7 +1913,7 @@ void updateCursorMode(GLFWwindow* window) {
         return;
     }
 
-    if (appState == EstadoJuego::MUNDO_2 || appState == EstadoJuego::MUNDO_4) {
+    if (appState == EstadoJuego::MUNDO_2 || appState == EstadoJuego::MUNDO_3 || appState == EstadoJuego::MUNDO_4) {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         firstMouse = true;
     } else {
@@ -1919,7 +1922,7 @@ void updateCursorMode(GLFWwindow* window) {
     lastCursorState = appState;
 }
 
-void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Mapa4Runtime& mapa4) {
+void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
     // Agrupa los atajos globales del juego para no duplicar control por mapa.
     const bool escapeDown = glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
     if (escapeDown && !lastEscapeKey) {
@@ -1939,6 +1942,10 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
             break;
         case EstadoJuego::MUNDO_2:
             volverAlMenu(mundo2);
+            break;
+        case EstadoJuego::MUNDO_3:
+            volverAlMenu(map3);
+            appState = EstadoJuego::MENU_PRINCIPAL;
             break;
         case EstadoJuego::MUNDO_4:
             volverAlMenu(mapa4);
@@ -2265,6 +2272,7 @@ int main(int argc, char** argv) {
 
     Mapa1 mapa1;
     Mundo2Runtime mundo2;
+    Map3Runtime map3;
     Mapa4Runtime mapa4;
 
     if (mapa1SmokeTest || mapa1CombatSmokeTest) {
@@ -2287,7 +2295,7 @@ int main(int argc, char** argv) {
         lastFrame = now;
 
         updateCursorMode(window);
-        processAppInput(window, mapa1, mundo2, mapa4);
+        processAppInput(window, mapa1, mundo2, map3, mapa4);
 
         double cursorX = 0.0;
         double cursorY = 0.0;
@@ -2313,6 +2321,19 @@ int main(int argc, char** argv) {
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
             } else {
                 renderMundo2(window, mundo2, menu, sceneShader, lavaShader, now);
+            }
+        } else if (appState == EstadoJuego::MUNDO_3) {
+            if (!iniciarMap3(map3)) {
+                appState = EstadoJuego::MENU_MUNDOS;
+                menu.notificationUntil = 0.0;
+            } else {
+                renderMap3(window, map3, sceneShader, lavaShader, now);
+                drawMissionHud(menu, map3.mission, width, height, now);
+                drawSimpleHealthHud(menu, map3.health, map3.maxHealth, width, height);
+                drawShieldHud(menu, width, height, map3DefensiveActionActive(map3, now));
+                if (map3.gameOver) {
+                    drawGameOverHud(menu, width, height);
+                }
             }
         } else if (appState == EstadoJuego::MUNDO_4) {
             if (!iniciarMapa4(mapa4)) {
@@ -2348,6 +2369,7 @@ int main(int argc, char** argv) {
                 break;
             case EstadoJuego::MUNDO_1:
             case EstadoJuego::MUNDO_2:
+            case EstadoJuego::MUNDO_3:
             case EstadoJuego::MUNDO_4:
                 break;
             }
