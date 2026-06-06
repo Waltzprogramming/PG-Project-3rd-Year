@@ -151,11 +151,11 @@ void renderMap3ActionEffect(const Shader& shader, const Player& player, float ti
 
 bool loadMap3Environment(Environment& environment) {
     const std::array<std::string, 8> candidates = {
-        "Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit/course.dae",
-        "Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit/course_fix.dae",
-        "Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit",
-        "assets/Mundos/MarioCircuit/course.dae",
-        "assets/Mundos/MarioCircuit",
+        "assets/mundo3/Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit/course.dae",
+        "assets/mundo3/Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit/course_fix.dae",
+        "assets/mundo3/Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit",
+        "assets/mundo3/Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit/map.dae",
+        "assets/mundo3/Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit/course_d.dae",
         "assets/Mundos/FreezeezyPeak/Freezeezy Peak.dae",
         "assets/mapa1/world1/CourseSelectW1.dae",
         "assets/mapa 4/mapamian/World 1/World 1/CourseSelectW1.dae"
@@ -318,8 +318,7 @@ int Map3EnemyManager::aliveCount() const {
 
 bool Map3EnemyManager::loadEnemyModel() {
     const std::string enemyPath = resolveFirstExistingAsset({
-        "Nintendo Switch - Super Mario Odyssey - Enemies (2D) - Fuzzy (2D)/Fuzzy (2D)/Fuzzy (2D)/Chorobon2D.dae",
-        "assets/characters/fuzzy_2d/Chorobon2D.dae"
+        "assets/mundo3/Nintendo Switch - Super Mario Odyssey - Enemies (2D) - Fuzzy (2D)/Fuzzy (2D)/Fuzzy (2D)/Chorobon2D.dae"
     });
     LoadedModel model = ModelLoader::loadModel(enemyPath);
     if (model.meshes.empty()) {
@@ -473,8 +472,7 @@ bool iniciarMap3(Map3Runtime& map3) {
     }
 
     const std::string playerPath = resolveFirstExistingAsset({
-        "DS _ DSi - Flower Sun and Rain_ Murder and Mystery in Paradise - Playable Characters - Sumio Mondo (Horse)/SumioMondoS4/ch_01_switchskin.dae",
-        "assets/characters/sumio_mondo_horse/ch_01_switchskin.dae"
+        "assets/mundo3/DS _ DSi - Flower Sun and Rain_ Murder and Mystery in Paradise - Playable Characters - Sumio Mondo (Horse)/SumioMondoS4/ch_01_switchskin.dae"
     });
     map3.player.load(playerPath);
 
