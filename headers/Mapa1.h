@@ -22,8 +22,16 @@ public:
     bool showCoinMessage(float timeSeconds) const;
     bool showStarMessage(float timeSeconds) const;
     bool showCombatHint(float timeSeconds) const;
+    bool showSpectralLockedHint(float timeSeconds) const;
+    bool showSpectralReadyHint(float timeSeconds) const;
+    bool showSpectralUnlockHint(float timeSeconds) const;
     bool levelComplete() const;
     int remainingEnemyCount() const;
+    int spectralGemCount() const;
+    int spectralGemRequirement() const;
+    bool spectralUnlocked() const;
+    bool showVanPrompt(float timeSeconds) const;
+    bool showVanShopCards(float timeSeconds) const;
     int currentHealth() const;
     int maximumHealth() const;
     float chargeRatio() const;

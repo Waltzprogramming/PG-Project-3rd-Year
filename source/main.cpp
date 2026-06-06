@@ -31,6 +31,7 @@ constexpr int WindowWidth = 1280;
 constexpr int WindowHeight = 720;
 constexpr int MaxLights = 24;
 constexpr int MissionCoinTotal = 10;
+constexpr int SpectralGemTarget = 10;
 
 enum class EstadoJuego {
     MENU_PRINCIPAL,
@@ -82,6 +83,20 @@ struct MenuContext {
     TextSprite estrellaLista;
     TextSprite nivelCompletado;
     TextSprite combateSolo2D;
+    TextSprite pasoEspectralBloqueado;
+    TextSprite pasoEspectralListo;
+    TextSprite pasoEspectralUsar;
+    TextSprite pasoEspectralTitulo;
+    std::array<TextSprite, SpectralGemTarget + 1> pasoEspectralGemas;
+    TextSprite promptCamioneta;
+    TextSprite camionetaTitulo;
+    TextSprite fichaMovimientoTitulo;
+    TextSprite fichaMovimientoTexto;
+    TextSprite fichaVistaTitulo;
+    TextSprite fichaVistaTexto;
+    TextSprite fichaPasoTitulo;
+    TextSprite fichaPasoTexto;
+    TextSprite fichaComprarTexto;
     TextSprite vidaJugador;
     TextSprite cargandoAtaque;
     TextSprite parryActivo;
@@ -255,6 +270,13 @@ std::wstring twoDigits(int value) {
 
 std::wstring formatCoinProgress(int count) {
     return twoDigits(std::clamp(count, 0, MissionCoinTotal)) + L"/" + twoDigits(MissionCoinTotal);
+}
+
+std::wstring formatSpectralGems(int count) {
+    const int gems = std::clamp(count, 0, SpectralGemTarget);
+    return gems >= SpectralGemTarget
+        ? L"LISTO"
+        : L"GEMAS " + twoDigits(gems) + L"/" + twoDigits(SpectralGemTarget);
 }
 
 bool boundsIntersect(const Bounds& a, const Bounds& b) {
@@ -1291,8 +1313,20 @@ void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int he
             active ? glm::vec4(0.92f, 0.18f, 0.16f, 1.0f) : glm::vec4(0.20f, 0.23f, 0.30f, 0.90f));
     }
 
+    const Rect spectralPanel{22.0f, 106.0f, 282.0f, 64.0f};
+    drawRect(menu, {spectralPanel.x + 6.0f, spectralPanel.y + 7.0f, spectralPanel.width, spectralPanel.height}, {0.01f, 0.02f, 0.05f, 0.42f});
+    drawRect(menu, spectralPanel, {0.04f, 0.19f, 0.34f, 0.94f});
+    drawText(menu, menu.pasoEspectralTitulo, spectralPanel.x + 14.0f, spectralPanel.y + 8.0f);
+    const int spectralGemIndex = mapa1.spectralUnlocked()
+        ? SpectralGemTarget
+        : std::clamp(mapa1.spectralGemCount(), 0, SpectralGemTarget);
+    const TextSprite& spectralCounter = menu.pasoEspectralGemas[spectralGemIndex];
+    drawText(menu, spectralCounter,
+        spectralPanel.x + spectralPanel.width - spectralCounter.size.x - 16.0f,
+        spectralPanel.y + 34.0f);
+
     if (mapa1.chargingAttack()) {
-        const Rect chargePanel{22.0f, 106.0f, 282.0f, 54.0f};
+        const Rect chargePanel{22.0f, 184.0f, 282.0f, 54.0f};
         drawRect(menu, chargePanel, {0.06f, 0.12f, 0.24f, 0.94f});
         drawText(menu, menu.cargandoAtaque, chargePanel.x + 14.0f, chargePanel.y + 7.0f);
         drawRect(menu, {chargePanel.x + 14.0f, chargePanel.y + 35.0f, 254.0f, 10.0f}, {0.20f, 0.23f, 0.30f, 0.90f});
@@ -1300,14 +1334,6 @@ void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int he
             mapa1.chargeRatio() >= 1.0f
                 ? glm::vec4(1.00f, 0.84f, 0.12f, 1.0f)
                 : glm::vec4(0.24f, 0.88f, 1.00f, 1.0f));
-    }
-
-    if (mapa1.parryActive(timeSeconds)) {
-        const Rect parryPanel = centeredRect(width * 0.5f, 38.0f, 188.0f, 48.0f);
-        drawRect(menu, parryPanel, {0.08f, 0.62f, 0.68f, 0.94f});
-        drawText(menu, menu.parryActivo,
-            parryPanel.x + (parryPanel.width - menu.parryActivo.size.x) * 0.5f,
-            parryPanel.y + (parryPanel.height - menu.parryActivo.size.y) * 0.5f);
     }
 
     if (mapa1.showCombatHint(timeSeconds)) {
@@ -1318,6 +1344,69 @@ void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int he
         drawText(menu, menu.combateSolo2D,
             panel.x + (panel.width - menu.combateSolo2D.size.x) * 0.5f,
             panel.y + (panel.height - menu.combateSolo2D.size.y) * 0.5f);
+    }
+
+    const TextSprite* spectralText = nullptr;
+    glm::vec4 spectralBorder(0.22f, 0.95f, 1.00f, 0.98f);
+    glm::vec4 spectralFill(0.06f, 0.18f, 0.36f, 0.96f);
+    if (mapa1.showSpectralUnlockHint(timeSeconds)) {
+        spectralText = &menu.pasoEspectralListo;
+        spectralBorder = {1.00f, 0.84f, 0.20f, 0.98f};
+        spectralFill = {0.04f, 0.24f, 0.42f, 0.96f};
+    } else if (mapa1.showSpectralReadyHint(timeSeconds)) {
+        spectralText = &menu.pasoEspectralUsar;
+    } else if (mapa1.showSpectralLockedHint(timeSeconds)) {
+        spectralText = &menu.pasoEspectralBloqueado;
+        spectralBorder = {0.42f, 0.58f, 0.68f, 0.98f};
+        spectralFill = {0.08f, 0.14f, 0.22f, 0.96f};
+    }
+
+    if (spectralText != nullptr) {
+        const float panelWidth = std::min(820.0f, std::max(360.0f, static_cast<float>(width) - 48.0f));
+        const Rect panel = centeredRect(width * 0.5f, static_cast<float>(height) - 188.0f, panelWidth, 62.0f);
+        drawRect(menu, {panel.x + 7.0f, panel.y + 8.0f, panel.width, panel.height}, {0.01f, 0.02f, 0.05f, 0.48f});
+        drawRect(menu, {panel.x - 4.0f, panel.y - 4.0f, panel.width + 8.0f, panel.height + 8.0f}, spectralBorder);
+        drawRect(menu, panel, spectralFill);
+        drawText(menu, *spectralText,
+            panel.x + (panel.width - spectralText->size.x) * 0.5f,
+            panel.y + (panel.height - spectralText->size.y) * 0.5f);
+    }
+
+    if (mapa1.showVanPrompt(timeSeconds) && !mapa1.showVanShopCards(timeSeconds)) {
+        const Rect prompt = centeredRect(width * 0.5f, static_cast<float>(height) - 250.0f, 410.0f, 54.0f);
+        drawRect(menu, {prompt.x + 6.0f, prompt.y + 7.0f, prompt.width, prompt.height}, {0.01f, 0.02f, 0.05f, 0.45f});
+        drawRect(menu, prompt, {0.05f, 0.22f, 0.36f, 0.94f});
+        drawText(menu, menu.promptCamioneta,
+            prompt.x + (prompt.width - menu.promptCamioneta.size.x) * 0.5f,
+            prompt.y + (prompt.height - menu.promptCamioneta.size.y) * 0.5f);
+    }
+
+    if (mapa1.showVanShopCards(timeSeconds)) {
+        const float panelWidth = std::min(940.0f, static_cast<float>(width) - 72.0f);
+        const Rect panel = centeredRect(width * 0.5f, 112.0f, panelWidth, 326.0f);
+        drawPanel(menu, panel);
+        drawText(menu, menu.camionetaTitulo,
+            panel.x + (panel.width - menu.camionetaTitulo.size.x) * 0.5f,
+            panel.y + 14.0f);
+
+        const float cardWidth = (panel.width - 72.0f) / 3.0f;
+        const float cardY = panel.y + 78.0f;
+        const Rect cardA{panel.x + 24.0f, cardY, cardWidth, 172.0f};
+        const Rect cardB{cardA.x + cardWidth + 24.0f, cardY, cardWidth, 172.0f};
+        const Rect cardC{cardB.x + cardWidth + 24.0f, cardY, cardWidth, 172.0f};
+        const Rect cards[] = {cardA, cardB, cardC};
+        const TextSprite* titles[] = {&menu.fichaMovimientoTitulo, &menu.fichaVistaTitulo, &menu.fichaPasoTitulo};
+        const TextSprite* bodies[] = {&menu.fichaMovimientoTexto, &menu.fichaVistaTexto, &menu.fichaPasoTexto};
+        for (int index = 0; index < 3; ++index) {
+            drawRect(menu, {cards[index].x + 5.0f, cards[index].y + 7.0f, cards[index].width, cards[index].height}, {0.01f, 0.02f, 0.05f, 0.36f});
+            drawRect(menu, cards[index], {0.05f, 0.20f, 0.33f, 0.96f});
+            drawText(menu, *titles[index], cards[index].x + (cards[index].width - titles[index]->size.x) * 0.5f, cards[index].y + 12.0f);
+            drawText(menu, *bodies[index], cards[index].x + (cards[index].width - bodies[index]->size.x) * 0.5f, cards[index].y + 58.0f);
+        }
+
+        drawText(menu, menu.fichaComprarTexto,
+            panel.x + (panel.width - menu.fichaComprarTexto.size.x) * 0.5f,
+            panel.y + 266.0f);
     }
 }
 
@@ -1703,6 +1792,7 @@ bool initializeMenu(MenuContext& menu) {
         L"- Evita obst\u00e1culos y enemigos.\n"
         L"- Mundo 1: apunta y dispara con el mouse; mantenlo para cargar.\n"
         L"- Pulsa F justo antes del impacto para hacer parry.\n"
+        L"- Busca la camioneta y pulsa E para comprar habilidades con gemas.\n"
         L"- Completa el nivel para ganar.\n"
         L"- Presiona ESC o el bot\u00f3n Volver para regresar al men\u00fa.",
         23, white, 700, true, false);
@@ -1721,6 +1811,22 @@ bool initializeMenu(MenuContext& menu) {
     menu.estrellaLista = createTextSprite(L"\u00a1La estrella apareci\u00f3!", 29, titleColor, 400, false, true);
     menu.nivelCompletado = createTextSprite(L"\u00a1Nivel completado!", 52, titleColor, 520, false, true);
     menu.combateSolo2D = createTextSprite(L"\u00a1Peligro! Cambia a 2D con TAB para detener a los enemigos.", 27, white, 720, false, true);
+    menu.pasoEspectralBloqueado = createTextSprite(L"Compra Paso Espectral en la camioneta con 10 gemas.", 27, white, 760, false, true);
+    menu.pasoEspectralListo = createTextSprite(L"Paso Espectral comprado: usa Q junto a un ancla azul.", 27, white, 760, false, true);
+    menu.pasoEspectralUsar = createTextSprite(L"Pulsa Q para cruzar con Paso Espectral.", 29, white, 620, false, true);
+    menu.pasoEspectralTitulo = createTextSprite(L"PASO ESPECTRAL", 21, white, 240, false, false);
+    for (int i = 0; i <= SpectralGemTarget; ++i) {
+        menu.pasoEspectralGemas[i] = createTextSprite(formatSpectralGems(i), 24, titleColor, 230, false, true);
+    }
+    menu.promptCamioneta = createTextSprite(L"Pulsa E para interactuar", 27, white, 380, false, true);
+    menu.camionetaTitulo = createTextSprite(L"Camioneta de habilidades", 35, titleColor, 600, false, true);
+    menu.fichaMovimientoTitulo = createTextSprite(L"MOVIMIENTO", 22, titleColor, 260, false, true);
+    menu.fichaMovimientoTexto = createTextSprite(L"A/D para moverte.\nW o ESPACIO para saltar.\nSube las islas como escalera.", 20, white, 260, true, false);
+    menu.fichaVistaTitulo = createTextSprite(L"2D / 3D", 22, titleColor, 260, false, true);
+    menu.fichaVistaTexto = createTextSprite(L"TAB cambia la vista.\nEn 2D algunas islas se alinean.\nEn 3D quedan separadas.", 20, white, 260, true, false);
+    menu.fichaPasoTitulo = createTextSprite(L"PASO ESPECTRAL", 22, titleColor, 260, false, true);
+    menu.fichaPasoTexto = createTextSprite(L"Los demonios sueltan gemas.\nJunta 10 y vuelve aqui.\nLuego usa Q en anclas azules.", 20, white, 260, true, false);
+    menu.fichaComprarTexto = createTextSprite(L"Con 10 gemas, pulsa E aqui para comprar la habilidad.", 24, titleColor, 760, false, true);
     menu.vidaJugador = createTextSprite(L"VIDA", 25, white, 120, false, false);
     menu.cargandoAtaque = createTextSprite(L"CARGANDO TIRO", 21, white, 250, false, false);
     menu.parryActivo = createTextSprite(L"PARRY", 23, white, 150, false, true);
