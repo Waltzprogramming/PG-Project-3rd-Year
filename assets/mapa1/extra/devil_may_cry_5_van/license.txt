@@ -1,0 +1,11 @@
+Model Information:
+* title:	Devil May Cry 5 Van
+* source:	https://sketchfab.com/3d-models/devil-may-cry-5-van-59e2ec7996bb4520bc50c7d9bbb66d26
+* author:	Odami_3D (https://sketchfab.com/Odami_3D)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Devil May Cry 5 Van" (https://sketchfab.com/3d-models/devil-may-cry-5-van-59e2ec7996bb4520bc50c7d9bbb66d26) by Odami_3D (https://sketchfab.com/Odami_3D) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

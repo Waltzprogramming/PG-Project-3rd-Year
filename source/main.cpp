@@ -42,6 +42,7 @@ enum class EstadoJuego {
     MENU_MUNDOS,
     COMO_JUGAR,
     CREDITOS,
+    CARGANDO,
     MUNDO_1,
     MUNDO_2,
     MUNDO_3,
@@ -96,6 +97,8 @@ float lastFrame = 0.0f;
 PlayMode currentMode = PlayMode::Mode3D;
 EstadoJuego appState = EstadoJuego::MENU_PRINCIPAL;
 EstadoJuego lastCursorState = EstadoJuego::MENU_PRINCIPAL;
+EstadoJuego loadingTarget = EstadoJuego::MENU_PRINCIPAL;
+bool loadingScreenPresented = false;
 bool lastToggleKey = false;
 bool lastJumpKey = false;
 bool lastEscapeKey = false;
@@ -109,6 +112,12 @@ float locked2DDepth = 0.0f;
 glm::vec3 gameplayCameraPosition{0.0f, 6.0f, 14.0f};
 glm::vec3 gameplayCameraTarget{0.0f, 2.0f, 0.0f};
 bool cameraInitialized = false;
+
+void solicitarCargaMundo(EstadoJuego target) {
+    loadingTarget = target;
+    loadingScreenPresented = false;
+    appState = EstadoJuego::CARGANDO;
+}
 
 bool environmentUsable(const Environment& environment) {
     // Comprueba si un mapa cargó colisiones y límites válidos antes de usarlo en juego.
@@ -1037,6 +1046,29 @@ void MissionManager::update(const Player& player, float timeSeconds) {
     }
 }
 
+void mostrarPantallaCarga(MenuContext& menu, int width, int height, float timeSeconds) {
+    beginUiFrame(menu, width, height);
+    drawMenuBackground(menu, width, height, timeSeconds, false);
+
+    const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 112.0f, 560.0f, 210.0f);
+    drawPanel(menu, panel);
+    drawText(menu, menu.cargando,
+        panel.x + (panel.width - menu.cargando.size.x) * 0.5f,
+        panel.y + 46.0f);
+    drawText(menu, menu.preparandoMundo,
+        panel.x + (panel.width - menu.preparandoMundo.size.x) * 0.5f,
+        panel.y + 112.0f);
+
+    const float dotY = panel.y + 162.0f;
+    const float dotStartX = width * 0.5f - 34.0f;
+    for (int index = 0; index < 3; ++index) {
+        const float pulse = 0.5f + 0.5f * std::sin(timeSeconds * 5.5f + index * 0.75f);
+        drawRect(menu,
+            {dotStartX + index * 28.0f, dotY, 14.0f, 14.0f},
+            {1.0f, 0.84f, 0.20f, 0.35f + 0.65f * pulse});
+    }
+}
+
 void MissionManager::render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const {
     // Dibuja las monedas y la estrella activa usando los modelos cargados o su fallback procedural.
     if (!m_initialized) {
@@ -1810,19 +1842,19 @@ void mostrarMenuMundos(MenuContext& menu, int width, int height, float timeSecon
     const float centerX = width * 0.5f;
     const float startY = 224.0f;
     if (drawButton(menu, menu.mundo1, centeredRect(centerX, startY, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
-        appState = EstadoJuego::MUNDO_1;
+        solicitarCargaMundo(EstadoJuego::MUNDO_1);
         menu.notificationUntil = 0.0;
     }
     if (drawButton(menu, menu.mundo2, centeredRect(centerX, startY + 68.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
-        appState = EstadoJuego::MUNDO_2;
+        solicitarCargaMundo(EstadoJuego::MUNDO_2);
         menu.notificationUntil = 0.0;
     }
     if (drawButton(menu, menu.mundo3, centeredRect(centerX, startY + 136.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
-        appState = EstadoJuego::MUNDO_3;
+        solicitarCargaMundo(EstadoJuego::MUNDO_3);
         menu.notificationUntil = 0.0;
     }
     if (drawButton(menu, menu.mundo4, centeredRect(centerX, startY + 204.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
-        appState = EstadoJuego::MUNDO_4;
+        solicitarCargaMundo(EstadoJuego::MUNDO_4);
         menu.notificationUntil = 0.0;
     }
     if (drawButton(menu, menu.volver, centeredRect(centerX, startY + 284.0f, buttonWidth, buttonHeight), mouse, clicked, timeSeconds)) {
@@ -2005,6 +2037,9 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
         case EstadoJuego::MENU_MUNDOS:
         case EstadoJuego::COMO_JUGAR:
         case EstadoJuego::CREDITOS:
+        case EstadoJuego::CARGANDO:
+            loadingTarget = EstadoJuego::MENU_PRINCIPAL;
+            loadingScreenPresented = false;
             appState = EstadoJuego::MENU_PRINCIPAL;
             break;
         case EstadoJuego::MUNDO_1:
@@ -2215,6 +2250,8 @@ bool initializeMenu(MenuContext& menu) {
         L"Mundo 2: [Nombre del estudiante]",
         27, white, 610, true, false);
     menu.noDisponible = createTextSprite(L"Este mundo a\u00fan no est\u00e1 disponible", 26, white, 510, false, true);
+    menu.cargando = createTextSprite(L"Cargando", 48, titleColor, 460, false, true);
+    menu.preparandoMundo = createTextSprite(L"Preparando mundo...", 27, white, 430, false, true);
     for (int i = 0; i <= MissionCoinTotal; ++i) {
         menu.coinCounters[i] = createTextSprite(formatCoinProgress(i), 28, white, 132, false, true);
         menu.coinMessages[i] = createTextSprite(formatCoinProgress(i), 31, white, 132, false, true);
@@ -2302,6 +2339,40 @@ void renderMundo2(GLFWwindow* window, Mundo2Runtime& mundo2, MenuContext& menu, 
     drawToadHud(menu, mundo2.toad, width, height);
 }
 
+bool cargarMundoPendiente(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4, MenuContext& menu) {
+    bool loaded = false;
+    switch (loadingTarget) {
+    case EstadoJuego::MUNDO_1:
+        loaded = mapa1.initialize();
+        break;
+    case EstadoJuego::MUNDO_2:
+        loaded = iniciarMundo2(mundo2);
+        break;
+    case EstadoJuego::MUNDO_3:
+        loaded = iniciarMap3(map3);
+        break;
+    case EstadoJuego::MUNDO_4:
+        loaded = iniciarMapa4(mapa4);
+        break;
+    default:
+        break;
+    }
+
+    if (loaded) {
+        appState = loadingTarget;
+    } else {
+        appState = EstadoJuego::MENU_MUNDOS;
+        menu.notificationUntil = glfwGetTime() + 2.3;
+    }
+
+    loadingTarget = EstadoJuego::MENU_PRINCIPAL;
+    loadingScreenPresented = false;
+    lastFrame = static_cast<float>(glfwGetTime());
+    deltaTime = 0.0f;
+    updateCursorMode(window);
+    return loaded;
+}
+
 int main(int argc, char** argv) {
     const bool mapa1SmokeTest = argc > 1 && std::string(argv[1]) == "--smoke-mapa1";
     const bool mapa1CombatSmokeTest = argc > 1 && std::string(argv[1]) == "--smoke-mapa1-combat";
@@ -2386,6 +2457,9 @@ int main(int argc, char** argv) {
 
         updateCursorMode(window);
         processAppInput(window, mapa1, mundo2, map3, mapa4);
+        if (appState == EstadoJuego::CARGANDO && loadingScreenPresented) {
+            cargarMundoPendiente(window, mapa1, mundo2, map3, mapa4, menu);
+        }
 
         double cursorX = 0.0;
         double cursorY = 0.0;
@@ -2456,6 +2530,10 @@ int main(int argc, char** argv) {
                 break;
             case EstadoJuego::CREDITOS:
                 mostrarCreditos(menu, width, height, now, mouse, clicked);
+                break;
+            case EstadoJuego::CARGANDO:
+                mostrarPantallaCarga(menu, width, height, now);
+                loadingScreenPresented = true;
                 break;
             case EstadoJuego::MUNDO_1:
             case EstadoJuego::MUNDO_2:

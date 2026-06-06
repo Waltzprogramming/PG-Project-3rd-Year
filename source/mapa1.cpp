@@ -474,6 +474,7 @@ struct Mapa1::Impl {
     AudioPlayer backgroundMusic{L"mapa1_background_music"};
     AudioPlayer parrySound{L"mapa1_parry_sound"};
     std::vector<WorldModel> worldModels;
+    std::vector<std::string> deferredWorldModelPaths;
     WorldModel vanModel;
     std::unordered_map<std::string, std::shared_ptr<Texture2D>> textureCache;
     Texture2D playerAtlasTexture;
@@ -534,6 +535,7 @@ struct Mapa1::Impl {
 
     bool initialized{false};
     bool vanModelLoaded{false};
+    bool vanModelLoadAttempted{false};
     bool backgroundMusicOpen{false};
     bool backgroundMusicPlaying{false};
     bool parrySoundOpen{false};
@@ -592,6 +594,7 @@ struct Mapa1::Impl {
     float vanPromptUntil{0.0f};
     float vanShopUntil{0.0f};
     bool completed{false};
+    float deferredWorldLoadDelay{0.0f};
 
     void initializeAudio() {
         backgroundMusicOpen = backgroundMusic.open(resolveAssetPath("assets/audio/devil-never-cry-compatible.mp3"));
@@ -664,7 +667,24 @@ struct Mapa1::Impl {
         return true;
     }
 
+    void streamDeferredWorldModels(float dt) {
+        if (deferredWorldModelPaths.empty()) {
+            return;
+        }
+
+        deferredWorldLoadDelay -= dt;
+        if (deferredWorldLoadDelay > 0.0f) {
+            return;
+        }
+
+        const std::string path = deferredWorldModelPaths.front();
+        deferredWorldModelPaths.erase(deferredWorldModelPaths.begin());
+        loadWorldModel(path);
+        deferredWorldLoadDelay = 0.18f;
+    }
+
     bool loadVanModel() {
+        vanModelLoadAttempted = true;
         vanModel = {};
         vanModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/devil_may_cry_5_van.glb"));
         if (vanModel.model.meshes.empty()) {
@@ -676,6 +696,16 @@ struct Mapa1::Impl {
         vanModel.materials = runtimeMaterialsFor(vanModel.model.materials);
         vanModelLoaded = true;
         return true;
+    }
+
+    bool ensureVanModelLoaded() {
+        if (vanModelLoaded) {
+            return true;
+        }
+        if (vanModelLoadAttempted) {
+            return false;
+        }
+        return loadVanModel();
     }
 
     std::string meshName(const WorldModel& model, const LoadedMesh& mesh) const {
@@ -1840,6 +1870,7 @@ struct Mapa1::Impl {
     void update(GLFWwindow* window, float deltaTime) {
         const float dt = std::clamp(deltaTime, 0.0f, 0.05f);
         const float now = static_cast<float>(glfwGetTime());
+        streamDeferredWorldModels(dt);
         if (messageTime > 0.0f) {
             messageTime = std::max(0.0f, messageTime - dt);
             if (messageTime <= 0.0f) {
@@ -2271,7 +2302,7 @@ struct Mapa1::Impl {
 
         const glm::vec3 renderPosition(van.x - posX, van.y, renderZ);
 
-        if (vanModelLoaded) {
+        if (ensureVanModelLoaded()) {
             const glm::vec3 extents = vanModel.model.maxBounds - vanModel.model.minBounds;
             const float maximumExtent = std::max({extents.x, extents.y, extents.z, 0.001f});
             const glm::vec3 center = (vanModel.model.minBounds + vanModel.model.maxBounds) * 0.5f;
@@ -2457,16 +2488,17 @@ struct Mapa1::Impl {
         glBindTexture(GL_TEXTURE_2D, 0);
 
         const std::string worldBase = "assets/mapa1/world1/";
-        const bool loaded =
-            loadWorldModel(worldBase + "CourseSelectW1.dae") &&
-            loadWorldModel(worldBase + "CourseSelectDecorationW1A.dae") &&
-            loadWorldModel(worldBase + "CourseSelectWaveW1.dae") &&
-            loadWorldModel(worldBase + "CourseSelectWallW1.dae");
-        if (!loaded) {
+        if (!loadWorldModel(worldBase + "CourseSelectW1.dae")) {
             std::cerr << "Mapa 1 world models could not be loaded." << std::endl;
             return false;
         }
-        loadVanModel();
+        deferredWorldModelPaths = {
+            worldBase + "CourseSelectWallW1.dae",
+            worldBase + "CourseSelectWaveW1.dae",
+            worldBase + "CourseSelectDecorationW1A.dae"
+        };
+        deferredWorldLoadDelay = 0.45f;
+        vanModelLoadAttempted = false;
 
         skyboxMesh = createSkyboxMesh();
         pipeBodyMesh = Mesh::cylinder(8);
@@ -2608,8 +2640,11 @@ struct Mapa1::Impl {
         shutdownAudio();
         terrainTriangles.clear();
         worldModels.clear();
+        deferredWorldModelPaths.clear();
         vanModel = {};
         vanModelLoaded = false;
+        vanModelLoadAttempted = false;
+        deferredWorldLoadDelay = 0.0f;
         textureCache.clear();
         playerAtlasTexture = Texture2D{};
         projectileSwordModel = {};
