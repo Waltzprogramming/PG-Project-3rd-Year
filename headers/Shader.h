@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 
 #include <string>
+#include <unordered_map>
 
 class Shader {
 public:
@@ -29,7 +30,9 @@ public:
 private:
     static std::string readTextFile(const std::string& path);
     static GLuint compileStage(GLenum stage, const std::string& source, const std::string& label);
+    GLint uniformLocation(const std::string& name) const;
     void release();
 
     GLuint m_program{0};
+    mutable std::unordered_map<std::string, GLint> m_uniformLocations;
 };

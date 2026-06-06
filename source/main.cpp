@@ -2,6 +2,8 @@
 #define NOMINMAX
 #endif
 
+#include <Windows.h>
+
 #include "AudioPlayer.h"
 #include "Environment.h"
 #include "GameRuntime.h"
@@ -14,7 +16,6 @@
 #include "Shader.h"
 
 #include <GL/glew.h>
-#include <Windows.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
@@ -32,14 +33,9 @@
 #include <string>
 #include <vector>
 
-#define MAP4_IMPLEMENTATION
-#include "Map4.cpp"
-
 constexpr int WindowWidth = 1280;
 constexpr int WindowHeight = 720;
 constexpr int MaxLights = 24;
-constexpr int MissionCoinTotal = 10;
-constexpr int SpectralGemTarget = 10;
 
 enum class EstadoJuego {
     MENU_PRINCIPAL,
@@ -50,148 +46,6 @@ enum class EstadoJuego {
     MUNDO_2,
     MUNDO_3,
     MUNDO_4
-};
-
-struct Rect {
-    float x{0.0f};
-    float y{0.0f};
-    float width{0.0f};
-    float height{0.0f};
-};
-
-struct TextSprite {
-    std::shared_ptr<Texture2D> texture;
-    glm::vec2 size{0.0f};
-};
-
-struct MenuContext {
-    Shader shader;
-    Texture2D whiteTexture;
-    Texture2D logoTexture;
-    Texture2D cloudTexture;
-    Texture2D backgroundTexture;
-    GLuint vao{0};
-    GLuint vbo{0};
-    double notificationUntil{0.0};
-
-    TextSprite jugar;
-    TextSprite comoJugar;
-    TextSprite creditos;
-    TextSprite salir;
-    TextSprite mundo1;
-    TextSprite mundo2;
-    TextSprite mundo3;
-    TextSprite mundo4;
-    TextSprite volver;
-    TextSprite tituloComoJugar;
-    TextSprite textoComoJugar;
-    TextSprite tituloCreditos;
-    TextSprite textoCreditos;
-    TextSprite noDisponible;
-    std::array<TextSprite, MissionCoinTotal + 1> coinCounters;
-    std::array<TextSprite, MissionCoinTotal + 1> coinMessages;
-    TextSprite estrellaLista;
-    TextSprite nivelCompletado;
-    TextSprite combateSolo2D;
-    TextSprite pasoEspectralBloqueado;
-    TextSprite pasoEspectralListo;
-    TextSprite pasoEspectralUsar;
-    TextSprite pasoEspectralTitulo;
-    std::array<TextSprite, SpectralGemTarget + 1> pasoEspectralGemas;
-    TextSprite promptCamioneta;
-    TextSprite camionetaTitulo;
-    TextSprite fichaMovimientoTitulo;
-    TextSprite fichaMovimientoTexto;
-    TextSprite fichaVistaTitulo;
-    TextSprite fichaVistaTexto;
-    TextSprite fichaPasoTitulo;
-    TextSprite fichaPasoTexto;
-    TextSprite fichaComprarTexto;
-    TextSprite vidaJugador;
-    TextSprite cargandoAtaque;
-    TextSprite parryActivo;
-    TextSprite promptHablarToad;
-    TextSprite nombreToad;
-    TextSprite dialogoToad;
-};
-
-struct MissionRenderablePart {
-    Mesh mesh;
-    Material material;
-    glm::vec3 localPosition{0.0f};
-    glm::vec3 localRotation{0.0f};
-    glm::vec3 localScale{1.0f};
-};
-
-struct Coin {
-    glm::vec3 position{0.0f};
-    bool collected{false};
-    float phase{0.0f};
-};
-
-struct Star {
-    glm::vec3 position{0.0f};
-    bool active{false};
-};
-
-class MissionManager {
-public:
-    bool initialize();
-    void reset(const Environment& environment, const glm::vec3& playerSpawn);
-    void generarMonedas(const Environment& environment, const glm::vec3& playerSpawn);
-    void update(const Player& player, float timeSeconds);
-    void render(const Shader& shader, float timeSeconds) const;
-
-    int collectedCount() const { return m_collectedCount; }
-    int messageCount() const { return m_messageCount; }
-    bool showCoinMessage(float timeSeconds) const { return timeSeconds <= static_cast<float>(m_coinMessageUntil); }
-    bool showStarMessage(float timeSeconds) const { return timeSeconds <= static_cast<float>(m_starMessageUntil); }
-    bool starFocusActive(float timeSeconds) const { return timeSeconds <= static_cast<float>(m_starFocusUntil); }
-    glm::vec3 starPosition() const { return m_star.position; }
-    bool levelComplete() const { return m_levelComplete; }
-    const Texture2D& coinIconTexture() const { return m_coinIcon; }
-
-private:
-    bool loadCoinModel();
-    bool loadStarModel();
-    std::shared_ptr<Texture2D> loadMissionTexture(const std::string& path);
-    Mesh createStarMesh() const;
-    Bounds coinBounds(const Coin& coin) const;
-    Bounds starBounds() const;
-    glm::mat4 coinModelMatrix(const Coin& coin, float timeSeconds) const;
-    glm::mat4 starModelMatrix(float timeSeconds) const;
-    bool validCoinPosition(const glm::vec3& position, const std::vector<Bounds>& colliders, const std::vector<Coin>& placed, const glm::vec3& playerSpawn, const glm::vec3& worldMin, const glm::vec3& worldMax, float minCoinDistance) const;
-    void recolectarMoneda(Coin& coin, float timeSeconds);
-    void mostrarMensajeMonedaTemporal(float timeSeconds);
-    void activarEstrella(float timeSeconds);
-    void completarNivel(float timeSeconds);
-
-    std::vector<MissionRenderablePart> m_coinParts;
-    std::vector<MissionRenderablePart> m_starParts;
-    std::vector<std::shared_ptr<Texture2D>> m_textures;
-    Texture2D m_coinIcon;
-    Mesh m_fallbackCoinMesh;
-    Mesh m_starMesh;
-    Material m_fallbackCoinMaterial;
-    Material m_starMaterial;
-    glm::vec3 m_coinModelMin{0.0f};
-    glm::vec3 m_coinModelMax{0.0f, 1.0f, 0.0f};
-    glm::vec3 m_coinModelCenter{0.0f};
-    glm::vec3 m_starModelMin{0.0f};
-    glm::vec3 m_starModelMax{0.0f, 1.0f, 0.0f};
-    glm::vec3 m_starModelCenter{0.0f};
-    float m_coinModelScale{1.0f};
-    float m_starModelScale{0.95f};
-    std::vector<Coin> m_coins;
-    Star m_star;
-    int m_collectedCount{0};
-    int m_messageCount{0};
-    double m_coinMessageUntil{0.0};
-    double m_starMessageUntil{0.0};
-    double m_starFocusUntil{0.0};
-    double m_victoryTime{0.0};
-    bool m_initialized{false};
-    bool m_levelComplete{false};
 };
 
 class ToadNpc {
@@ -2484,6 +2338,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     glGetError();
+    glfwSwapInterval(1);
 
     glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
@@ -2526,7 +2381,7 @@ int main(int argc, char** argv) {
 
     while (!glfwWindowShouldClose(window)) {
         const float now = static_cast<float>(glfwGetTime());
-        deltaTime = now - lastFrame;
+        deltaTime = std::clamp(now - lastFrame, 0.0f, 1.0f / 30.0f);
         lastFrame = now;
 
         updateCursorMode(window);

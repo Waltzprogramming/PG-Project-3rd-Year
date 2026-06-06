@@ -57,7 +57,7 @@ struct ImportedLevelPart {
     std::string name;
     Mesh mesh;
     Material material;
-    Bounds sourceBounds{};
+    Bounds renderBounds{};
 };
 
 class Environment {

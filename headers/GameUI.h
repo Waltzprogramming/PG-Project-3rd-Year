@@ -9,6 +9,7 @@
 #include <string>
 
 inline constexpr int MissionCoinTotal = 10;
+inline constexpr int SpectralGemTarget = 10;
 
 struct Rect {
     float x{0.0f};
@@ -52,6 +53,20 @@ struct MenuContext {
     TextSprite nivelCompletado;
     TextSprite juegoTerminado;
     TextSprite combateSolo2D;
+    TextSprite pasoEspectralBloqueado;
+    TextSprite pasoEspectralListo;
+    TextSprite pasoEspectralUsar;
+    TextSprite pasoEspectralTitulo;
+    std::array<TextSprite, SpectralGemTarget + 1> pasoEspectralGemas;
+    TextSprite promptCamioneta;
+    TextSprite camionetaTitulo;
+    TextSprite fichaMovimientoTitulo;
+    TextSprite fichaMovimientoTexto;
+    TextSprite fichaVistaTitulo;
+    TextSprite fichaVistaTexto;
+    TextSprite fichaPasoTitulo;
+    TextSprite fichaPasoTexto;
+    TextSprite fichaComprarTexto;
     TextSprite vidaJugador;
     TextSprite luzJugador;
     TextSprite mapa4Hint;

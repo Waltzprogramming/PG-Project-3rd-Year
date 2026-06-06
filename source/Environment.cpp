@@ -112,7 +112,7 @@ void Environment::render(const Shader& sceneShader, const Shader& lavaShader, fl
         sceneShader.setFloat("uTime", timeSeconds);
         sceneShader.setMat4("uModel", m_levelTransform);
         for (const ImportedLevelPart& part : m_levelParts) {
-            if (marioMap4 && !shouldRenderBounds(part.sourceBounds, cameraPosition, 3.6f)) {
+            if (marioMap4 && !shouldRenderBounds(part.renderBounds, cameraPosition, 3.6f)) {
                 continue;
             }
             bindMaterial(sceneShader, part.material);
@@ -449,14 +449,15 @@ bool Environment::loadReferenceLevel() {
         ImportedLevelPart part;
         part.name = mesh.name;
         part.material = material;
-        part.sourceBounds.center = (mesh.minBounds + mesh.maxBounds) * 0.5f;
-        part.sourceBounds.halfExtent = (mesh.maxBounds - mesh.minBounds) * 0.5f;
+        part.renderBounds = transformedLevelBounds(mesh.minBounds, mesh.maxBounds);
         part.mesh = std::move(mesh.mesh);
         if (mesh.collisionBoxes.empty()) {
-            const Bounds fallbackBounds = transformedLevelBounds(mesh.minBounds, mesh.maxBounds);
+            const Bounds fallbackBounds = part.renderBounds;
             if (!excludedFromGameplay) {
                 m_collisionPreview.push_back(fallbackBounds);
             }
+            m_worldMin = glm::min(m_worldMin, fallbackBounds.center - fallbackBounds.halfExtent);
+            m_worldMax = glm::max(m_worldMax, fallbackBounds.center + fallbackBounds.halfExtent);
         } else {
             for (const auto& box : mesh.collisionBoxes) {
                 const Bounds bounds = transformedLevelBounds(box.minBounds, box.maxBounds);

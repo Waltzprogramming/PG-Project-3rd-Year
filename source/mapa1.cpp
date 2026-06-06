@@ -72,6 +72,8 @@ constexpr float SpectralAnchorPromptRange = 0.95f;
 constexpr float SpectralAnchorVerticalRange = 1.35f;
 constexpr float VanPromptRange = 1.45f;
 constexpr float VanPromptVerticalRange = 1.50f;
+constexpr float VanRenderRangeX = 22.0f;
+constexpr float VanRenderRangeZ = 26.0f;
 constexpr float SpectralStepCooldown = 0.75f;
 constexpr float SpectralHintTime = 3.8f;
 constexpr size_t NormalRouteFirstPlatformIndex = 8;
@@ -2263,6 +2265,10 @@ struct Mapa1::Impl {
     void drawVanShop(float now) {
         const glm::vec3 van = vanWorldPosition();
         const float renderZ = renderedDepth(van.z, true) - posZ;
+        if (std::abs(van.x - posX) > VanRenderRangeX || (mode3D && std::abs(van.z - posZ) > VanRenderRangeZ)) {
+            return;
+        }
+
         const glm::vec3 renderPosition(van.x - posX, van.y, renderZ);
 
         if (vanModelLoaded) {

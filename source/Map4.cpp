@@ -1,5 +1,3 @@
-#ifdef MAP4_IMPLEMENTATION
-
 #include "Map4.h"
 
 #include "GameRuntime.h"
@@ -1388,10 +1386,3 @@ void renderMapa4Hud(MenuContext& menu, const Mapa4Runtime& mapa4, int width, int
     drawText(menu, menu.mapa4Hint, hintPanel.x + 14.0f, hintPanel.y + (hintPanel.height - menu.mapa4Hint.size.y) * 0.5f, glm::vec4(1.0f, 0.93f, 0.78f, 0.96f));
 
 }
-
-#else
-
-int g_map4_compilation_stub = 0;
-
-#endif
-

@@ -19,7 +19,9 @@ Shader& Shader::operator=(Shader&& other) noexcept {
     if (this != &other) {
         release();
         m_program = other.m_program;
+        m_uniformLocations = std::move(other.m_uniformLocations);
         other.m_program = 0;
+        other.m_uniformLocations.clear();
     }
     return *this;
 }
@@ -70,27 +72,27 @@ void Shader::use() const {
 }
 
 void Shader::setBool(const std::string& name, bool value) const {
-    glUniform1i(glGetUniformLocation(m_program, name.c_str()), value ? 1 : 0);
+    glUniform1i(uniformLocation(name), value ? 1 : 0);
 }
 
 void Shader::setInt(const std::string& name, int value) const {
-    glUniform1i(glGetUniformLocation(m_program, name.c_str()), value);
+    glUniform1i(uniformLocation(name), value);
 }
 
 void Shader::setFloat(const std::string& name, float value) const {
-    glUniform1f(glGetUniformLocation(m_program, name.c_str()), value);
+    glUniform1f(uniformLocation(name), value);
 }
 
 void Shader::setVec3(const std::string& name, const glm::vec3& value) const {
-    glUniform3fv(glGetUniformLocation(m_program, name.c_str()), 1, glm::value_ptr(value));
+    glUniform3fv(uniformLocation(name), 1, glm::value_ptr(value));
 }
 
 void Shader::setVec4(const std::string& name, const glm::vec4& value) const {
-    glUniform4fv(glGetUniformLocation(m_program, name.c_str()), 1, glm::value_ptr(value));
+    glUniform4fv(uniformLocation(name), 1, glm::value_ptr(value));
 }
 
 void Shader::setMat4(const std::string& name, const glm::mat4& value) const {
-    glUniformMatrix4fv(glGetUniformLocation(m_program, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
+    glUniformMatrix4fv(uniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
 }
 
 std::string Shader::readTextFile(const std::string& path) {
@@ -124,9 +126,21 @@ GLuint Shader::compileStage(GLenum stage, const std::string& source, const std::
     return shader;
 }
 
+GLint Shader::uniformLocation(const std::string& name) const {
+    const auto found = m_uniformLocations.find(name);
+    if (found != m_uniformLocations.end()) {
+        return found->second;
+    }
+
+    const GLint location = glGetUniformLocation(m_program, name.c_str());
+    m_uniformLocations.emplace(name, location);
+    return location;
+}
+
 void Shader::release() {
     if (m_program != 0) {
         glDeleteProgram(m_program);
         m_program = 0;
     }
+    m_uniformLocations.clear();
 }
