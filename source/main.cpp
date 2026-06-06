@@ -2330,7 +2330,6 @@ int main(int argc, char** argv) {
                 renderMap3(window, map3, sceneShader, lavaShader, now);
                 drawMissionHud(menu, map3.mission, width, height, now);
                 drawSimpleHealthHud(menu, map3.health, map3.maxHealth, width, height);
-                drawShieldHud(menu, width, height, map3DefensiveActionActive(map3, now));
                 if (map3.gameOver) {
                     drawGameOverHud(menu, width, height);
                 }

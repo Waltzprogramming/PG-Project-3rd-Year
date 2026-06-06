@@ -12,12 +12,21 @@
 
 struct GLFWwindow;
 
+struct Map3Projectile {
+    glm::vec3 position{0.0f};
+    glm::vec3 velocity{0.0f};
+    float lifetime{4.0f};
+    bool reflected{false};
+};
+
 class Map3EnemyManager {
 public:
     bool initialize();
     void reset(const Environment& environment, const glm::vec3& playerSpawn);
-    bool update(const Player& player, const Environment& environment, float deltaTime, float timeSeconds, bool parryActive, bool dodgeActive);
+    bool update(const Player& player, const Environment& environment, float deltaTime, float timeSeconds, bool dodgeActive, std::vector<Map3Projectile>& projectiles);
     void render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const;
+    bool damageEnemyAt(const glm::vec3& position, float horizontalRadius, float verticalRadius, int damage);
+    glm::vec3 directionToClosestEnemy(const glm::vec3& position) const;
     int aliveCount() const;
 
 private:
@@ -27,6 +36,7 @@ private:
         float yaw{0.0f};
         float phase{0.0f};
         float hurtTimer{0.0f};
+        float shotCooldown{0.0f};
         int health{2};
         bool alive{true};
     };
@@ -65,6 +75,7 @@ struct Map3Runtime {
     float dodgeCooldown{0.0f};
     float dodgeActiveUntil{0.0f};
     float parryActiveUntil{0.0f};
+    std::vector<Map3Projectile> projectiles;
     bool gameOver{false};
 };
 

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -27,6 +28,11 @@ constexpr float Map3DodgeCooldown = 0.72f;
 constexpr float Map3DodgeActiveTime = 0.28f;
 constexpr float Map3ParryActiveTime = 0.42f;
 constexpr float Map3ParryRadius = 1.24f;
+constexpr float Map3EnemyProjectileSpeed = 3.05f;
+constexpr float Map3EnemyProjectileCooldown = 1.65f;
+constexpr float Map3ProjectileLifetime = 4.25f;
+constexpr float Map3ReflectedProjectileSpeed = 4.65f;
+constexpr float Map3ProjectileHitRadius = 0.42f;
 
 bool map3BoundsIntersect(const Bounds& a, const Bounds& b) {
     const glm::vec3 delta = glm::abs(a.center - b.center);
@@ -124,6 +130,10 @@ Mesh createMap3ActionMesh() {
     return Mesh::sphere(24, 12, 1.0f);
 }
 
+Mesh createMap3ProjectileMesh() {
+    return Mesh::sphere(18, 9, 0.5f);
+}
+
 void renderMap3ActionEffect(const Shader& shader, const Player& player, float timeSeconds, bool parryActive, bool dodgeActive) {
     if (!parryActive && !dodgeActive) {
         return;
@@ -147,6 +157,31 @@ void renderMap3ActionEffect(const Shader& shader, const Player& player, float ti
     shader.setMat4("uModel", model);
     bindSceneMaterial(shader, material);
     effectMesh.draw();
+}
+
+void renderMap3Projectiles(const Shader& shader, const std::vector<Map3Projectile>& projectiles, float timeSeconds, const glm::vec3& cameraPosition) {
+    static Mesh projectileMesh = createMap3ProjectileMesh();
+    shader.use();
+    shader.setFloat("uTime", timeSeconds);
+
+    for (const Map3Projectile& projectile : projectiles) {
+        if (glm::length(projectile.position - cameraPosition) > 30.0f) {
+            continue;
+        }
+
+        Material material;
+        material.baseColor = projectile.reflected ? glm::vec3(0.20f, 0.82f, 1.0f) : glm::vec3(1.0f, 0.22f, 0.16f);
+        material.emissive = projectile.reflected ? glm::vec3(0.05f, 0.18f, 0.24f) : glm::vec3(0.24f, 0.03f, 0.02f);
+        material.roughness = 0.42f;
+        material.fogAmount = 0.08f;
+
+        glm::mat4 model(1.0f);
+        model = glm::translate(model, projectile.position);
+        model = glm::scale(model, glm::vec3(projectile.reflected ? 0.26f : 0.22f));
+        shader.setMat4("uModel", model);
+        bindSceneMaterial(shader, material);
+        projectileMesh.draw();
+    }
 }
 
 bool loadMap3Environment(Environment& environment) {
@@ -178,6 +213,73 @@ bool loadMap3Environment(Environment& environment) {
     }
 
     return false;
+}
+
+bool updateMap3Projectiles(Map3Runtime& map3, float deltaTime, bool parryActive, bool dodgeActive) {
+    bool hitPlayer = false;
+    const Bounds playerBounds = map3.player.bounds();
+    const glm::vec3 playerCenter = playerBounds.center;
+    const glm::vec3 worldMin = map3.environment.worldMin();
+    const glm::vec3 worldMax = map3.environment.worldMax();
+
+    for (size_t index = 0; index < map3.projectiles.size();) {
+        Map3Projectile& projectile = map3.projectiles[index];
+        projectile.position += projectile.velocity * deltaTime;
+        projectile.lifetime -= deltaTime;
+
+        bool remove = projectile.lifetime <= 0.0f ||
+            projectile.position.x < worldMin.x - 2.0f ||
+            projectile.position.x > worldMax.x + 2.0f ||
+            projectile.position.y < worldMin.y - 2.0f ||
+            projectile.position.y > worldMax.y + 5.0f ||
+            projectile.position.z < worldMin.z - 2.0f ||
+            projectile.position.z > worldMax.z + 2.0f;
+
+        if (!remove && !projectile.reflected && parryActive && currentMode == PlayMode::Mode2D) {
+            const float horizontalDistance = std::abs(projectile.position.x - playerCenter.x);
+            const float verticalDistance = std::abs(projectile.position.y - playerCenter.y);
+            const float depthDistance = std::abs(projectile.position.z - playerCenter.z);
+            if (horizontalDistance <= Map3ParryRadius && verticalDistance <= 0.92f && depthDistance <= 0.74f) {
+                const glm::vec3 reflectedDirection = map3.enemies.directionToClosestEnemy(projectile.position);
+                projectile.velocity = reflectedDirection * Map3ReflectedProjectileSpeed;
+                projectile.reflected = true;
+                projectile.lifetime = Map3ProjectileLifetime;
+            }
+        }
+
+        if (!remove && projectile.reflected) {
+            remove = map3.enemies.damageEnemyAt(projectile.position, Map3ProjectileHitRadius, 0.52f, 1);
+        }
+
+        if (!remove && !projectile.reflected && !dodgeActive) {
+            const float horizontalDistance = glm::length(glm::vec2(projectile.position.x - playerCenter.x, projectile.position.z - playerCenter.z));
+            const float verticalDistance = std::abs(projectile.position.y - playerCenter.y);
+            if (horizontalDistance <= 0.44f && verticalDistance <= 0.78f) {
+                hitPlayer = true;
+                remove = true;
+            }
+        }
+
+        if (!remove) {
+            const Bounds projectileBounds{projectile.position, glm::vec3(0.12f)};
+            for (const Bounds& collider : map3.environment.collisionPreview()) {
+                const float top = collider.center.y + collider.halfExtent.y;
+                const bool likelyFloor = collider.halfExtent.y <= 0.34f && std::abs(projectile.position.y - top) <= 0.16f;
+                if (!likelyFloor && map3BoundsIntersect(projectileBounds, collider)) {
+                    remove = true;
+                    break;
+                }
+            }
+        }
+
+        if (remove) {
+            map3.projectiles.erase(map3.projectiles.begin() + static_cast<std::ptrdiff_t>(index));
+        } else {
+            ++index;
+        }
+    }
+
+    return hitPlayer;
 }
 }
 
@@ -215,13 +317,14 @@ void Map3EnemyManager::reset(const Environment& environment, const glm::vec3& pl
         enemy.position = findSpawnPosition(environment, playerSpawn, anchors[index]);
         enemy.spawnPosition = enemy.position;
         enemy.phase = static_cast<float>(index) * 1.21f;
+        enemy.shotCooldown = 0.35f + static_cast<float>(index) * 0.22f;
         enemy.health = 2;
         enemy.alive = true;
         m_enemies.push_back(enemy);
     }
 }
 
-bool Map3EnemyManager::update(const Player& player, const Environment& environment, float deltaTime, float timeSeconds, bool parryActive, bool dodgeActive) {
+bool Map3EnemyManager::update(const Player& player, const Environment& environment, float deltaTime, float timeSeconds, bool dodgeActive, std::vector<Map3Projectile>& projectiles) {
     bool hitPlayer = false;
     const glm::vec3 playerPosition = player.position();
 
@@ -231,6 +334,7 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
         }
 
         enemy.hurtTimer = std::max(0.0f, enemy.hurtTimer - deltaTime);
+        enemy.shotCooldown = std::max(0.0f, enemy.shotCooldown - deltaTime);
         glm::vec3 toPlayer = playerPosition - enemy.position;
         if (currentMode == PlayMode::Mode2D) {
             toPlayer.z = 0.0f;
@@ -238,25 +342,29 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
         }
 
         const float distance = glm::length(toPlayer);
-        if (parryActive && currentMode == PlayMode::Mode2D && distance <= Map3ParryRadius) {
-            enemy.health -= 1;
-            enemy.hurtTimer = 0.28f;
-            if (enemy.health <= 0) {
-                enemy.alive = false;
-                continue;
-            }
-
-            const glm::vec3 push = glm::length(toPlayer) > 0.05f ? -glm::normalize(toPlayer) * 0.62f : glm::vec3(0.62f, 0.0f, 0.0f);
-            tryMoveEnemy(enemy, environment, push);
-            continue;
-        }
-
         if (distance <= Map3EnemyDetectionRange && distance > 0.08f) {
             const float speed = currentMode == PlayMode::Mode2D ? Map3EnemySpeed2D : Map3EnemySpeed3D;
             glm::vec3 direction = glm::normalize(toPlayer);
             direction.y = 0.0f;
             tryMoveEnemy(enemy, environment, direction * speed * deltaTime);
             enemy.yaw = std::atan2(direction.x, direction.z);
+
+            if (enemy.shotCooldown <= 0.0f && distance <= Map3EnemyDetectionRange * 0.92f) {
+                glm::vec3 shotDirection = playerPosition + glm::vec3(0.0f, 0.45f, 0.0f) - (enemy.position + glm::vec3(0.0f, 0.38f, 0.0f));
+                if (currentMode == PlayMode::Mode2D) {
+                    shotDirection.z = 0.0f;
+                }
+                if (glm::length(shotDirection) > 0.05f) {
+                    shotDirection = glm::normalize(shotDirection);
+                    projectiles.push_back({
+                        enemy.position + glm::vec3(0.0f, 0.38f, 0.0f) + shotDirection * 0.38f,
+                        shotDirection * Map3EnemyProjectileSpeed,
+                        Map3ProjectileLifetime,
+                        false
+                    });
+                    enemy.shotCooldown = Map3EnemyProjectileCooldown + std::fmod(enemy.phase, 0.45f);
+                }
+            }
         } else {
             const float drift = std::sin(timeSeconds * 0.9f + enemy.phase) * 0.36f;
             const glm::vec3 target = enemy.spawnPosition + glm::vec3(drift, 0.0f, currentMode == PlayMode::Mode2D ? 0.0f : std::cos(timeSeconds * 0.7f + enemy.phase) * 0.28f);
@@ -269,7 +377,7 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
             }
         }
 
-        if (!dodgeActive && !parryActive && map3BoundsIntersect(player.bounds(), enemyBounds(enemy))) {
+        if (!dodgeActive && map3BoundsIntersect(player.bounds(), enemyBounds(enemy))) {
             hitPlayer = true;
         }
     }
@@ -308,6 +416,55 @@ void Map3EnemyManager::render(const Shader& shader, float timeSeconds, const glm
             m_fallbackMesh.draw();
         }
     }
+}
+
+bool Map3EnemyManager::damageEnemyAt(const glm::vec3& position, float horizontalRadius, float verticalRadius, int damage) {
+    for (Enemy& enemy : m_enemies) {
+        if (!enemy.alive) {
+            continue;
+        }
+
+        const glm::vec3 center = enemyBounds(enemy).center;
+        const float horizontalDistance = glm::length(glm::vec2(position.x - center.x, position.z - center.z));
+        const float verticalDistance = std::abs(position.y - center.y);
+        if (horizontalDistance > horizontalRadius || verticalDistance > verticalRadius) {
+            continue;
+        }
+
+        enemy.health -= damage;
+        enemy.hurtTimer = 0.28f;
+        if (enemy.health <= 0) {
+            enemy.alive = false;
+        }
+        return true;
+    }
+    return false;
+}
+
+glm::vec3 Map3EnemyManager::directionToClosestEnemy(const glm::vec3& position) const {
+    glm::vec3 bestDirection(0.0f);
+    float bestDistance = std::numeric_limits<float>::max();
+
+    for (const Enemy& enemy : m_enemies) {
+        if (!enemy.alive) {
+            continue;
+        }
+
+        glm::vec3 direction = enemyBounds(enemy).center - position;
+        if (currentMode == PlayMode::Mode2D) {
+            direction.z = 0.0f;
+        }
+        const float distance = glm::length(direction);
+        if (distance > 0.05f && distance < bestDistance) {
+            bestDistance = distance;
+            bestDirection = direction / distance;
+        }
+    }
+
+    if (glm::length(bestDirection) <= 0.05f) {
+        return glm::vec3(1.0f, 0.0f, 0.0f);
+    }
+    return bestDirection;
 }
 
 int Map3EnemyManager::aliveCount() const {
@@ -458,6 +615,7 @@ bool iniciarMap3(Map3Runtime& map3) {
             map3.dodgeCooldown = 0.0f;
             map3.dodgeActiveUntil = 0.0f;
             map3.parryActiveUntil = 0.0f;
+            map3.projectiles.clear();
             map3.gameOver = false;
             map3.skipFirstUpdateFrame = true;
             resetMap3View(map3.player);
@@ -487,6 +645,7 @@ bool iniciarMap3(Map3Runtime& map3) {
     map3.dodgeCooldown = 0.0f;
     map3.dodgeActiveUntil = 0.0f;
     map3.parryActiveUntil = 0.0f;
+    map3.projectiles.clear();
     map3.gameOver = false;
     map3.skipFirstUpdateFrame = true;
     resetMap3View(map3.player);
@@ -506,6 +665,7 @@ void volverAlMenu(Map3Runtime& map3) {
     map3.dodgeCooldown = 0.0f;
     map3.dodgeActiveUntil = 0.0f;
     map3.parryActiveUntil = 0.0f;
+    map3.projectiles.clear();
 }
 
 void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader, const Shader& lavaShader, float now) {
@@ -537,9 +697,10 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
             }
         }
 
-        const bool activeParryAfterInput = now <= map3.parryActiveUntil;
         const bool activeDodgeAfterInput = now <= map3.dodgeActiveUntil;
-        if (map3.enemies.update(map3.player, map3.environment, frameDelta, now, activeParryAfterInput, activeDodgeAfterInput) && map3.damageCooldown <= 0.0f) {
+        const bool enemyTouchedPlayer = map3.enemies.update(map3.player, map3.environment, frameDelta, now, activeDodgeAfterInput, map3.projectiles);
+        const bool projectileHitPlayer = updateMap3Projectiles(map3, frameDelta, now <= map3.parryActiveUntil, activeDodgeAfterInput);
+        if ((enemyTouchedPlayer || projectileHitPlayer) && map3.damageCooldown <= 0.0f) {
             map3.health = std::max(0, map3.health - 1);
             map3.damageCooldown = Map3EnemyHitCooldown;
             if (map3.health <= 0) {
@@ -572,6 +733,7 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
     map3.environment.render(sceneShader, lavaShader, now, gameplayCameraPosition);
     map3.mission.render(sceneShader, now, gameplayCameraPosition);
     map3.enemies.render(sceneShader, now, gameplayCameraPosition);
+    renderMap3Projectiles(sceneShader, map3.projectiles, now, gameplayCameraPosition);
     renderMap3ActionEffect(sceneShader, map3.player, now, now <= map3.parryActiveUntil, now <= map3.dodgeActiveUntil);
     map3.player.render(sceneShader);
 }
