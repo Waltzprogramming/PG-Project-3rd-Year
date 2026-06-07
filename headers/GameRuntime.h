@@ -17,7 +17,6 @@ extern float deltaTime;
 extern PlayMode currentMode;
 extern bool lastToggleKey;
 extern bool lastJumpKey;
-extern bool lastTeleportKey;
 extern bool lastShieldKey;
 extern float cameraYawDegrees;
 extern float cameraPitchDegrees;

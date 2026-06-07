@@ -18,7 +18,7 @@
 #include <vector>
 
 namespace {
-// Ajustes base de combate y supervivencia exclusivos de Mapa 4.
+// valores base del combate y de la mecánica de luz para que todo el mapa use el mismo ritmo
 constexpr float Map4ProjectileLifetime = 4.20f;
 constexpr float Map4ProjectileSpeed = 5.40f;
 constexpr float Map4ProjectileCooldown = 0.18f;
@@ -33,14 +33,14 @@ constexpr float Map4LightRespawnTime = 10.0f;
 constexpr size_t Map4SunPickupTotal = 5;
 
 bool map4BoundsIntersect(const Bounds& a, const Bounds& b) {
-    // Intersección simple AABB usada por pickups, jugador y enemigos.
+    // chequeo simple de cajas para saber si dos cosas del mapa se están tocando
     const glm::vec3 delta = glm::abs(a.center - b.center);
     const glm::vec3 total = a.halfExtent + b.halfExtent;
     return delta.x < total.x && delta.y < total.y && delta.z < total.z;
 }
 
 glm::vec3 findMarioMapa4Spawn(const Environment& environment) {
-    // Busca una plataforma segura en la mitad izquierda para el spawn inicial.
+    // busca un piso estable del lado izquierdo para que el jugador aparezca en una zona segura
     const auto& colliders = environment.collisionPreview();
     const glm::vec3 worldMin = environment.worldMin();
     const glm::vec3 worldMax = environment.worldMax();
@@ -66,7 +66,7 @@ glm::vec3 findMarioMapa4Spawn(const Environment& environment) {
 
         glm::vec3 candidate = collider.center;
         candidate.y = top + 0.05f;
-        // Premia plataformas cercanas al punto de inicio previsto para evitar apariciones extrañas.
+        // le da prioridad a plataformas cerca de la zona de inicio para evitar spawns raros
         const float score = std::abs(candidate.x - (worldMin.x + 2.4f)) + std::abs(candidate.y - (worldMin.y + 0.8f)) * 0.5f;
         if (score < bestScore) {
             bestScore = score;
@@ -77,49 +77,8 @@ glm::vec3 findMarioMapa4Spawn(const Environment& environment) {
     return best;
 }
 
-void configureMarioMapa4PipeTeleport(Mapa4Runtime& mapa4) {
-    // Calcula las dos bocas de la tubería a partir del tamaño real del mapa cargado.
-    const glm::vec3 worldMin = mapa4.environment.worldMin();
-    const glm::vec3 worldMax = mapa4.environment.worldMax();
-    const float pipeX = worldMin.x + (worldMax.x - worldMin.x) * 0.52f;
-    const float centerZ = (worldMin.z + worldMax.z) * 0.5f;
-    mapa4.pipeTopEntry = {pipeX, worldMin.y + 3.10f, centerZ};
-    mapa4.pipeBottomEntry = {pipeX, worldMin.y + 0.30f, centerZ};
-}
-
-void updateMarioMapa4PipeTeleport(Mapa4Runtime& mapa4, float dt, bool teleportPressed) {
-    // El teletransporte solo se activa al tocar la tubería y confirmar la acción.
-    if (!isMarioMapa4Environment(mapa4.environment)) {
-        return;
-    }
-
-    mapa4.pipeTeleportCooldown = std::max(0.0f, mapa4.pipeTeleportCooldown - dt);
-    if (mapa4.pipeTeleportCooldown > 0.0f || !teleportPressed) {
-        return;
-    }
-
-    const Bounds playerBounds = mapa4.player.bounds();
-    const Bounds topTrigger{mapa4.pipeTopEntry + glm::vec3(0.0f, 0.38f, 0.0f), {1.10f, 1.15f, 0.95f}};
-    const Bounds bottomTrigger{mapa4.pipeBottomEntry + glm::vec3(0.0f, 0.38f, 0.0f), {1.10f, 1.15f, 0.95f}};
-
-    const auto intersects = [](const Bounds& a, const Bounds& b) {
-        return std::abs(a.center.x - b.center.x) <= a.halfExtent.x + b.halfExtent.x &&
-            std::abs(a.center.y - b.center.y) <= a.halfExtent.y + b.halfExtent.y &&
-            std::abs(a.center.z - b.center.z) <= a.halfExtent.z + b.halfExtent.z;
-    };
-
-    if (intersects(playerBounds, topTrigger)) {
-        // El cooldown evita rebotes inmediatos entre ambas bocas.
-        mapa4.player.teleportTo(mapa4.pipeBottomEntry + glm::vec3(0.0f, 0.15f, 0.0f));
-        mapa4.pipeTeleportCooldown = 0.85f;
-    } else if (intersects(playerBounds, bottomTrigger)) {
-        mapa4.player.teleportTo(mapa4.pipeTopEntry + glm::vec3(0.0f, 0.15f, 0.0f));
-        mapa4.pipeTeleportCooldown = 0.85f;
-    }
-}
-
 Mesh createMapa4ShieldRingMesh() {
-    // Geometría ligera para dibujar el efecto visual del escudo sin cargar modelos externos.
+    // arma un aro sencillo para el escudo sin depender de un modelo extra
     constexpr int segments = 48;
     constexpr float outerRadius = 1.0f;
     constexpr float innerRadius = 0.88f;
@@ -163,45 +122,8 @@ Mesh createMapa4ShieldRingMesh() {
     return mesh;
 }
 
-glm::vec3 map4MouseAimDirection(GLFWwindow* window, const glm::mat4& view, const glm::mat4& projection, const Player& player) {
-    // Convierte la posición del mouse en una dirección de disparo sobre el plano del jugador.
-    int width = 0;
-    int height = 0;
-    glfwGetFramebufferSize(window, &width, &height);
-    if (width <= 0 || height <= 0) {
-        return {1.0f, 0.0f, 0.0f};
-    }
-
-    double mouseX = 0.0;
-    double mouseY = 0.0;
-    glfwGetCursorPos(window, &mouseX, &mouseY);
-    const glm::vec4 viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
-    const glm::vec3 nearPoint = glm::unProject(
-        glm::vec3(static_cast<float>(mouseX), static_cast<float>(height) - static_cast<float>(mouseY), 0.0f),
-        view,
-        projection,
-        viewport);
-    const glm::vec3 farPoint = glm::unProject(
-        glm::vec3(static_cast<float>(mouseX), static_cast<float>(height) - static_cast<float>(mouseY), 1.0f),
-        view,
-        projection,
-        viewport);
-
-    const glm::vec3 ray = farPoint - nearPoint;
-    const float planeZ = player.position().z;
-    // En 2D el raycast se aplana sobre la profundidad fija del personaje.
-    const float amount = std::abs(ray.z) > 0.0001f ? (planeZ - nearPoint.z) / ray.z : 0.0f;
-    const glm::vec3 cursorPosition = nearPoint + ray * amount;
-    glm::vec3 direction = cursorPosition - (player.position() + glm::vec3(0.0f, 0.56f, 0.0f));
-    direction.z = 0.0f;
-    if (glm::length(direction) < 0.05f) {
-        return {1.0f, 0.0f, 0.0f};
-    }
-    return glm::normalize(direction);
-}
-
 void updateMapa4Projectiles(Mapa4Runtime& mapa4, float dt) {
-    // Resuelve movimiento, colisiones y daño de todos los disparos activos.
+    // mueve todos los proyectiles y decide cuándo pegan o cuándo se deben borrar
     for (size_t i = 0; i < mapa4.projectiles.size();) {
         Mapa4Projectile& projectile = mapa4.projectiles[i];
         projectile.position += projectile.velocity * dt;
@@ -220,7 +142,7 @@ void updateMapa4Projectiles(Mapa4Runtime& mapa4, float dt) {
         bool remove = projectile.lifetime <= 0.0f || outsideWorld;
         if (!remove) {
             if (projectile.fromEnemy) {
-                // Los impactos enemigos alimentan el sistema de daño gradual del mapa.
+                // los tiros enemigos no quitan vida de golpe sino que suman impactos
                 const glm::vec3 playerCenter = mapa4.player.bounds().center;
                 const bool hitPlayer =
                     std::abs(projectile.position.x - playerCenter.x) <= 0.52f &&
@@ -240,7 +162,7 @@ void updateMapa4Projectiles(Mapa4Runtime& mapa4, float dt) {
                     }
                 }
             } else {
-                // El disparo del jugador delega el impacto al gestor de enemigos.
+                // los tiros del jugador revisan con el gestor de enemigos si hubo impacto
                 remove = mapa4.enemies.damageEnemyAt(projectile.position, 0.58f, 0.72f, projectile.damage);
             }
         }
@@ -254,7 +176,7 @@ void updateMapa4Projectiles(Mapa4Runtime& mapa4, float dt) {
 }
 
 void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Projectile>& projectiles, const glm::vec3& cameraPosition, float timeSeconds) {
-    // Dibuja flechas del jugador y enemigos con materiales distintos pero una malla compartida.
+    // dibuja los disparos usando la misma malla base pero con materiales distintos
     static Mesh arrowMesh = Mesh::cylinder(18, 1.0f, 0.08f);
     Material playerArrowMaterial;
     playerArrowMaterial.baseColor = {0.86f, 0.82f, 0.72f};
@@ -293,7 +215,7 @@ void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Project
 }
 
 void renderMapa4Shield(const Shader& shader, const Player& player, float timeSeconds) {
-    // El escudo se compone de anillos cruzados para que el personaje siga siendo visible.
+    // el escudo usa varios aros cruzados para verse claro sin tapar al personaje
     static Mesh shieldRing = createMapa4ShieldRingMesh();
 
     const float pulse = 0.96f + 0.04f * std::sin(timeSeconds * 9.0f);
@@ -337,7 +259,7 @@ void renderMapa4Shield(const Shader& shader, const Player& player, float timeSec
 }
 
 void renderMapa4Backdrop(const Shader& shader, const Environment& environment, const glm::vec3& cameraPosition, float timeSeconds) {
-    // El skybox sigue a la cámara para que el fondo siempre envuelva el nivel.
+    // el skybox se mueve con la cámara para que el fondo siempre rodee al mapa
     static bool skyboxLoaded = false;
     static LoadedModel skyboxModel;
     static std::vector<std::shared_ptr<Texture2D>> skyboxTextures;
@@ -383,7 +305,7 @@ void renderMapa4Backdrop(const Shader& shader, const Environment& environment, c
     }
 
     glDepthMask(GL_FALSE);
-    // El fondo no debe escribir profundidad para no tapar la geometría jugable.
+    // el fondo no escribe profundidad para no ponerse delante del escenario
     shader.use();
     shader.setFloat("uTime", timeSeconds);
     const glm::vec3 worldMin = environment.worldMin();
@@ -407,10 +329,10 @@ void renderMapa4Backdrop(const Shader& shader, const Environment& environment, c
     glDepthMask(GL_TRUE);
 }
 
-} // namespace
+} // helpers internos de mapa 4
 
 bool SimpleEnemyManager::initialize() {
-    // Carga ambos modelos de enemigo una sola vez y reutiliza los recursos.
+    // carga los modelos de enemigos una vez y luego los reutiliza durante toda la sesión
     if (m_initialized) {
         return true;
     }
@@ -422,7 +344,7 @@ bool SimpleEnemyManager::initialize() {
 }
 
 void SimpleEnemyManager::reset(const Environment& environment, const glm::vec3& playerSpawn) {
-    // Reparte enemigos en puntos válidos del mapa y les asigna una patrulla simple.
+    // vuelve a crear los enemigos en pisos válidos y les deja una patrulla sencilla
     m_enemies.clear();
     const glm::vec3 worldMin = environment.worldMin();
     const glm::vec3 worldMax = environment.worldMax();
@@ -442,7 +364,7 @@ void SimpleEnemyManager::reset(const Environment& environment, const glm::vec3& 
         enemy.position = findSpawnPosition(environment, playerSpawn, anchors[index]);
         enemy.patrolCenter = enemy.position;
         enemy.patrolRadius = 2.8f + static_cast<float>(index % 3) * 0.65f;
-        // Variar radio y fase evita que todas las patrullas se vean idénticas.
+        // cambiar radio y fase hace que no todos se muevan igual
         enemy.patrolSpeed = 0.56f + static_cast<float>(index) * 0.08f;
         enemy.patrolPhase = static_cast<float>(index) * 1.37f;
         enemy.patrolOnX = index % 2 == 0;
@@ -456,7 +378,7 @@ void SimpleEnemyManager::reset(const Environment& environment, const glm::vec3& 
 }
 
 bool SimpleEnemyManager::update(const Player& player, const Environment& environment, float deltaTime, float timeSeconds, std::vector<Mapa4Projectile>& projectiles) {
-    // Controla patrulla, detección cercana y disparos lentos de los enemigos.
+    // resuelve patrulla, detección cercana y disparo lento de cada enemigo
     bool damagedPlayer = false;
     const Bounds playerBounds = player.bounds();
     const glm::vec3 playerPosition = player.position();
@@ -473,7 +395,7 @@ bool SimpleEnemyManager::update(const Player& player, const Environment& environ
         const float distance = glm::length(toPlayer);
 
         if (distance > 24.0f) {
-            // Si está demasiado lejos, se omite la IA completa por rendimiento.
+            // si el jugador está muy lejos se ahorra trabajo de ia
             continue;
         }
 
@@ -538,7 +460,7 @@ bool SimpleEnemyManager::update(const Player& player, const Environment& environ
 }
 
 void SimpleEnemyManager::render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const {
-    // Omite enemigos lejanos para mantener el coste de render controlado.
+    // deja fuera del render a los enemigos lejanos para cuidar rendimiento
     shader.use();
     shader.setFloat("uTime", timeSeconds);
     for (const Enemy& enemy : m_enemies) {
@@ -556,7 +478,7 @@ void SimpleEnemyManager::render(const Shader& shader, float timeSeconds, const g
 }
 
 bool SimpleEnemyManager::loadEnemyModel(const std::string& path, const glm::vec3& fallbackColor, EnemyModel& modelData) {
-    // Intenta cargar el modelo real; si falla, deja listo un sustituto procedural.
+    // intenta usar el modelo real y si falla deja uno simple para no romper el mapa
     LoadedModel model = ModelLoader::loadModel(path);
     if (model.meshes.empty()) {
         buildFallbackModel(fallbackColor, modelData);
@@ -587,7 +509,7 @@ bool SimpleEnemyManager::loadEnemyModel(const std::string& path, const glm::vec3
         } else {
             part.material.baseColor = fallbackColor;
         }
-        // Los FBX de los enemigos no siempre reportan rutas de textura a Assimp.
+        // estos fbx a veces no traen bien la ruta de textura y aquí se corrige con fallback
         if (!part.material.texture) {
             part.material.texture = loadFirstEnemyTexture(fallbackTextures);
         }
@@ -652,7 +574,7 @@ std::shared_ptr<Texture2D> SimpleEnemyManager::loadEnemyTexture(const std::strin
 }
 
 glm::vec3 SimpleEnemyManager::findSpawnPosition(const Environment& environment, const glm::vec3& playerSpawn, const glm::vec2& anchor) const {
-    // Busca plataformas amplias y seguras para distribuir enemigos lejos del spawn.
+    // busca plataformas amplias para repartir enemigos sin pegarlos al jugador
     glm::vec3 best = playerSpawn + glm::vec3(anchor.x >= 0.0f ? 4.0f : -4.0f, 0.0f, anchor.y >= 0.0f ? 4.0f : -4.0f);
     float bestScore = std::numeric_limits<float>::max();
 
@@ -670,7 +592,7 @@ glm::vec3 SimpleEnemyManager::findSpawnPosition(const Environment& environment, 
         const glm::vec3 candidate{collider.center.x, top + 0.04f, collider.center.z};
         const float playerDistance = glm::length(glm::vec2(candidate.x - playerSpawn.x, candidate.z - playerSpawn.z));
         if (playerDistance < 3.0f) {
-            // Mantiene un espacio seguro entre el jugador y el spawn enemigo.
+            // evita que un enemigo aparezca demasiado cerca del jugador
             continue;
         }
 
@@ -684,7 +606,7 @@ glm::vec3 SimpleEnemyManager::findSpawnPosition(const Environment& environment, 
 }
 
 bool SimpleEnemyManager::tryMoveEnemy(Enemy& enemy, const Environment& environment, const glm::vec3& step) const {
-    // Valida movimiento contra colisiones y corrige la altura al piso más cercano.
+    // prueba un paso del enemigo y corrige altura para que siga sobre un piso válido
     glm::vec3 candidate = enemy.position + step;
     const glm::vec3 worldMin = environment.worldMin();
     const glm::vec3 worldMax = environment.worldMax();
@@ -696,7 +618,7 @@ bool SimpleEnemyManager::tryMoveEnemy(Enemy& enemy, const Environment& environme
 
     float floorY = candidate.y;
     if (!findFloorAt(environment, candidate.x, candidate.z, enemy.position.y, floorY)) {
-        // Sin piso válido, el enemigo no sale de su zona jugable.
+        // si no hay piso debajo no se mueve para no salirse del mapa
         return false;
     }
     candidate.y = floorY + 0.04f;
@@ -797,7 +719,7 @@ int SimpleEnemyManager::aliveCount() const {
 }
 
 bool Map4LightManager::initialize() {
-    // Prepara el modelo de Sol y su material emisivo para el ciclo de luz.
+    // deja listo el modelo del sol y su material para usarlos como pickup de luz
     if (m_initialized) {
         return true;
     }
@@ -811,9 +733,9 @@ bool Map4LightManager::initialize() {
     m_initialized = true;
     return true;
 }
-
+//soles map 4
 void Map4LightManager::reset(const Environment& environment, const glm::vec3& playerSpawn) {
-    // Distribuye los Soles en puntos alcanzables para sostener la exploración nocturna.
+    // reparte los soles en lugares alcanzables para obligar a explorar el mapa
     m_pickups.clear();
     struct SurfaceCandidate {
         Bounds bounds;
@@ -910,7 +832,7 @@ void Map4LightManager::reset(const Environment& environment, const glm::vec3& pl
 }
 
 void Map4LightManager::update(Player& player, float timeSeconds, float deltaTime, float& energySeconds) {
-    // Consume energía con el tiempo y recarga la barra cuando el jugador recoge un Sol.
+    // baja la energía con el tiempo y la rellena cuando el jugador toca un sol
     energySeconds = std::max(0.0f, energySeconds - deltaTime);
     const Bounds playerBounds = player.bounds();
     for (SunPickup& pickup : m_pickups) {
@@ -924,7 +846,7 @@ void Map4LightManager::update(Player& player, float timeSeconds, float deltaTime
         if (map4BoundsIntersect(playerBounds, sunBounds(pickup))) {
             pickup.available = false;
             pickup.respawnAt = timeSeconds + Map4LightRespawnTime;
-            // Cada Sol rellena una carga completa, pero nunca supera el máximo.
+            // cada sol recarga bastante pero no deja pasar el máximo de energía
             energySeconds = std::min(Map4LightEnergyMaximum, energySeconds + Map4LightEnergyMaximum);
         }
     }
@@ -951,37 +873,6 @@ void Map4LightManager::render(const Shader& shader, float timeSeconds, const glm
             m_fallbackMesh.draw();
         }
     }
-}
-
-std::vector<glm::vec3> Map4LightManager::activeLightPositions(const glm::vec3& cameraPosition, size_t maxCount) const {
-    struct Candidate {
-        glm::vec3 position{0.0f};
-        float distance{0.0f};
-    };
-
-    std::vector<Candidate> candidates;
-    candidates.reserve(m_pickups.size());
-    for (const SunPickup& pickup : m_pickups) {
-        if (!pickup.available) {
-            continue;
-        }
-        const float distance = glm::length(pickup.position - cameraPosition);
-        if (distance > 14.0f) {
-            continue;
-        }
-        candidates.push_back({pickup.position, distance});
-    }
-
-    std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
-        return a.distance < b.distance;
-    });
-
-    std::vector<glm::vec3> result;
-    result.reserve(std::min(maxCount, candidates.size()));
-    for (size_t i = 0; i < candidates.size() && i < maxCount; ++i) {
-        result.push_back(candidates[i].position);
-    }
-    return result;
 }
 
 std::shared_ptr<Texture2D> Map4LightManager::loadSunTexture(const std::string& path) {
@@ -1049,7 +940,7 @@ std::shared_ptr<Texture2D> Map4LightManager::loadSunTexture(const LoadedMaterial
 }
 
 bool Map4LightManager::loadSunModel() {
-    // Carga el coleccionable Sol y ajusta sus materiales para que brillen en la oscuridad.
+    // carga el modelo del sol y lo deja con un material que destaque en la oscuridad
     LoadedModel model = ModelLoader::loadModel(resolveAssetPath("assets/Items/sol.glb"));
     if (model.meshes.empty()) {
         model = ModelLoader::loadModel(resolveAssetPath("assets/items/sol.glb"));
@@ -1103,7 +994,7 @@ glm::mat4 Map4LightManager::sunModelMatrix(const SunPickup& pickup, float timeSe
 }
 
 bool isMarioMapa4Environment(const Environment& environment) {
-    // Detecta si el runtime actual debe usar las reglas especiales de Mapa 4.
+    // revisa la ruta cargada para saber si se deben aplicar las reglas propias de mapa 4
     const std::string source = environment.levelSource();
     return source.find("mapamian") != std::string::npos ||
         source.find("mapa verde") != std::string::npos ||
@@ -1111,7 +1002,7 @@ bool isMarioMapa4Environment(const Environment& environment) {
 }
 
 bool iniciarMapa4(Mapa4Runtime& mapa4) {
-    // Inicializa o reactiva la sesión de Mapa 4 sin recargar recursos innecesariamente.
+    // prepara o reactiva la sesión del mapa sin volver a cargar lo que ya existe en memoria
     if (mapa4.initialized) {
         if (!mapa4.sessionActive) {
             const glm::vec3 spawnPoint = isMarioMapa4Environment(mapa4.environment)
@@ -1122,10 +1013,8 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
             mapa4.enemies.reset(mapa4.environment, spawnPoint);
             mapa4.lightPickups.initialize();
             mapa4.lightPickups.reset(mapa4.environment, spawnPoint);
-            configureMarioMapa4PipeTeleport(mapa4);
             mapa4.lastCollectedCount = 0;
             mapa4.coinCollectDelay = 1.10f;
-            mapa4.pipeTeleportCooldown = 0.0f;
             mapa4.health = mapa4.maxHealth;
             mapa4.damageCooldown = 0.0f;
             mapa4.pendingHits = 0;
@@ -1180,10 +1069,8 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     mapa4.lightPickups.reset(mapa4.environment, spawnPoint);
     mapa4.enemies.initialize();
     mapa4.enemies.reset(mapa4.environment, spawnPoint);
-    configureMarioMapa4PipeTeleport(mapa4);
     mapa4.lastCollectedCount = 0;
     mapa4.coinCollectDelay = 1.10f;
-    mapa4.pipeTeleportCooldown = 0.0f;
     mapa4.health = mapa4.maxHealth;
     mapa4.damageCooldown = 0.0f;
     mapa4.pendingHits = 0;
@@ -1207,14 +1094,13 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
 }
 
 void volverAlMenu(Mapa4Runtime& mapa4) {
-    // Limpia el estado temporal del nivel al regresar al menú.
+    // limpia estados temporales del mapa antes de volver al menú principal
     if (mapa4.musicOpen && mapa4.musicPlaying) {
         mapa4.music.stop();
         mapa4.musicPlaying = false;
     }
     mapa4.lastCollectedCount = 0;
     mapa4.coinCollectDelay = 0.0f;
-    mapa4.pipeTeleportCooldown = 0.0f;
     mapa4.projectiles.clear();
     mapa4.projectileCooldown = 0.0f;
     mapa4.pendingHits = 0;
@@ -1225,27 +1111,18 @@ void volverAlMenu(Mapa4Runtime& mapa4) {
     mapa4.skipFirstUpdateFrame = false;
     mapa4.sessionActive = false;
 }
-
+//funcion render map 4 
 void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneShader, const Shader& lavaShader, float now) {
-    // Este ciclo concentra la jugabilidad y el render específicos de Mapa 4.
+    // aquí corre todo lo importante del mapa en cada frame
     if (mapa4.startSequencePending) {
-        // La música arranca solo cuando el nivel ya terminó de prepararse.
+        // la música entra hasta que el mapa ya terminó de armarse
         if (!mapa4.musicOpen) {
-            const std::vector<std::string> musicCandidates = {
+            const std::string musicPath = resolveFirstExistingAsset({
                 "assets/audio/map4.mp3",
-                "assets/audio/Map4.mp3",
-                "assets/mapa 4/audio 4.mp3",
-                "assets/mapa 4/Audio 4.mp3",
-                "assets/mapa 4/audio4.mp3",
-                "assets/mapa 4/Audio4.mp3"
-            };
-            for (const std::string& candidate : musicCandidates) {
-                if (std::filesystem::exists(resolveAssetPath(candidate))) {
-                    mapa4.musicOpen = mapa4.music.open(resolveAssetPath(candidate));
-                    if (mapa4.musicOpen) {
-                        break;
-                    }
-                }
+                "assets/audio/Map4.mp3"
+            });
+            if (!musicPath.empty() && std::filesystem::exists(musicPath)) {
+                mapa4.musicOpen = mapa4.music.open(musicPath);
             }
         }
         if (mapa4.musicOpen && !mapa4.musicPlaying) {
@@ -1260,9 +1137,6 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
 
     if (!mapa4.gameOver && !mapa4.mission.levelComplete()) {
         const PlayerInput playerInput = buildPlayerInput(window, mapa4.player);
-        const bool teleportDown = glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS;
-        const bool teleportPressed = teleportDown && !lastTeleportKey;
-        lastTeleportKey = teleportDown;
         const bool shieldDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
         const bool shieldPressed = shieldDown && !lastShieldKey;
         lastShieldKey = shieldDown;
@@ -1284,7 +1158,6 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
         mapa4.player.update(playerInput, mapa4.environment.collisionPreview(), mapa4.environment.worldMin(), mapa4.environment.worldMax(), frameDelta);
         mapa4.lightPickups.update(mapa4.player, now, frameDelta, mapa4.lightEnergy);
         mapa4.coinCollectDelay = std::max(0.0f, mapa4.coinCollectDelay - frameDelta);
-        updateMarioMapa4PipeTeleport(mapa4, frameDelta, teleportPressed);
         if (mapa4.coinCollectDelay <= 0.0f) {
             mapa4.mission.update(mapa4.player, now);
         }
@@ -1320,13 +1193,12 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
 
     mapa4.projectileCooldown = std::max(0.0f, mapa4.projectileCooldown - frameDelta);
     if (!mapa4.gameOver && !mapa4.mission.levelComplete()) {
-        // En 2D el jugador mantiene el disparo continuo; en 3D se desactiva.
+        // en 2d se permite disparo continuo y en 3d se corta esa mecánica
         if (currentMode == PlayMode::Mode2D) {
             const bool attackDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
             if (attackDown && mapa4.projectileCooldown <= 0.0f) {
-                glm::vec3 aimDirection = map4MouseAimDirection(window, view, projection, mapa4.player);
                 const float facing = std::sin(mapa4.player.facingYaw()) >= 0.0f ? 1.0f : -1.0f;
-                aimDirection = glm::vec3(facing, 0.0f, 0.0f);
+                const glm::vec3 aimDirection(facing, 0.0f, 0.0f);
                 const glm::vec3 spawnPosition = mapa4.player.position() + glm::vec3(aimDirection.x * 0.52f, 0.60f, 0.0f);
                 mapa4.projectiles.push_back({
                     spawnPosition,
@@ -1346,10 +1218,10 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
     glClearColor(0.02f, 0.03f, 0.08f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    const glm::vec3 flashlightAnchor = mapa4.player.position();
-    const std::vector<glm::vec3> sunGlowPositions = mapa4.lightPickups.activeLightPositions(gameplayCameraPosition, 3);
-    // La luz del jugador y el glow tenue de los Soles entran al shader como luces extra.
-    uploadCommonSceneUniforms(sceneShader, mapa4.environment, gameplayCameraPosition, view, projection, now, &flashlightAnchor, mapa4.lightEnergy / Map4LightEnergyMaximum, &sunGlowPositions);
+    // variable local flashlitgh armor 
+      const glm::vec3 flashlightAnchor = mapa4.player.position();
+    // la luz del jugador se manda al shader para iluminar solo la zona cercana
+    uploadCommonSceneUniforms(sceneShader, mapa4.environment, gameplayCameraPosition, view, projection, now, &flashlightAnchor, mapa4.lightEnergy / Map4LightEnergyMaximum, nullptr);
     lavaShader.use();
     lavaShader.setMat4("uView", view);
     lavaShader.setMat4("uProjection", projection);
@@ -1368,7 +1240,7 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
 }
 
 void renderMapa4Hud(MenuContext& menu, const Mapa4Runtime& mapa4, int width, int height, float now) {
-    // HUD propio: barra de luz y mensaje guía permanente del nivel.
+    // hud propio del mapa con barra de luz y mensaje fijo para orientar al jugador
     const Rect lightPanel{22.0f, 106.0f, 282.0f, 72.0f};
     drawRect(menu, {lightPanel.x + 6.0f, lightPanel.y + 7.0f, lightPanel.width, lightPanel.height}, {0.01f, 0.02f, 0.05f, 0.48f});
     drawRect(menu, lightPanel, {0.06f, 0.12f, 0.24f, 0.94f});

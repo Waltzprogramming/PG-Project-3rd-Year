@@ -113,7 +113,6 @@ bool lastJumpKey = false;
 bool lastEscapeKey = false;
 bool lastInteractKey = false;
 bool lastMouseButton = false;
-bool lastTeleportKey = false;
 bool lastShieldKey = false;
 float cameraYawDegrees = 0.0f;
 float cameraPitchDegrees = 18.0f;
@@ -2103,7 +2102,7 @@ void updateGameplayCamera(const Player& player, const Environment& environment, 
         gameplayCameraTarget = glm::mix(gameplayCameraTarget, desiredTarget, smoothing);
     }
 }
-
+//funcion map4 uplaodCommon scene uniforms 
 void uploadCommonSceneUniforms(const Shader& shader, const Environment& environment, const glm::vec3& cameraPosition, const glm::mat4& view, const glm::mat4& projection, float timeSeconds, const glm::vec3* playerLightPosition = nullptr, float playerLightRatio = 1.0f, const std::vector<glm::vec3>* extraGlowLights = nullptr) {
     // Envía al shader la cámara, la iluminación común y las variaciones especiales de cada mapa.
     shader.use();
@@ -2138,7 +2137,7 @@ void uploadCommonSceneUniforms(const Shader& shader, const Environment& environm
         shader.setFloat(prefix + ".intensity", lights[i].intensity * flicker);
         shader.setFloat(prefix + ".radius", lights[i].radius);
     }
-
+    // iluminacion map4
     if (marioMap4) {
         const int extraBase = count;
         const int glowCount = 0;
