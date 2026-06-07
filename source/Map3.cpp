@@ -34,6 +34,12 @@ constexpr float Map3ProjectileLifetime = 4.25f;
 constexpr float Map3ReflectedProjectileSpeed = 4.65f;
 constexpr float Map3ProjectileHitRadius = 0.42f;
 
+bool isMap3PirateEnvironment(const Environment& environment) {
+    std::string source = environment.levelSource();
+    std::replace(source.begin(), source.end(), '\\', '/');
+    return source.find("game_pirate_adventure_map") != std::string::npos;
+}
+
 bool map3BoundsIntersect(const Bounds& a, const Bounds& b) {
     const glm::vec3 delta = glm::abs(a.center - b.center);
     const glm::vec3 total = a.halfExtent + b.halfExtent;
@@ -65,10 +71,98 @@ bool positionOverlapsWorld(const Bounds& bounds, const std::vector<Bounds>& coll
     return false;
 }
 
-bool findFloorAt(const Environment& environment, float x, float z, float preferredY, float& floorY) {
+bool findFloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float& floorY);
+glm::vec3 findMap3PirateSpawn(const Environment& environment);
+
+std::vector<Bounds> buildMap3PirateCollision(const Environment& environment) {
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    const glm::vec3 worldCenter = (worldMin + worldMax) * 0.5f;
+    const glm::vec3 span = glm::max(worldMax - worldMin, glm::vec3(1.0f));
+
+    const float pathLength = span.x * 0.88f;
+    const float shoulderHalfWidth = std::min(std::max(span.z * 0.19f, 1.85f), 2.75f);
+    const float pathCenterX = worldCenter.x - span.x * 0.08f;
+    const glm::vec3 rawSpawn = findMap3PirateSpawn(environment);
+    const float pathCenterZ = rawSpawn.z;
+    const float floorTop = rawSpawn.y - 0.08f;
+    const float floorCenterY = floorTop - 0.16f;
+
+    std::vector<Bounds> colliders;
+    colliders.push_back({{pathCenterX, floorCenterY, pathCenterZ}, {pathLength * 0.5f, 0.16f, shoulderHalfWidth}});
+
+    const float wallThickness = 0.22f;
+    const float wallHeight = std::max(12.0f, span.y + 4.0f);
+    const float wallCenterY = floorTop + wallHeight * 0.5f;
+    colliders.push_back({{pathCenterX, wallCenterY, pathCenterZ - shoulderHalfWidth - wallThickness}, {pathLength * 0.5f, wallHeight * 0.5f, wallThickness}});
+    colliders.push_back({{pathCenterX, wallCenterY, pathCenterZ + shoulderHalfWidth + wallThickness}, {pathLength * 0.5f, wallHeight * 0.5f, wallThickness}});
+    colliders.push_back({{pathCenterX - pathLength * 0.5f - wallThickness, wallCenterY, pathCenterZ}, {wallThickness, wallHeight * 0.5f, shoulderHalfWidth + wallThickness}});
+    colliders.push_back({{pathCenterX + pathLength * 0.5f + wallThickness, wallCenterY, pathCenterZ}, {wallThickness, wallHeight * 0.5f, shoulderHalfWidth + wallThickness}});
+
+    return colliders;
+}
+
+const std::vector<Bounds>& map3ActiveColliders(const Map3Runtime& map3) {
+    return map3.collisionBounds.empty() ? map3.environment.collisionPreview() : map3.collisionBounds;
+}
+
+glm::vec3 findMap3PirateSpawn(const Environment& environment) {
+    const auto& colliders = environment.collisionPreview();
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    const glm::vec3 span = glm::max(worldMax - worldMin, glm::vec3(1.0f));
+    const glm::vec2 anchor(worldMin.x + span.x * 0.16f, (worldMin.z + worldMax.z) * 0.5f);
+    glm::vec3 best = environment.recommendedSpawnPoint();
+    float bestScore = std::numeric_limits<float>::max();
+
+    for (const Bounds& collider : colliders) {
+        const float top = collider.center.y + collider.halfExtent.y;
+        const float width = collider.halfExtent.x * 2.0f;
+        const float depth = collider.halfExtent.z * 2.0f;
+        const float area = width * depth;
+        const bool floorLike = collider.halfExtent.y <= 0.34f && area >= 0.04f;
+        const bool playableHeight = top >= worldMin.y + 0.15f && top <= worldMin.y + 3.8f;
+        if (!floorLike || !playableHeight) {
+            continue;
+        }
+
+        const float safeX = std::max(collider.halfExtent.x - 0.34f, 0.0f);
+        const float safeZ = std::max(collider.halfExtent.z - 0.34f, 0.0f);
+        glm::vec3 candidate{
+            std::clamp(anchor.x, collider.center.x - safeX, collider.center.x + safeX),
+            top + 0.08f,
+            std::clamp(anchor.y, collider.center.z - safeZ, collider.center.z + safeZ)
+        };
+
+        const float depthScore = std::abs(candidate.z - anchor.y) * 2.8f;
+        const float startScore = std::abs(candidate.x - anchor.x);
+        const float roadScore = collider.halfExtent.z <= 0.72f ? -1.8f : 0.0f;
+        const float score = startScore + depthScore + std::abs(candidate.y - (worldMin.y + 1.6f)) * 0.55f + roadScore;
+        if (score < bestScore) {
+            bestScore = score;
+            best = candidate;
+        }
+    }
+
+    return best;
+}
+
+glm::vec3 findMap3PirateSpawn(const Environment& environment, const std::vector<Bounds>& colliders) {
+    const Bounds& path = colliders.empty()
+        ? Bounds{environment.recommendedSpawnPoint(), glm::vec3(1.0f)}
+        : colliders.front();
+    glm::vec3 spawn{path.center.x - path.halfExtent.x * 0.42f, path.center.y + path.halfExtent.y + 0.08f, path.center.z};
+    float floorY = spawn.y;
+    if (findFloorAt(colliders, spawn.x, spawn.z, spawn.y, floorY)) {
+        spawn.y = floorY + 0.08f;
+    }
+    return spawn;
+}
+
+bool findFloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float& floorY) {
     bool found = false;
     float bestScore = std::numeric_limits<float>::max();
-    for (const Bounds& collider : environment.collisionPreview()) {
+    for (const Bounds& collider : colliders) {
         const float top = collider.center.y + collider.halfExtent.y;
         const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
         const bool floorLike = collider.halfExtent.y <= 0.34f && area >= 0.24f;
@@ -91,7 +185,7 @@ bool findFloorAt(const Environment& environment, float x, float z, float preferr
     return found;
 }
 
-bool tryDodgePlayer(Player& player, const Environment& environment, const PlayerInput& input) {
+bool tryDodgePlayer(Player& player, const Environment& environment, const std::vector<Bounds>& colliders, const PlayerInput& input) {
     const glm::vec3 direction = map3MoveDirectionFromInput(input);
     const glm::vec3 current = player.position();
     glm::vec3 target = current + direction * Map3DodgeDistance;
@@ -101,13 +195,13 @@ bool tryDodgePlayer(Player& player, const Environment& environment, const Player
     target.x = std::clamp(target.x, worldMin.x + 0.36f, worldMax.x - 0.36f);
     target.z = std::clamp(target.z, worldMin.z + 0.36f, worldMax.z - 0.36f);
     float floorY = target.y;
-    if (findFloorAt(environment, target.x, target.z, current.y, floorY)) {
+    if (findFloorAt(colliders, target.x, target.z, current.y, floorY)) {
         target.y = floorY + 0.05f;
     }
 
     Bounds candidate = player.bounds();
     candidate.center += target - current;
-    if (positionOverlapsWorld(candidate, environment.collisionPreview())) {
+    if (positionOverlapsWorld(candidate, colliders)) {
         return false;
     }
 
@@ -124,6 +218,14 @@ void resetMap3View(const Player& player) {
     cameraPitchDegrees = 18.0f;
     locked2DDepth = player.position().z;
     cameraInitialized = false;
+}
+
+void resetMap3ViewForEnvironment(const Environment& environment, const Player& player) {
+    resetMap3View(player);
+    if (isMap3PirateEnvironment(environment)) {
+        cameraYawDegrees = -90.0f;
+        cameraPitchDegrees = 14.0f;
+    }
 }
 
 Mesh createMap3ActionMesh() {
@@ -185,7 +287,8 @@ void renderMap3Projectiles(const Shader& shader, const std::vector<Map3Projectil
 }
 
 bool loadMap3Environment(Environment& environment) {
-    const std::array<std::string, 8> candidates = {
+    const std::array<std::string, 9> candidates = {
+        "assets/mundo3/game_pirate_adventure_map/scene_map3.gltf",
         "assets/mundo3/Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit/course.dae",
         "assets/mundo3/Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit/course_fix.dae",
         "assets/mundo3/Wii - Mario Kart Wii - Courses - Mario Circuit/Mario Circuit",
@@ -262,7 +365,7 @@ bool updateMap3Projectiles(Map3Runtime& map3, float deltaTime, bool parryActive,
 
         if (!remove) {
             const Bounds projectileBounds{projectile.position, glm::vec3(0.12f)};
-            for (const Bounds& collider : map3.environment.collisionPreview()) {
+            for (const Bounds& collider : map3ActiveColliders(map3)) {
                 const float top = collider.center.y + collider.halfExtent.y;
                 const bool likelyFloor = collider.halfExtent.y <= 0.34f && std::abs(projectile.position.y - top) <= 0.16f;
                 if (!likelyFloor && map3BoundsIntersect(projectileBounds, collider)) {
@@ -296,7 +399,7 @@ bool Map3EnemyManager::initialize() {
     return true;
 }
 
-void Map3EnemyManager::reset(const Environment& environment, const glm::vec3& playerSpawn) {
+void Map3EnemyManager::reset(const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn) {
     m_enemies.clear();
     const glm::vec3 worldMin = environment.worldMin();
     const glm::vec3 worldMax = environment.worldMax();
@@ -314,7 +417,7 @@ void Map3EnemyManager::reset(const Environment& environment, const glm::vec3& pl
 
     for (size_t index = 0; index < anchors.size(); ++index) {
         Enemy enemy;
-        enemy.position = findSpawnPosition(environment, playerSpawn, anchors[index]);
+        enemy.position = findSpawnPosition(environment, colliders, playerSpawn, anchors[index]);
         enemy.spawnPosition = enemy.position;
         enemy.phase = static_cast<float>(index) * 1.21f;
         enemy.shotCooldown = 0.35f + static_cast<float>(index) * 0.22f;
@@ -324,7 +427,7 @@ void Map3EnemyManager::reset(const Environment& environment, const glm::vec3& pl
     }
 }
 
-bool Map3EnemyManager::update(const Player& player, const Environment& environment, float deltaTime, float timeSeconds, bool dodgeActive, std::vector<Map3Projectile>& projectiles) {
+bool Map3EnemyManager::update(const Player& player, const Environment& environment, const std::vector<Bounds>& colliders, float deltaTime, float timeSeconds, bool dodgeActive, std::vector<Map3Projectile>& projectiles) {
     bool hitPlayer = false;
     const glm::vec3 playerPosition = player.position();
 
@@ -346,7 +449,7 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
             const float speed = currentMode == PlayMode::Mode2D ? Map3EnemySpeed2D : Map3EnemySpeed3D;
             glm::vec3 direction = glm::normalize(toPlayer);
             direction.y = 0.0f;
-            tryMoveEnemy(enemy, environment, direction * speed * deltaTime);
+            tryMoveEnemy(enemy, environment, colliders, direction * speed * deltaTime);
             enemy.yaw = std::atan2(direction.x, direction.z);
 
             if (enemy.shotCooldown <= 0.0f && distance <= Map3EnemyDetectionRange * 0.92f) {
@@ -372,7 +475,7 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
             direction.y = 0.0f;
             if (glm::length(direction) > 0.05f) {
                 direction = glm::normalize(direction);
-                tryMoveEnemy(enemy, environment, direction * Map3EnemySpeed3D * 0.45f * deltaTime);
+                tryMoveEnemy(enemy, environment, colliders, direction * Map3EnemySpeed3D * 0.45f * deltaTime);
                 enemy.yaw = std::atan2(direction.x, direction.z);
             }
         }
@@ -524,11 +627,11 @@ void Map3EnemyManager::buildFallbackModel() {
     m_modelScale = 0.72f;
 }
 
-glm::vec3 Map3EnemyManager::findSpawnPosition(const Environment& environment, const glm::vec3& playerSpawn, const glm::vec2& anchor) const {
+glm::vec3 Map3EnemyManager::findSpawnPosition(const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn, const glm::vec2& anchor) const {
     glm::vec3 best{anchor.x, playerSpawn.y, anchor.y};
     float bestScore = std::numeric_limits<float>::max();
 
-    for (const Bounds& collider : environment.collisionPreview()) {
+    for (const Bounds& collider : colliders) {
         const float top = collider.center.y + collider.halfExtent.y;
         const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
         const bool floorLike = collider.halfExtent.y <= 0.34f && area >= 0.28f;
@@ -559,23 +662,23 @@ glm::vec3 Map3EnemyManager::findSpawnPosition(const Environment& environment, co
     return best;
 }
 
-bool Map3EnemyManager::findFloorAt(const Environment& environment, float x, float z, float preferredY, float& floorY) const {
-    return ::findFloorAt(environment, x, z, preferredY, floorY);
+bool Map3EnemyManager::findFloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float& floorY) const {
+    return ::findFloorAt(colliders, x, z, preferredY, floorY);
 }
 
-bool Map3EnemyManager::tryMoveEnemy(Enemy& enemy, const Environment& environment, const glm::vec3& step) const {
+bool Map3EnemyManager::tryMoveEnemy(Enemy& enemy, const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& step) const {
     glm::vec3 target = enemy.position + step;
     target.x = std::clamp(target.x, environment.worldMin().x + 0.28f, environment.worldMax().x - 0.28f);
     target.z = std::clamp(target.z, environment.worldMin().z + 0.28f, environment.worldMax().z - 0.28f);
 
     float floorY = enemy.position.y - 0.05f;
-    if (!findFloorAt(environment, target.x, target.z, enemy.position.y, floorY)) {
+    if (!findFloorAt(colliders, target.x, target.z, enemy.position.y, floorY)) {
         return false;
     }
     target.y = floorY + 0.05f;
 
     const Bounds candidate{target + glm::vec3(0.0f, 0.34f, 0.0f), {0.34f, 0.34f, 0.34f}};
-    for (const Bounds& collider : environment.collisionPreview()) {
+    for (const Bounds& collider : colliders) {
         const float top = collider.center.y + collider.halfExtent.y;
         if (std::abs(top - floorY) <= 0.08f) {
             continue;
@@ -606,10 +709,15 @@ glm::mat4 Map3EnemyManager::enemyModelMatrix(const Enemy& enemy, float timeSecon
 bool iniciarMap3(Map3Runtime& map3) {
     if (map3.initialized) {
         if (!map3.sessionActive) {
-            const glm::vec3 spawnPoint = map3.environment.recommendedSpawnPoint();
+            map3.collisionBounds = isMap3PirateEnvironment(map3.environment)
+                ? buildMap3PirateCollision(map3.environment)
+                : map3.environment.collisionPreview();
+            const glm::vec3 spawnPoint = isMap3PirateEnvironment(map3.environment)
+                ? findMap3PirateSpawn(map3.environment, map3.collisionBounds)
+                : map3.environment.recommendedSpawnPoint();
             map3.player.spawnAt(spawnPoint);
             map3.mission.reset(map3.environment, spawnPoint);
-            map3.enemies.reset(map3.environment, spawnPoint);
+            map3.enemies.reset(map3.environment, map3.collisionBounds, spawnPoint);
             map3.health = map3.maxHealth;
             map3.damageCooldown = 0.0f;
             map3.dodgeCooldown = 0.0f;
@@ -618,7 +726,7 @@ bool iniciarMap3(Map3Runtime& map3) {
             map3.projectiles.clear();
             map3.gameOver = false;
             map3.skipFirstUpdateFrame = true;
-            resetMap3View(map3.player);
+            resetMap3ViewForEnvironment(map3.environment, map3.player);
             map3.sessionActive = true;
         }
         return true;
@@ -634,12 +742,17 @@ bool iniciarMap3(Map3Runtime& map3) {
     });
     map3.player.load(playerPath);
 
-    const glm::vec3 spawnPoint = map3.environment.recommendedSpawnPoint();
+    map3.collisionBounds = isMap3PirateEnvironment(map3.environment)
+        ? buildMap3PirateCollision(map3.environment)
+        : map3.environment.collisionPreview();
+    const glm::vec3 spawnPoint = isMap3PirateEnvironment(map3.environment)
+        ? findMap3PirateSpawn(map3.environment, map3.collisionBounds)
+        : map3.environment.recommendedSpawnPoint();
     map3.player.spawnAt(spawnPoint);
     map3.mission.initialize();
     map3.mission.reset(map3.environment, spawnPoint);
     map3.enemies.initialize();
-    map3.enemies.reset(map3.environment, spawnPoint);
+    map3.enemies.reset(map3.environment, map3.collisionBounds, spawnPoint);
     map3.health = map3.maxHealth;
     map3.damageCooldown = 0.0f;
     map3.dodgeCooldown = 0.0f;
@@ -648,9 +761,9 @@ bool iniciarMap3(Map3Runtime& map3) {
     map3.projectiles.clear();
     map3.gameOver = false;
     map3.skipFirstUpdateFrame = true;
-    resetMap3View(map3.player);
+    resetMap3ViewForEnvironment(map3.environment, map3.player);
 
-    std::cout << "Mundo 3 ready. Collision volumes: " << map3.environment.collisionPreview().size() << std::endl;
+    std::cout << "Mundo 3 ready. Collision volumes: " << map3ActiveColliders(map3).size() << std::endl;
     std::cout << "Controls: TAB cambia 2D/3D, E esquiva en 3D y hace parry en 2D." << std::endl;
 
     map3.initialized = true;
@@ -684,11 +797,12 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
         map3.dodgeCooldown = std::max(0.0f, map3.dodgeCooldown - frameDelta);
         map3.damageCooldown = std::max(0.0f, map3.damageCooldown - frameDelta);
 
-        map3.player.update(playerInput, map3.environment.collisionPreview(), map3.environment.worldMin(), map3.environment.worldMax(), frameDelta);
+        const std::vector<Bounds>& colliders = map3ActiveColliders(map3);
+        map3.player.update(playerInput, colliders, map3.environment.worldMin(), map3.environment.worldMax(), frameDelta);
 
         if (actionPressed) {
             if (currentMode == PlayMode::Mode3D && map3.dodgeCooldown <= 0.0f) {
-                if (tryDodgePlayer(map3.player, map3.environment, playerInput)) {
+                if (tryDodgePlayer(map3.player, map3.environment, colliders, playerInput)) {
                     map3.dodgeActiveUntil = now + Map3DodgeActiveTime;
                     map3.dodgeCooldown = Map3DodgeCooldown;
                 }
@@ -698,7 +812,7 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
         }
 
         const bool activeDodgeAfterInput = now <= map3.dodgeActiveUntil;
-        const bool enemyTouchedPlayer = map3.enemies.update(map3.player, map3.environment, frameDelta, now, activeDodgeAfterInput, map3.projectiles);
+        const bool enemyTouchedPlayer = map3.enemies.update(map3.player, map3.environment, colliders, frameDelta, now, activeDodgeAfterInput, map3.projectiles);
         const bool projectileHitPlayer = updateMap3Projectiles(map3, frameDelta, now <= map3.parryActiveUntil, activeDodgeAfterInput);
         if ((enemyTouchedPlayer || projectileHitPlayer) && map3.damageCooldown <= 0.0f) {
             map3.health = std::max(0, map3.health - 1);
@@ -721,10 +835,19 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
     const glm::mat4 projection = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 180.0f);
 
     glEnable(GL_DEPTH_TEST);
-    glClearColor(0.42f, 0.58f, 0.78f, 1.0f);
+    const bool pirateMap = isMap3PirateEnvironment(map3.environment);
+    glClearColor(pirateMap ? 0.48f : 0.42f, pirateMap ? 0.76f : 0.58f, pirateMap ? 0.90f : 0.78f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     uploadCommonSceneUniforms(sceneShader, map3.environment, gameplayCameraPosition, view, projection, now, nullptr, 1.0f, nullptr);
+    if (pirateMap) {
+        sceneShader.use();
+        sceneShader.setVec3("uAmbientColor", {0.62f, 0.66f, 0.58f});
+        sceneShader.setVec3("uDirectionalLight.direction", {-0.35f, -0.78f, -0.28f});
+        sceneShader.setVec3("uDirectionalLight.color", {0.74f, 0.78f, 0.66f});
+        sceneShader.setVec3("uFogColor", {0.48f, 0.76f, 0.90f});
+        sceneShader.setFloat("uSceneExposure", 1.08f);
+    }
     lavaShader.use();
     lavaShader.setMat4("uView", view);
     lavaShader.setMat4("uProjection", projection);
