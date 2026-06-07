@@ -35,9 +35,19 @@
 #define MAP4_IMPLEMENTATION
 #include "Map4.cpp"
 
-constexpr int WindowWidth = 1280;
-constexpr int WindowHeight = 720;
+constexpr int WindowWidth = 1600;
+constexpr int WindowHeight = 900;
 constexpr int MaxLights = 24;
+constexpr float DefaultCamera3DDistance = 4.25f;
+constexpr float Map3Camera3DDistance = 1.5f;
+constexpr float Map4Camera3DDistance = 3.10f;
+constexpr float DefaultCamera2DDistance = 6.2f;
+constexpr float Map3Camera2DDistance = 2.0f;
+constexpr float Map4Camera2DDistance = 3.35f;
+constexpr float DefaultCamera2DTargetHeight = 0.56f;
+constexpr float Map3Camera2DTargetHeight = 0.70f;
+constexpr float Map3Camera2DHeight = 0.20f;
+constexpr float DefaultCamera2DHeight = 0.88f;
 
 enum class EstadoJuego {
     MENU_PRINCIPAL,
@@ -120,6 +130,13 @@ bool environmentUsable(const Environment& environment) {
         worldMax.x > worldMin.x &&
         worldMax.y > worldMin.y &&
         worldMax.z > worldMin.z;
+}
+
+bool isMap3Environment(const Environment& environment) {
+    std::string source = environment.levelSource();
+    std::replace(source.begin(), source.end(), '\\', '/');
+    return source.find("assets/mundo3/") != std::string::npos ||
+        source.find("game_pirate_adventure_map") != std::string::npos;
 }
 
 std::string resolveAssetPath(const std::string& path) {
@@ -1409,6 +1426,14 @@ void MissionManager::completarNivel(float timeSeconds) {
     m_victoryTime = timeSeconds;
 }
 
+void MissionManager::forceComplete(float timeSeconds) {
+    if (m_levelComplete) {
+        return;
+    }
+    m_levelComplete = true;
+    m_victoryTime = timeSeconds;
+}
+
 
 
 bool ToadNpc::initialize() {
@@ -1607,6 +1632,34 @@ void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int he
     }
 }
 
+std::wstring formatMap3PlayerX(float x) {
+    const int tenths = static_cast<int>(std::lround(x * 10.0f));
+    const int absoluteTenths = std::abs(tenths);
+    std::wstring value = tenths < 0 ? L"-" : L"";
+    value += std::to_wstring(absoluteTenths / 10);
+    value += L".";
+    value += std::to_wstring(absoluteTenths % 10);
+    return value;
+}
+
+void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, int height) {
+    static int cachedXTenths = std::numeric_limits<int>::min();
+    const int currentXTenths = static_cast<int>(std::lround(map3.player.position().x * 10.0f));
+    if (currentXTenths != cachedXTenths || !menu.map3PlayerX.texture || !menu.map3PlayerX.texture->valid()) {
+        cachedXTenths = currentXTenths;
+        menu.map3PlayerX = createTextSprite(formatMap3PlayerX(map3.player.position().x), 38, glm::vec3(1.0f), 180, false, true);
+    }
+
+    beginUiFrame(menu, width, height);
+    const float panelWidth = std::max(116.0f, menu.map3PlayerX.size.x + 34.0f);
+    const Rect panel = centeredRect(width * 0.5f, 20.0f, panelWidth, 56.0f);
+    drawRect(menu, {panel.x + 5.0f, panel.y + 6.0f, panel.width, panel.height}, {0.01f, 0.02f, 0.05f, 0.46f});
+    drawRect(menu, panel, {0.06f, 0.16f, 0.30f, 0.88f});
+    drawText(menu, menu.map3PlayerX,
+        panel.x + (panel.width - menu.map3PlayerX.size.x) * 0.5f,
+        panel.y + (panel.height - menu.map3PlayerX.size.y) * 0.5f - 1.0f);
+}
+
 void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int height, float timeSeconds) {
     // HUD de combate de Mapa 1 reutilizado como referencia visual para otros sistemas.
     beginUiFrame(menu, width, height);
@@ -1678,6 +1731,14 @@ void drawGameOverHud(MenuContext& menu, int width, int height) {
     const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 72.0f, 560.0f, 144.0f);
     drawPanel(menu, panel);
     drawText(menu, menu.juegoTerminado, panel.x + (panel.width - menu.juegoTerminado.size.x) * 0.5f, panel.y + (panel.height - menu.juegoTerminado.size.y) * 0.5f);
+}
+
+void drawLevelCompleteHud(MenuContext& menu, int width, int height) {
+    beginUiFrame(menu, width, height);
+    drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.01f, 0.02f, 0.06f, 0.58f});
+    const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 72.0f, 560.0f, 144.0f);
+    drawPanel(menu, panel);
+    drawText(menu, menu.nivelCompletado, panel.x + (panel.width - menu.nivelCompletado.size.x) * 0.5f, panel.y + (panel.height - menu.nivelCompletado.size.y) * 0.5f);
 }
 
 void drawToadHud(MenuContext& menu, const ToadNpc& toad, int width, int height) {
@@ -2011,7 +2072,9 @@ void updateGameplayCamera(const Player& player, const Environment& environment, 
         const bool marioMap4 = isMarioMapa4Environment(environment);
         const float yaw = glm::radians(cameraYawDegrees);
         const float pitch = glm::radians(cameraPitchDegrees);
-        const float distance = marioMap4 ? 3.10f : 4.25f;
+        const float distance = marioMap4
+            ? Map4Camera3DDistance
+            : (isMap3Environment(environment) ? Map3Camera3DDistance : DefaultCamera3DDistance);
         const float horizontalDistance = std::cos(pitch) * distance;
         const glm::vec3 orbitOffset(
             std::sin(yaw) * horizontalDistance,
@@ -2020,8 +2083,14 @@ void updateGameplayCamera(const Player& player, const Environment& environment, 
         desiredTarget = player.position() + glm::vec3(0.0f, marioMap4 ? 0.44f : 0.50f, 0.0f);
         desiredPosition = desiredTarget + orbitOffset;
     } else {
-        desiredTarget = player.position() + glm::vec3(0.0f, 0.56f, 0.0f);
-        desiredPosition = desiredTarget + glm::vec3(0.0f, 0.88f, isMarioMapa4Environment(environment) ? 3.35f : 6.2f);
+        const bool map3Environment = isMap3Environment(environment);
+        const float camera2DTargetHeight = map3Environment ? Map3Camera2DTargetHeight : DefaultCamera2DTargetHeight;
+        const float camera2DHeight = map3Environment ? Map3Camera2DHeight : DefaultCamera2DHeight;
+        const float camera2DDistance = isMarioMapa4Environment(environment)
+            ? Map4Camera2DDistance
+            : (map3Environment ? Map3Camera2DDistance : DefaultCamera2DDistance);
+        desiredTarget = player.position() + glm::vec3(0.0f, camera2DTargetHeight, 0.0f);
+        desiredPosition = desiredTarget + glm::vec3(0.0f, camera2DHeight, camera2DDistance);
     }
 
     const float smoothing = 1.0f - std::exp(-7.2f * dt);
@@ -2328,9 +2397,11 @@ int main(int argc, char** argv) {
                 menu.notificationUntil = 0.0;
             } else {
                 renderMap3(window, map3, sceneShader, lavaShader, now);
-                drawMissionHud(menu, map3.mission, width, height, now);
                 drawSimpleHealthHud(menu, map3.health, map3.maxHealth, width, height);
-                if (map3.gameOver) {
+                drawMap3PositionHud(menu, map3, width, height);
+                if (map3.mission.levelComplete()) {
+                    drawLevelCompleteHud(menu, width, height);
+                } else if (map3.gameOver) {
                     drawGameOverHud(menu, width, height);
                 }
             }

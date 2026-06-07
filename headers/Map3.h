@@ -23,6 +23,7 @@ class Map3EnemyManager {
 public:
     bool initialize();
     void reset(const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn);
+    void addEnemies(int count, const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn);
     bool update(const Player& player, const Environment& environment, const std::vector<Bounds>& colliders, float deltaTime, float timeSeconds, bool dodgeActive, std::vector<Map3Projectile>& projectiles);
     void render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const;
     bool damageEnemyAt(const glm::vec3& position, float horizontalRadius, float verticalRadius, int damage);
@@ -75,6 +76,8 @@ struct Map3Runtime {
     float dodgeCooldown{0.0f};
     float dodgeActiveUntil{0.0f};
     float parryActiveUntil{0.0f};
+    float nextEnemyWaveAt{0.0f};
+    int nextEnemyWaveSize{6};
     std::vector<Map3Projectile> projectiles;
     std::vector<Bounds> collisionBounds;
     bool gameOver{false};
