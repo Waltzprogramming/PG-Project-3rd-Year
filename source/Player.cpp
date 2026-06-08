@@ -103,17 +103,21 @@ bool Player::load(const std::string& modelPath) {
     m_modelCenter = (m_modelMin + m_modelMax) * 0.5f;
     const float modelHeight = std::max(m_modelMax.y - m_modelMin.y, 0.001f);
     const std::string normalizedModelPath = normalizeAssetKey(resolvePath(modelPath).string());
+    m_map3Variant = normalizedModelPath.find("assets/mundo3/") != std::string::npos;
     m_deadpoolVariant = normalizedModelPath.find("assets/characters/deadpool") != std::string::npos;
     m_marioMapVariant =
         normalizedModelPath.find("assets/mapa 4/luffy") != std::string::npos ||
         m_deadpoolVariant;
-    const float desiredHeight = m_deadpoolVariant ? 0.62f : (m_marioMapVariant ? 0.50f : 0.76f);
+    const float desiredHeight = m_map3Variant ? 0.34f : (m_deadpoolVariant ? 0.62f : (m_marioMapVariant ? 0.50f : 0.76f));
     m_modelScale = desiredHeight / modelHeight;
-    m_collisionHalf = m_deadpoolVariant
+    m_collisionHalf = m_map3Variant
+        ? glm::vec3(0.07f, desiredHeight * 0.5f, 0.055f)
+        : (m_deadpoolVariant
         ? glm::vec3(0.17f, desiredHeight * 0.5f, 0.13f)
         : (m_marioMapVariant
             ? glm::vec3(0.14f, desiredHeight * 0.5f, 0.11f)
-            : glm::vec3(0.16f, desiredHeight * 0.5f, 0.12f));
+            : glm::vec3(0.16f, desiredHeight * 0.5f, 0.12f)));
+    m_visualYOffset = m_map3Variant ? -0.24f : 0.0f;
     m_modelYawOffset = 0.0f;
     return true;
 }
@@ -199,9 +203,11 @@ void Player::updateHorizontalVelocity(const PlayerInput& input, float deltaTime)
         m_facingYaw = std::atan2(desiredDirection.x, desiredDirection.z);
     }
 
-    const float maxSpeed = m_marioMapVariant
+    const float maxSpeed = m_map3Variant
+        ? (input.mode == PlayMode::Mode3D ? 1.55f : 1.75f)
+        : (m_marioMapVariant
         ? (input.mode == PlayMode::Mode3D ? 2.55f : 2.85f)
-        : (input.mode == PlayMode::Mode3D ? 4.25f : 4.65f);
+        : (input.mode == PlayMode::Mode3D ? 4.25f : 4.65f));
     const glm::vec3 targetVelocity = desiredDirection * maxSpeed;
     const float acceleration = m_grounded ? 30.0f : 12.0f;
     const float deceleration = m_grounded ? 18.0f : 5.0f;
@@ -266,7 +272,7 @@ void Player::keepInsideWorld(const glm::vec3& worldMin, const glm::vec3& worldMa
 
 glm::mat4 Player::modelMatrix() const {
     glm::mat4 model(1.0f);
-    model = glm::translate(model, m_position);
+    model = glm::translate(model, m_position + glm::vec3(0.0f, m_visualYOffset, 0.0f));
     model = glm::rotate(model, m_facingYaw + m_modelYawOffset, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(m_modelScale));
     model = glm::translate(model, {-m_modelCenter.x, -m_modelMin.y, -m_modelCenter.z});

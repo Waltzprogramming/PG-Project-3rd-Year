@@ -35,6 +35,7 @@ public:
     void generarMonedas(const Environment& environment, const glm::vec3& playerSpawn);
     void update(const Player& player, float timeSeconds);
     void render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const;
+    void forceComplete(float timeSeconds);
 
     int collectedCount() const { return m_collectedCount; }
     int messageCount() const { return m_messageCount; }

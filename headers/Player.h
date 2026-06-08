@@ -61,8 +61,10 @@ private:
     glm::vec3 m_modelCenter{0.0f};
     glm::vec3 m_collisionHalf{0.34f, 0.82f, 0.28f};
     float m_modelScale{1.0f};
+    float m_visualYOffset{0.0f};
     float m_facingYaw{0.0f};
     float m_modelYawOffset{0.0f};
+    bool m_map3Variant{false};
     bool m_marioMapVariant{false};
     bool m_deadpoolVariant{false};
     bool m_grounded{false};

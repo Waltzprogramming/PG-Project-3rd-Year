@@ -12,12 +12,22 @@
 
 struct GLFWwindow;
 
+struct Map3Projectile {
+    glm::vec3 position{0.0f};
+    glm::vec3 velocity{0.0f};
+    float lifetime{4.0f};
+    bool reflected{false};
+};
+
 class Map3EnemyManager {
 public:
     bool initialize();
-    void reset(const Environment& environment, const glm::vec3& playerSpawn);
-    bool update(const Player& player, const Environment& environment, float deltaTime, float timeSeconds, bool parryActive, bool dodgeActive);
+    void reset(const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn);
+    void addEnemies(int count, const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn);
+    bool update(const Player& player, const Environment& environment, const std::vector<Bounds>& colliders, float deltaTime, float timeSeconds, bool dodgeActive, std::vector<Map3Projectile>& projectiles);
     void render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const;
+    bool damageEnemyAt(const glm::vec3& position, float horizontalRadius, float verticalRadius, int damage);
+    glm::vec3 directionToClosestEnemy(const glm::vec3& position) const;
     int aliveCount() const;
 
 private:
@@ -27,15 +37,16 @@ private:
         float yaw{0.0f};
         float phase{0.0f};
         float hurtTimer{0.0f};
+        float shotCooldown{0.0f};
         int health{2};
         bool alive{true};
     };
 
     bool loadEnemyModel();
     void buildFallbackModel();
-    glm::vec3 findSpawnPosition(const Environment& environment, const glm::vec3& playerSpawn, const glm::vec2& anchor) const;
-    bool findFloorAt(const Environment& environment, float x, float z, float preferredY, float& floorY) const;
-    bool tryMoveEnemy(Enemy& enemy, const Environment& environment, const glm::vec3& step) const;
+    glm::vec3 findSpawnPosition(const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn, const glm::vec2& anchor) const;
+    bool findFloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float& floorY) const;
+    bool tryMoveEnemy(Enemy& enemy, const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& step) const;
     Bounds enemyBounds(const Enemy& enemy) const;
     glm::mat4 enemyModelMatrix(const Enemy& enemy, float timeSeconds) const;
 
@@ -65,6 +76,10 @@ struct Map3Runtime {
     float dodgeCooldown{0.0f};
     float dodgeActiveUntil{0.0f};
     float parryActiveUntil{0.0f};
+    float nextEnemyWaveAt{0.0f};
+    int nextEnemyWaveSize{6};
+    std::vector<Map3Projectile> projectiles;
+    std::vector<Bounds> collisionBounds;
     bool gameOver{false};
 };
 

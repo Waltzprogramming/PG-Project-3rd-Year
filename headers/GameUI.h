@@ -54,6 +54,7 @@ struct MenuContext {
     TextSprite combateSolo2D;
     TextSprite vidaJugador;
     TextSprite luzJugador;
+    TextSprite map3PlayerX;
     TextSprite mapa4Hint;
     TextSprite cargandoAtaque;
     TextSprite parryActivo;
