@@ -28,451 +28,453 @@
 #include <vector>
 
 namespace {
-constexpr float MapScale = 0.0100f;
-const glm::vec3 MapCenter(1336.45f, 0.0f, -200.0f);
-constexpr float MinimumWalkableNormal = 0.35f;
-constexpr float MinimumWalkableHeight = -1.08f;
-constexpr float TriangleMargin = 0.012f;
-constexpr float LandingMargin = 0.09f;
-constexpr float StepHeightWithoutJump = 0.12f;
-constexpr int StartingLives = 3;
-constexpr int PlayerMaximumHealth = 3;
-constexpr int EnemyMaximumHealth = 3;
-constexpr int TotalCoins = 10;
-constexpr float DeathHeight = -4.0f;
-constexpr float MoveSpeed2D = 1.20f;
-constexpr float MoveSpeed3D = 1.28f;
-constexpr float JumpSpeed = 6.25f;
-constexpr float Gravity = 9.20f;
-constexpr float EnemyDetectionRange = 9.50f;
-constexpr float EnemyAttackRange = 4.60f;
-constexpr float EnemyStopDistance = 1.10f;
-constexpr float EnemyMoveSpeed = 0.82f;
-constexpr float EnemyMaximumStepHeight = 0.24f;
-constexpr float EnemyShotCooldown = 2.80f;
-constexpr float EnemyShotSpeed = 3.20f;
-constexpr float PlayerShotSpeed = 5.40f;
-constexpr float ChargedPlayerShotSpeed = 6.20f;
-constexpr float ProjectileLifetime = 4.20f;
-constexpr float PlayerInvulnerabilityTime = 1.25f;
-constexpr float PlayerAttackCooldown = 0.38f;
-constexpr float PlayerChargeTime = 1.65f;
-constexpr float ParryWindow = 0.50f;
-constexpr float ParryEffectTime = 0.34f;
-constexpr float ProjectileSwordLength = 0.72f;
-constexpr float PlayerSpriteHeight = 1.15f;
-constexpr float CameraPlayerCenterOffset = PlayerSpriteHeight * 0.5f;
-constexpr float PlayerRunFramesPerSecond = 12.0f;
-constexpr float PlayerEntranceFramesPerSecond = 11.0f;
-constexpr float PlayerDeathFramesPerSecond = 7.0f;
-constexpr float PlayerTransitionFramesPerSecond = 16.0f;
-constexpr int EnemySpawnCount = 11;
-constexpr int SpectralGemRequirement = 10;
-constexpr float SpectralAnchorPromptRange = 0.95f;
-constexpr float SpectralAnchorVerticalRange = 1.35f;
-constexpr float VanPromptRange = 1.45f;
-constexpr float VanPromptVerticalRange = 1.50f;
-constexpr float VanRenderRangeX = 22.0f;
-constexpr float VanRenderRangeZ = 26.0f;
-constexpr float SpectralStepCooldown = 0.75f;
-constexpr float SpectralHintTime = 3.8f;
-constexpr size_t NormalRouteFirstPlatformIndex = 8;
-constexpr size_t SpectralAnchorPlatformIndex = 11;
-constexpr size_t FirstSpectralIslandIndex = 12;
-constexpr size_t FinalSpectralIslandIndex = 13;
-constexpr size_t VanRouteFirstPlatformIndex = 14;
-constexpr size_t VanIslandPlatformIndex = 18;
+    constexpr float MapScale = 0.0100f;
+    const glm::vec3 MapCenter(1336.45f, 0.0f, -200.0f);
+    constexpr float MinimumWalkableNormal = 0.35f;
+    constexpr float MinimumWalkableHeight = -1.08f;
+    constexpr float TriangleMargin = 0.012f;
+    constexpr float LandingMargin = 0.09f;
+    constexpr float StepHeightWithoutJump = 0.12f;
+    constexpr int StartingLives = 3;
+    constexpr int PlayerMaximumHealth = 3;
+    constexpr int EnemyMaximumHealth = 3;
+    constexpr int TotalCoins = 10;
+    constexpr float DeathHeight = -4.0f;
+    constexpr float MoveSpeed2D = 1.20f;
+    constexpr float MoveSpeed3D = 1.28f;
+    constexpr float JumpSpeed = 6.25f;
+    constexpr float Gravity = 9.20f;
+    constexpr float EnemyDetectionRange = 9.50f;
+    constexpr float EnemyAttackRange = 4.60f;
+    constexpr float EnemyStopDistance = 1.10f;
+    constexpr float EnemyMoveSpeed = 0.82f;
+    constexpr float EnemyMaximumStepHeight = 0.24f;
+    constexpr float EnemyShotCooldown = 2.80f;
+    constexpr float EnemyShotSpeed = 3.20f;
+    constexpr float PlayerShotSpeed = 5.40f;
+    constexpr float ChargedPlayerShotSpeed = 6.20f;
+    constexpr float ProjectileLifetime = 4.20f;
+    constexpr float PlayerInvulnerabilityTime = 1.25f;
+    constexpr float PlayerAttackCooldown = 0.38f;
+    constexpr float PlayerChargeTime = 1.65f;
+    constexpr float ParryWindow = 0.50f;
+    constexpr float ParryEffectTime = 0.34f;
+    constexpr float ProjectileSwordLength = 0.72f;
+    constexpr float PlayerSpriteHeight = 1.15f;
+    constexpr float CameraPlayerCenterOffset = PlayerSpriteHeight * 0.5f;
+    constexpr float PlayerRunFramesPerSecond = 12.0f;
+    constexpr float PlayerEntranceFramesPerSecond = 11.0f;
+    constexpr float PlayerDeathFramesPerSecond = 7.0f;
+    constexpr float PlayerTransitionFramesPerSecond = 16.0f;
+    constexpr int EnemySpawnCount = 11;
+    constexpr int SpectralGemRequirement = 10;
+    constexpr float SpectralAnchorPromptRange = 0.95f;
+    constexpr float SpectralAnchorVerticalRange = 1.35f;
+    constexpr float VanPromptRange = 3.25f;
+    constexpr float VanPromptVerticalRange = 4.80f;
+    constexpr float VanRenderRangeX = 30.0f;
+    constexpr float VanRenderRangeZ = 30.0f;
+    constexpr float VanModelDisplaySize = 6.60f;
+    constexpr float PlayerSpawnDistanceFromVan = 2.25f;
+    constexpr float SpectralStepCooldown = 0.75f;
+    constexpr float SpectralHintTime = 3.8f;
+    constexpr size_t NormalRouteFirstPlatformIndex = 8;
+    constexpr size_t SpectralAnchorPlatformIndex = 11;
+    constexpr size_t FirstSpectralIslandIndex = 12;
+    constexpr size_t FinalSpectralIslandIndex = 13;
+    constexpr size_t VanRouteFirstPlatformIndex = 14;
+    constexpr size_t VanIslandPlatformIndex = 18;
 
-struct TerrainTriangle {
-    glm::vec3 a{0.0f};
-    glm::vec3 b{0.0f};
-    glm::vec3 c{0.0f};
-    float minX{0.0f};
-    float maxX{0.0f};
-    float minZ{0.0f};
-    float maxZ{0.0f};
-    const std::string* name{nullptr};
-};
-
-enum class PlatformShape {
-    Rectangle,
-    Ellipse
-};
-
-struct ExtraPlatform {
-    PlatformShape shape{PlatformShape::Rectangle};
-    float minX{0.0f};
-    float maxX{0.0f};
-    float minZ{0.0f};
-    float maxZ{0.0f};
-    float height{0.0f};
-    float thickness{0.24f};
-    glm::vec4 color{1.0f};
-    const char* name{nullptr};
-    bool visible{true};
-    bool projectIn2D{false};
-};
-
-struct Coin {
-    glm::vec3 position{0.0f};
-    bool collected{false};
-    float phase{0.0f};
-    bool projectIn2D{false};
-};
-
-struct Star {
-    glm::vec3 position{0.0f};
-    bool active{false};
-    bool projectIn2D{false};
-};
-
-struct SpectralAnchor {
-    glm::vec3 origin{0.0f};
-    glm::vec3 target{0.0f};
-    bool projectIn2D{true};
-    float phase{0.0f};
-};
-
-enum class EnemyState {
-    Idle,
-    Chase,
-    Attack,
-    Hurt,
-    Dying
-};
-
-struct DemonEnemy {
-    glm::vec3 position{0.0f};
-    glm::vec3 spawnPosition{0.0f};
-    EnemyState state{EnemyState::Idle};
-    float shotCooldown{0.0f};
-    float animationTime{0.0f};
-    float hurtTime{0.0f};
-    int health{EnemyMaximumHealth};
-    bool facingLeft{false};
-    bool alive{true};
-};
-
-struct Projectile {
-    glm::vec3 position{0.0f};
-    glm::vec3 velocity{0.0f};
-    float lifetime{ProjectileLifetime};
-    bool fromPlayer{false};
-    int damage{1};
-    bool charged{false};
-};
-
-struct AtlasFrame {
-    int x{0};
-    int y{0};
-    int width{0};
-    int height{0};
-};
-
-struct MapMaterial {
-    glm::vec4 color{1.0f};
-    std::shared_ptr<Texture2D> texture;
-};
-
-struct WorldModel {
-    LoadedModel model;
-    std::vector<MapMaterial> materials;
-};
-
-std::string resolveAssetPath(const std::string& path) {
-    const std::filesystem::path requested(path);
-    const std::filesystem::path candidates[] = {
-        requested,
-        std::filesystem::path("..") / ".." / requested
+    struct TerrainTriangle {
+        glm::vec3 a{ 0.0f };
+        glm::vec3 b{ 0.0f };
+        glm::vec3 c{ 0.0f };
+        float minX{ 0.0f };
+        float maxX{ 0.0f };
+        float minZ{ 0.0f };
+        float maxZ{ 0.0f };
+        const std::string* name{ nullptr };
     };
 
-    for (const auto& candidate : candidates) {
-        if (std::filesystem::exists(candidate)) {
-            return candidate.lexically_normal().string();
+    enum class PlatformShape {
+        Rectangle,
+        Ellipse
+    };
+
+    struct ExtraPlatform {
+        PlatformShape shape{ PlatformShape::Rectangle };
+        float minX{ 0.0f };
+        float maxX{ 0.0f };
+        float minZ{ 0.0f };
+        float maxZ{ 0.0f };
+        float height{ 0.0f };
+        float thickness{ 0.24f };
+        glm::vec4 color{ 1.0f };
+        const char* name{ nullptr };
+        bool visible{ true };
+        bool projectIn2D{ false };
+    };
+
+    struct Coin {
+        glm::vec3 position{ 0.0f };
+        bool collected{ false };
+        float phase{ 0.0f };
+        bool projectIn2D{ false };
+    };
+
+    struct Star {
+        glm::vec3 position{ 0.0f };
+        bool active{ false };
+        bool projectIn2D{ false };
+    };
+
+    struct SpectralAnchor {
+        glm::vec3 origin{ 0.0f };
+        glm::vec3 target{ 0.0f };
+        bool projectIn2D{ true };
+        float phase{ 0.0f };
+    };
+
+    enum class EnemyState {
+        Idle,
+        Chase,
+        Attack,
+        Hurt,
+        Dying
+    };
+
+    struct DemonEnemy {
+        glm::vec3 position{ 0.0f };
+        glm::vec3 spawnPosition{ 0.0f };
+        EnemyState state{ EnemyState::Idle };
+        float shotCooldown{ 0.0f };
+        float animationTime{ 0.0f };
+        float hurtTime{ 0.0f };
+        int health{ EnemyMaximumHealth };
+        bool facingLeft{ false };
+        bool alive{ true };
+    };
+
+    struct Projectile {
+        glm::vec3 position{ 0.0f };
+        glm::vec3 velocity{ 0.0f };
+        float lifetime{ ProjectileLifetime };
+        bool fromPlayer{ false };
+        int damage{ 1 };
+        bool charged{ false };
+    };
+
+    struct AtlasFrame {
+        int x{ 0 };
+        int y{ 0 };
+        int width{ 0 };
+        int height{ 0 };
+    };
+
+    struct MapMaterial {
+        glm::vec4 color{ 1.0f };
+        std::shared_ptr<Texture2D> texture;
+    };
+
+    struct WorldModel {
+        LoadedModel model;
+        std::vector<MapMaterial> materials;
+    };
+
+    std::string resolveAssetPath(const std::string& path) {
+        const std::filesystem::path requested(path);
+        const std::filesystem::path candidates[] = {
+            requested,
+            std::filesystem::path("..") / ".." / requested
+        };
+
+        for (const auto& candidate : candidates) {
+            if (std::filesystem::exists(candidate)) {
+                return candidate.lexically_normal().string();
+            }
         }
-    }
-    return path;
-}
-
-Vertex makeVertex(const glm::vec3& position, const glm::vec2& uv) {
-    return {position, {0.0f, 0.0f, 1.0f}, uv, glm::vec4(1.0f)};
-}
-
-Mesh createPlayerMesh() {
-    const std::vector<Vertex> vertices = {
-        makeVertex({0.42f, 1.15f, 0.0f}, {1.0f, 1.0f}),
-        makeVertex({0.42f, 0.00f, 0.0f}, {1.0f, 0.0f}),
-        makeVertex({-0.42f, 0.00f, 0.0f}, {0.0f, 0.0f}),
-        makeVertex({-0.42f, 1.15f, 0.0f}, {0.0f, 1.0f})
-    };
-    const std::vector<unsigned int> indices = {0, 1, 2, 0, 2, 3};
-
-    Mesh mesh;
-    mesh.upload(vertices, indices);
-    return mesh;
-}
-
-Mesh createSpriteMesh(const AtlasFrame& frame, float width, float height, int atlasWidth, int atlasHeight) {
-    constexpr float inset = 0.18f;
-    const float u0 = (static_cast<float>(frame.x) + inset) / static_cast<float>(atlasWidth);
-    const float u1 = (static_cast<float>(frame.x + frame.width) - inset) / static_cast<float>(atlasWidth);
-    const float vTop = 1.0f - (static_cast<float>(frame.y) + inset) / static_cast<float>(atlasHeight);
-    const float vBottom = 1.0f - (static_cast<float>(frame.y + frame.height) - inset) / static_cast<float>(atlasHeight);
-    const float halfWidth = width * 0.5f;
-    const std::vector<Vertex> vertices = {
-        makeVertex({halfWidth, height, 0.0f}, {u1, vTop}),
-        makeVertex({halfWidth, 0.0f, 0.0f}, {u1, vBottom}),
-        makeVertex({-halfWidth, 0.0f, 0.0f}, {u0, vBottom}),
-        makeVertex({-halfWidth, height, 0.0f}, {u0, vTop})
-    };
-    const std::vector<unsigned int> indices = {0, 1, 2, 0, 2, 3};
-
-    Mesh mesh;
-    mesh.upload(vertices, indices);
-    return mesh;
-}
-
-Mesh createPlayerSpriteMesh(const AtlasFrame& frame, int atlasWidth, int atlasHeight) {
-    const float aspect = static_cast<float>(frame.width) / static_cast<float>(std::max(frame.height, 1));
-    return createSpriteMesh(frame, PlayerSpriteHeight * aspect, PlayerSpriteHeight, atlasWidth, atlasHeight);
-}
-
-float animationDuration(const std::vector<Mesh>& frames, float framesPerSecond) {
-    if (frames.empty() || framesPerSecond <= 0.0f) {
-        return 0.0f;
-    }
-    return static_cast<float>(frames.size()) / framesPerSecond;
-}
-
-const Mesh* animationFrame(const std::vector<Mesh>& frames, float time, float framesPerSecond, bool loop) {
-    if (frames.empty()) {
-        return nullptr;
+        return path;
     }
 
-    size_t frameIndex = static_cast<size_t>(std::max(0.0f, time) * framesPerSecond);
-    frameIndex = loop
-        ? frameIndex % frames.size()
-        : std::min(frameIndex, frames.size() - 1);
-    return &frames[frameIndex];
-}
-
-Mesh createSkyboxMesh() {
-    constexpr float margin = 0.001f;
-    constexpr float u0 = 0.00f + margin;
-    constexpr float u1 = 0.25f - margin;
-    constexpr float u2 = 0.25f + margin;
-    constexpr float u3 = 0.50f - margin;
-    constexpr float u4 = 0.50f + margin;
-    constexpr float u5 = 0.75f - margin;
-    constexpr float u6 = 0.75f + margin;
-    constexpr float u7 = 1.00f - margin;
-    constexpr float vBottom0 = 0.00f + margin;
-    constexpr float vBottom1 = (1.0f / 3.0f) - margin;
-    constexpr float vMiddle0 = (1.0f / 3.0f) + margin;
-    constexpr float vMiddle1 = (2.0f / 3.0f) - margin;
-    constexpr float vTop0 = (2.0f / 3.0f) + margin;
-    constexpr float vTop1 = 1.00f - margin;
-
-    const std::vector<Vertex> vertices = {
-        makeVertex({-1.0f, 1.0f, -1.0f}, {u2, vMiddle1}),
-        makeVertex({1.0f, 1.0f, -1.0f}, {u3, vMiddle1}),
-        makeVertex({1.0f, -1.0f, -1.0f}, {u3, vMiddle0}),
-        makeVertex({-1.0f, -1.0f, -1.0f}, {u2, vMiddle0}),
-        makeVertex({1.0f, 1.0f, -1.0f}, {u4, vMiddle1}),
-        makeVertex({1.0f, 1.0f, 1.0f}, {u5, vMiddle1}),
-        makeVertex({1.0f, -1.0f, 1.0f}, {u5, vMiddle0}),
-        makeVertex({1.0f, -1.0f, -1.0f}, {u4, vMiddle0}),
-        makeVertex({1.0f, 1.0f, 1.0f}, {u6, vMiddle1}),
-        makeVertex({-1.0f, 1.0f, 1.0f}, {u7, vMiddle1}),
-        makeVertex({-1.0f, -1.0f, 1.0f}, {u7, vMiddle0}),
-        makeVertex({1.0f, -1.0f, 1.0f}, {u6, vMiddle0}),
-        makeVertex({-1.0f, 1.0f, 1.0f}, {u0, vMiddle1}),
-        makeVertex({-1.0f, 1.0f, -1.0f}, {u1, vMiddle1}),
-        makeVertex({-1.0f, -1.0f, -1.0f}, {u1, vMiddle0}),
-        makeVertex({-1.0f, -1.0f, 1.0f}, {u0, vMiddle0}),
-        makeVertex({-1.0f, 1.0f, 1.0f}, {u2, vTop1}),
-        makeVertex({1.0f, 1.0f, 1.0f}, {u3, vTop1}),
-        makeVertex({1.0f, 1.0f, -1.0f}, {u3, vTop0}),
-        makeVertex({-1.0f, 1.0f, -1.0f}, {u2, vTop0}),
-        makeVertex({-1.0f, -1.0f, -1.0f}, {u2, vBottom1}),
-        makeVertex({1.0f, -1.0f, -1.0f}, {u3, vBottom1}),
-        makeVertex({1.0f, -1.0f, 1.0f}, {u3, vBottom0}),
-        makeVertex({-1.0f, -1.0f, 1.0f}, {u2, vBottom0})
-    };
-    const std::vector<unsigned int> indices = {
-        0, 1, 2, 2, 3, 0,
-        4, 5, 6, 6, 7, 4,
-        8, 9, 10, 10, 11, 8,
-        12, 13, 14, 14, 15, 12,
-        16, 17, 18, 18, 19, 16,
-        20, 21, 22, 22, 23, 20
-    };
-
-    Mesh mesh;
-    mesh.upload(vertices, indices);
-    return mesh;
-}
-
-Mesh createStarMesh() {
-    std::vector<Vertex> vertices;
-    std::vector<unsigned int> indices;
-    constexpr int points = 10;
-    constexpr float frontZ = 0.08f;
-    constexpr float backZ = -0.08f;
-
-    vertices.push_back({{0.0f, 0.0f, frontZ}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}, glm::vec4(1.0f)});
-    vertices.push_back({{0.0f, 0.0f, backZ}, {0.0f, 0.0f, -1.0f}, {0.5f, 0.5f}, glm::vec4(1.0f)});
-    for (int i = 0; i < points; ++i) {
-        const float radius = (i % 2 == 0) ? 0.72f : 0.33f;
-        const float angle = glm::half_pi<float>() + glm::two_pi<float>() * static_cast<float>(i) / static_cast<float>(points);
-        const float x = std::cos(angle) * radius;
-        const float y = std::sin(angle) * radius;
-        vertices.push_back({{x, y, frontZ}, {0.0f, 0.0f, 1.0f}, {(x / 1.6f) + 0.5f, (y / 1.6f) + 0.5f}, glm::vec4(1.0f)});
-        vertices.push_back({{x, y, backZ}, {0.0f, 0.0f, -1.0f}, {(x / 1.6f) + 0.5f, (y / 1.6f) + 0.5f}, glm::vec4(1.0f)});
+    Vertex makeVertex(const glm::vec3& position, const glm::vec2& uv) {
+        return { position, {0.0f, 0.0f, 1.0f}, uv, glm::vec4(1.0f) };
     }
 
-    for (int i = 0; i < points; ++i) {
-        const unsigned int frontA = 2u + static_cast<unsigned int>(i) * 2u;
-        const unsigned int backA = frontA + 1u;
-        const unsigned int frontB = 2u + static_cast<unsigned int>((i + 1) % points) * 2u;
-        const unsigned int backB = frontB + 1u;
-        indices.insert(indices.end(), {0u, frontA, frontB});
-        indices.insert(indices.end(), {1u, backB, backA});
-        indices.insert(indices.end(), {frontA, backA, backB, frontA, backB, frontB});
+    Mesh createPlayerMesh() {
+        const std::vector<Vertex> vertices = {
+            makeVertex({0.42f, 1.15f, 0.0f}, {1.0f, 1.0f}),
+            makeVertex({0.42f, 0.00f, 0.0f}, {1.0f, 0.0f}),
+            makeVertex({-0.42f, 0.00f, 0.0f}, {0.0f, 0.0f}),
+            makeVertex({-0.42f, 1.15f, 0.0f}, {0.0f, 1.0f})
+        };
+        const std::vector<unsigned int> indices = { 0, 1, 2, 0, 2, 3 };
+
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
     }
 
-    Mesh mesh;
-    mesh.upload(vertices, indices);
-    return mesh;
-}
+    Mesh createSpriteMesh(const AtlasFrame& frame, float width, float height, int atlasWidth, int atlasHeight) {
+        constexpr float inset = 0.18f;
+        const float u0 = (static_cast<float>(frame.x) + inset) / static_cast<float>(atlasWidth);
+        const float u1 = (static_cast<float>(frame.x + frame.width) - inset) / static_cast<float>(atlasWidth);
+        const float vTop = 1.0f - (static_cast<float>(frame.y) + inset) / static_cast<float>(atlasHeight);
+        const float vBottom = 1.0f - (static_cast<float>(frame.y + frame.height) - inset) / static_cast<float>(atlasHeight);
+        const float halfWidth = width * 0.5f;
+        const std::vector<Vertex> vertices = {
+            makeVertex({halfWidth, height, 0.0f}, {u1, vTop}),
+            makeVertex({halfWidth, 0.0f, 0.0f}, {u1, vBottom}),
+            makeVertex({-halfWidth, 0.0f, 0.0f}, {u0, vBottom}),
+            makeVertex({-halfWidth, height, 0.0f}, {u0, vTop})
+        };
+        const std::vector<unsigned int> indices = { 0, 1, 2, 0, 2, 3 };
 
-Mesh createParryRingMesh() {
-    std::vector<Vertex> vertices;
-    std::vector<unsigned int> indices;
-    constexpr int segments = 48;
-    constexpr float outerRadius = 0.66f;
-    constexpr float innerRadius = 0.52f;
-    vertices.reserve(static_cast<size_t>((segments + 1) * 2));
-    indices.reserve(static_cast<size_t>(segments * 6));
-
-    for (int index = 0; index <= segments; ++index) {
-        const float angle = glm::two_pi<float>() * static_cast<float>(index) / static_cast<float>(segments);
-        const glm::vec2 direction(std::cos(angle), std::sin(angle));
-        vertices.push_back(makeVertex({direction.x * outerRadius, direction.y * outerRadius, 0.0f}, {1.0f, 1.0f}));
-        vertices.push_back(makeVertex({direction.x * innerRadius, direction.y * innerRadius, 0.0f}, {0.0f, 0.0f}));
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
     }
 
-    for (int index = 0; index < segments; ++index) {
-        const unsigned int outer = static_cast<unsigned int>(index * 2);
-        const unsigned int inner = outer + 1;
-        indices.insert(indices.end(), {outer, inner, outer + 2, inner, inner + 2, outer + 2});
+    Mesh createPlayerSpriteMesh(const AtlasFrame& frame, int atlasWidth, int atlasHeight) {
+        const float aspect = static_cast<float>(frame.width) / static_cast<float>(std::max(frame.height, 1));
+        return createSpriteMesh(frame, PlayerSpriteHeight * aspect, PlayerSpriteHeight, atlasWidth, atlasHeight);
     }
 
-    Mesh mesh;
-    mesh.upload(vertices, indices);
-    return mesh;
-}
-
-bool containsText(const std::string& text, const char* pattern) {
-    return text.find(pattern) != std::string::npos;
-}
-
-bool isWalkableMesh(const std::string& name) {
-    if (containsText(name, "Wave") ||
-        containsText(name, "SeaSide") ||
-        containsText(name, "IslandMat") ||
-        containsText(name, "Cloud") ||
-        containsText(name, "Shadow") ||
-        containsText(name, "GatePole")) {
-        return false;
-    }
-
-    return containsText(name, "Lawn") ||
-        containsText(name, "Grass") ||
-        containsText(name, "Flower") ||
-        containsText(name, "Road") ||
-        containsText(name, "SandMat") ||
-        containsText(name, "Bridge") ||
-        containsText(name, "Rock") ||
-        containsText(name, "WallBlock");
-}
-
-glm::vec3 transformMapPoint(const glm::vec3& point) {
-    return {
-        (point.x + MapCenter.x) * MapScale,
-        -1.0f + point.y * MapScale,
-        (point.z + MapCenter.z) * MapScale
-    };
-}
-
-bool heightInTriangle(const TerrainTriangle& triangle, float x, float z, float& height) {
-    if (x < triangle.minX - TriangleMargin || x > triangle.maxX + TriangleMargin ||
-        z < triangle.minZ - TriangleMargin || z > triangle.maxZ + TriangleMargin) {
-        return false;
-    }
-
-    const float denominator = (triangle.b.z - triangle.c.z) * (triangle.a.x - triangle.c.x) +
-        (triangle.c.x - triangle.b.x) * (triangle.a.z - triangle.c.z);
-    if (std::fabs(denominator) < 0.000001f) {
-        return false;
-    }
-
-    const float weightA = ((triangle.b.z - triangle.c.z) * (x - triangle.c.x) +
-        (triangle.c.x - triangle.b.x) * (z - triangle.c.z)) / denominator;
-    const float weightB = ((triangle.c.z - triangle.a.z) * (x - triangle.c.x) +
-        (triangle.a.x - triangle.c.x) * (z - triangle.c.z)) / denominator;
-    const float weightC = 1.0f - weightA - weightB;
-
-    if (weightA < -TriangleMargin || weightB < -TriangleMargin || weightC < -TriangleMargin) {
-        return false;
-    }
-
-    height = weightA * triangle.a.y + weightB * triangle.b.y + weightC * triangle.c.y;
-    return true;
-}
-
-bool pointInPlatform(const ExtraPlatform& platform, float x, float z, bool projectDepth) {
-    if (platform.shape == PlatformShape::Rectangle) {
-        return x >= platform.minX && x <= platform.maxX &&
-            (projectDepth || (z >= platform.minZ && z <= platform.maxZ));
-    }
-
-    const float centerX = (platform.minX + platform.maxX) * 0.5f;
-    const float centerZ = (platform.minZ + platform.maxZ) * 0.5f;
-    const float radiusX = (platform.maxX - platform.minX) * 0.5f;
-    const float radiusZ = (platform.maxZ - platform.minZ) * 0.5f;
-    const float dx = (x - centerX) / radiusX;
-    const float dz = (z - centerZ) / radiusZ;
-    return dx * dx + dz * dz <= 1.0f;
-}
-
-glm::quat rotationBetweenVectors(glm::vec3 from, glm::vec3 to) {
-    from = glm::normalize(from);
-    to = glm::normalize(to);
-    const float cosine = glm::dot(from, to);
-    if (cosine < -0.9999f) {
-        glm::vec3 axis = glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), from);
-        if (glm::dot(axis, axis) < 0.0001f) {
-            axis = glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), from);
+    float animationDuration(const std::vector<Mesh>& frames, float framesPerSecond) {
+        if (frames.empty() || framesPerSecond <= 0.0f) {
+            return 0.0f;
         }
-        return glm::angleAxis(glm::pi<float>(), glm::normalize(axis));
+        return static_cast<float>(frames.size()) / framesPerSecond;
     }
 
-    const glm::vec3 axis = glm::cross(from, to);
-    const float scale = std::sqrt((1.0f + cosine) * 2.0f);
-    const float inverseScale = 1.0f / scale;
-    return glm::normalize(glm::quat(
-        scale * 0.5f,
-        axis.x * inverseScale,
-        axis.y * inverseScale,
-        axis.z * inverseScale));
-}
+    const Mesh* animationFrame(const std::vector<Mesh>& frames, float time, float framesPerSecond, bool loop) {
+        if (frames.empty()) {
+            return nullptr;
+        }
+
+        size_t frameIndex = static_cast<size_t>(std::max(0.0f, time) * framesPerSecond);
+        frameIndex = loop
+            ? frameIndex % frames.size()
+            : std::min(frameIndex, frames.size() - 1);
+        return &frames[frameIndex];
+    }
+
+    Mesh createSkyboxMesh() {
+        constexpr float margin = 0.001f;
+        constexpr float u0 = 0.00f + margin;
+        constexpr float u1 = 0.25f - margin;
+        constexpr float u2 = 0.25f + margin;
+        constexpr float u3 = 0.50f - margin;
+        constexpr float u4 = 0.50f + margin;
+        constexpr float u5 = 0.75f - margin;
+        constexpr float u6 = 0.75f + margin;
+        constexpr float u7 = 1.00f - margin;
+        constexpr float vBottom0 = 0.00f + margin;
+        constexpr float vBottom1 = (1.0f / 3.0f) - margin;
+        constexpr float vMiddle0 = (1.0f / 3.0f) + margin;
+        constexpr float vMiddle1 = (2.0f / 3.0f) - margin;
+        constexpr float vTop0 = (2.0f / 3.0f) + margin;
+        constexpr float vTop1 = 1.00f - margin;
+
+        const std::vector<Vertex> vertices = {
+            makeVertex({-1.0f, 1.0f, -1.0f}, {u2, vMiddle1}),
+            makeVertex({1.0f, 1.0f, -1.0f}, {u3, vMiddle1}),
+            makeVertex({1.0f, -1.0f, -1.0f}, {u3, vMiddle0}),
+            makeVertex({-1.0f, -1.0f, -1.0f}, {u2, vMiddle0}),
+            makeVertex({1.0f, 1.0f, -1.0f}, {u4, vMiddle1}),
+            makeVertex({1.0f, 1.0f, 1.0f}, {u5, vMiddle1}),
+            makeVertex({1.0f, -1.0f, 1.0f}, {u5, vMiddle0}),
+            makeVertex({1.0f, -1.0f, -1.0f}, {u4, vMiddle0}),
+            makeVertex({1.0f, 1.0f, 1.0f}, {u6, vMiddle1}),
+            makeVertex({-1.0f, 1.0f, 1.0f}, {u7, vMiddle1}),
+            makeVertex({-1.0f, -1.0f, 1.0f}, {u7, vMiddle0}),
+            makeVertex({1.0f, -1.0f, 1.0f}, {u6, vMiddle0}),
+            makeVertex({-1.0f, 1.0f, 1.0f}, {u0, vMiddle1}),
+            makeVertex({-1.0f, 1.0f, -1.0f}, {u1, vMiddle1}),
+            makeVertex({-1.0f, -1.0f, -1.0f}, {u1, vMiddle0}),
+            makeVertex({-1.0f, -1.0f, 1.0f}, {u0, vMiddle0}),
+            makeVertex({-1.0f, 1.0f, 1.0f}, {u2, vTop1}),
+            makeVertex({1.0f, 1.0f, 1.0f}, {u3, vTop1}),
+            makeVertex({1.0f, 1.0f, -1.0f}, {u3, vTop0}),
+            makeVertex({-1.0f, 1.0f, -1.0f}, {u2, vTop0}),
+            makeVertex({-1.0f, -1.0f, -1.0f}, {u2, vBottom1}),
+            makeVertex({1.0f, -1.0f, -1.0f}, {u3, vBottom1}),
+            makeVertex({1.0f, -1.0f, 1.0f}, {u3, vBottom0}),
+            makeVertex({-1.0f, -1.0f, 1.0f}, {u2, vBottom0})
+        };
+        const std::vector<unsigned int> indices = {
+            0, 1, 2, 2, 3, 0,
+            4, 5, 6, 6, 7, 4,
+            8, 9, 10, 10, 11, 8,
+            12, 13, 14, 14, 15, 12,
+            16, 17, 18, 18, 19, 16,
+            20, 21, 22, 22, 23, 20
+        };
+
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
+    }
+
+    Mesh createStarMesh() {
+        std::vector<Vertex> vertices;
+        std::vector<unsigned int> indices;
+        constexpr int points = 10;
+        constexpr float frontZ = 0.08f;
+        constexpr float backZ = -0.08f;
+
+        vertices.push_back({ {0.0f, 0.0f, frontZ}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}, glm::vec4(1.0f) });
+        vertices.push_back({ {0.0f, 0.0f, backZ}, {0.0f, 0.0f, -1.0f}, {0.5f, 0.5f}, glm::vec4(1.0f) });
+        for (int i = 0; i < points; ++i) {
+            const float radius = (i % 2 == 0) ? 0.72f : 0.33f;
+            const float angle = glm::half_pi<float>() + glm::two_pi<float>() * static_cast<float>(i) / static_cast<float>(points);
+            const float x = std::cos(angle) * radius;
+            const float y = std::sin(angle) * radius;
+            vertices.push_back({ {x, y, frontZ}, {0.0f, 0.0f, 1.0f}, {(x / 1.6f) + 0.5f, (y / 1.6f) + 0.5f}, glm::vec4(1.0f) });
+            vertices.push_back({ {x, y, backZ}, {0.0f, 0.0f, -1.0f}, {(x / 1.6f) + 0.5f, (y / 1.6f) + 0.5f}, glm::vec4(1.0f) });
+        }
+
+        for (int i = 0; i < points; ++i) {
+            const unsigned int frontA = 2u + static_cast<unsigned int>(i) * 2u;
+            const unsigned int backA = frontA + 1u;
+            const unsigned int frontB = 2u + static_cast<unsigned int>((i + 1) % points) * 2u;
+            const unsigned int backB = frontB + 1u;
+            indices.insert(indices.end(), { 0u, frontA, frontB });
+            indices.insert(indices.end(), { 1u, backB, backA });
+            indices.insert(indices.end(), { frontA, backA, backB, frontA, backB, frontB });
+        }
+
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
+    }
+
+    Mesh createParryRingMesh() {
+        std::vector<Vertex> vertices;
+        std::vector<unsigned int> indices;
+        constexpr int segments = 48;
+        constexpr float outerRadius = 0.66f;
+        constexpr float innerRadius = 0.52f;
+        vertices.reserve(static_cast<size_t>((segments + 1) * 2));
+        indices.reserve(static_cast<size_t>(segments * 6));
+
+        for (int index = 0; index <= segments; ++index) {
+            const float angle = glm::two_pi<float>() * static_cast<float>(index) / static_cast<float>(segments);
+            const glm::vec2 direction(std::cos(angle), std::sin(angle));
+            vertices.push_back(makeVertex({ direction.x * outerRadius, direction.y * outerRadius, 0.0f }, { 1.0f, 1.0f }));
+            vertices.push_back(makeVertex({ direction.x * innerRadius, direction.y * innerRadius, 0.0f }, { 0.0f, 0.0f }));
+        }
+
+        for (int index = 0; index < segments; ++index) {
+            const unsigned int outer = static_cast<unsigned int>(index * 2);
+            const unsigned int inner = outer + 1;
+            indices.insert(indices.end(), { outer, inner, outer + 2, inner, inner + 2, outer + 2 });
+        }
+
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
+    }
+
+    bool containsText(const std::string& text, const char* pattern) {
+        return text.find(pattern) != std::string::npos;
+    }
+
+    bool isWalkableMesh(const std::string& name) {
+        if (containsText(name, "Wave") ||
+            containsText(name, "SeaSide") ||
+            containsText(name, "IslandMat") ||
+            containsText(name, "Cloud") ||
+            containsText(name, "Shadow") ||
+            containsText(name, "GatePole")) {
+            return false;
+        }
+
+        return containsText(name, "Lawn") ||
+            containsText(name, "Grass") ||
+            containsText(name, "Flower") ||
+            containsText(name, "Road") ||
+            containsText(name, "SandMat") ||
+            containsText(name, "Bridge") ||
+            containsText(name, "Rock") ||
+            containsText(name, "WallBlock");
+    }
+
+    glm::vec3 transformMapPoint(const glm::vec3& point) {
+        return {
+            (point.x + MapCenter.x) * MapScale,
+            -1.0f + point.y * MapScale,
+            (point.z + MapCenter.z) * MapScale
+        };
+    }
+
+    bool heightInTriangle(const TerrainTriangle& triangle, float x, float z, float& height) {
+        if (x < triangle.minX - TriangleMargin || x > triangle.maxX + TriangleMargin ||
+            z < triangle.minZ - TriangleMargin || z > triangle.maxZ + TriangleMargin) {
+            return false;
+        }
+
+        const float denominator = (triangle.b.z - triangle.c.z) * (triangle.a.x - triangle.c.x) +
+            (triangle.c.x - triangle.b.x) * (triangle.a.z - triangle.c.z);
+        if (std::fabs(denominator) < 0.000001f) {
+            return false;
+        }
+
+        const float weightA = ((triangle.b.z - triangle.c.z) * (x - triangle.c.x) +
+            (triangle.c.x - triangle.b.x) * (z - triangle.c.z)) / denominator;
+        const float weightB = ((triangle.c.z - triangle.a.z) * (x - triangle.c.x) +
+            (triangle.a.x - triangle.c.x) * (z - triangle.c.z)) / denominator;
+        const float weightC = 1.0f - weightA - weightB;
+
+        if (weightA < -TriangleMargin || weightB < -TriangleMargin || weightC < -TriangleMargin) {
+            return false;
+        }
+
+        height = weightA * triangle.a.y + weightB * triangle.b.y + weightC * triangle.c.y;
+        return true;
+    }
+
+    bool pointInPlatform(const ExtraPlatform& platform, float x, float z, bool projectDepth) {
+        if (platform.shape == PlatformShape::Rectangle) {
+            return x >= platform.minX && x <= platform.maxX &&
+                (projectDepth || (z >= platform.minZ && z <= platform.maxZ));
+        }
+
+        const float centerX = (platform.minX + platform.maxX) * 0.5f;
+        const float centerZ = (platform.minZ + platform.maxZ) * 0.5f;
+        const float radiusX = (platform.maxX - platform.minX) * 0.5f;
+        const float radiusZ = (platform.maxZ - platform.minZ) * 0.5f;
+        const float dx = (x - centerX) / radiusX;
+        const float dz = (z - centerZ) / radiusZ;
+        return dx * dx + dz * dz <= 1.0f;
+    }
+
+    glm::quat rotationBetweenVectors(glm::vec3 from, glm::vec3 to) {
+        from = glm::normalize(from);
+        to = glm::normalize(to);
+        const float cosine = glm::dot(from, to);
+        if (cosine < -0.9999f) {
+            glm::vec3 axis = glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), from);
+            if (glm::dot(axis, axis) < 0.0001f) {
+                axis = glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), from);
+            }
+            return glm::angleAxis(glm::pi<float>(), glm::normalize(axis));
+        }
+
+        const glm::vec3 axis = glm::cross(from, to);
+        const float scale = std::sqrt((1.0f + cosine) * 2.0f);
+        const float inverseScale = 1.0f / scale;
+        return glm::normalize(glm::quat(
+            scale * 0.5f,
+            axis.x * inverseScale,
+            axis.y * inverseScale,
+            axis.z * inverseScale));
+    }
 }
 
 struct Mapa1::Impl {
     Shader shader;
-    AudioPlayer backgroundMusic{L"mapa1_background_music"};
-    AudioPlayer parrySound{L"mapa1_parry_sound"};
+    AudioPlayer backgroundMusic{ L"mapa1_background_music" };
+    AudioPlayer parrySound{ L"mapa1_parry_sound" };
     std::vector<WorldModel> worldModels;
     std::vector<std::string> deferredWorldModelPaths;
     WorldModel vanModel;
@@ -521,11 +523,11 @@ struct Mapa1::Impl {
         {PlatformShape::Rectangle, 18.70f, 20.20f, -10.50f, -8.90f, 2.90f, 0.28f, {0.46f, 0.84f, 1.00f, 1.0f}, "isla_ancla_01", true, true},
         {PlatformShape::Rectangle, 23.65f, 25.25f, 7.90f, 9.55f, 3.05f, 0.28f, {0.18f, 0.68f, 1.00f, 1.0f}, "isla_espectral_01", true, true},
         {PlatformShape::Rectangle, 31.80f, 34.20f, -12.20f, -10.10f, 3.22f, 0.30f, {0.70f, 0.88f, 1.00f, 1.0f}, "isla_espectral_final", true, true},
-        {PlatformShape::Rectangle, -31.40f, -29.90f, 26.20f, 27.70f, 0.66f, 0.24f, {0.48f, 0.78f, 0.54f, 1.0f}, "van_ruta_01", true, true},
-        {PlatformShape::Rectangle, -33.70f, -32.20f, -29.80f, -28.20f, 1.06f, 0.24f, {0.52f, 0.80f, 0.62f, 1.0f}, "van_ruta_02", true, true},
-        {PlatformShape::Rectangle, -36.00f, -34.50f, 28.40f, 30.00f, 1.46f, 0.24f, {0.58f, 0.82f, 0.72f, 1.0f}, "van_ruta_03", true, true},
-        {PlatformShape::Rectangle, -38.40f, -36.90f, -31.00f, -29.30f, 1.86f, 0.24f, {0.64f, 0.84f, 0.80f, 1.0f}, "van_ruta_04", true, true},
-        {PlatformShape::Rectangle, -42.10f, -39.30f, 30.60f, 33.10f, 2.06f, 0.30f, {0.78f, 0.88f, 0.94f, 1.0f}, "isla_camioneta", true, true}
+        {PlatformShape::Rectangle, -37.00f, -33.90f, -1.40f, 1.60f, 0.42f, 0.22f, {0.36f, 0.64f, 0.42f, 1.0f}, "van_camino_mapa", true, true},
+        {PlatformShape::Rectangle, -40.80f, -38.00f, -1.50f, 1.50f, 0.58f, 0.22f, {0.40f, 0.68f, 0.48f, 1.0f}, "van_camino_01", true, true},
+        {PlatformShape::Rectangle, -44.60f, -41.80f, -1.50f, 1.50f, 0.76f, 0.22f, {0.44f, 0.72f, 0.54f, 1.0f}, "van_camino_02", true, true},
+        {PlatformShape::Rectangle, -48.40f, -45.60f, -1.50f, 1.50f, 0.94f, 0.22f, {0.48f, 0.76f, 0.60f, 1.0f}, "van_camino_03", true, true},
+        {PlatformShape::Rectangle, -56.25f, -49.25f, -3.60f, 3.60f, 1.10f, 0.30f, {0.58f, 0.78f, 0.62f, 1.0f}, "isla_camioneta", true, true}
     };
     std::vector<Coin> coins;
     Star star;
@@ -533,74 +535,75 @@ struct Mapa1::Impl {
     std::vector<DemonEnemy> enemies;
     std::vector<Projectile> projectiles;
 
-    bool initialized{false};
-    bool vanModelLoaded{false};
-    bool vanModelLoadAttempted{false};
-    bool backgroundMusicOpen{false};
-    bool backgroundMusicPlaying{false};
-    bool parrySoundOpen{false};
-    bool mode3D{false};
-    bool tabPressed{false};
-    bool mouseAttackPressed{false};
-    bool chargingPlayerAttack{false};
-    bool parryPressed{false};
-    bool interactPressed{false};
-    bool resetEnemiesRequested{false};
-    bool clearProjectilesRequested{false};
-    float posX{0.0f};
-    float posY{0.0f};
-    float posZ{0.0f};
-    float velocityY{0.0f};
-    bool grounded{false};
-    float playerAngle{0.0f};
-    float cameraOffsetY{0.0f};
-    int lives{StartingLives};
-    int playerHealth{PlayerMaximumHealth};
-    float messageTime{0.0f};
+    bool initialized{ false };
+    bool vanModelLoaded{ false };
+    bool vanModelLoadAttempted{ false };
+    bool backgroundMusicOpen{ false };
+    bool backgroundMusicPlaying{ false };
+    bool parrySoundOpen{ false };
+    bool mode3D{ false };
+    bool tabPressed{ false };
+    bool mouseAttackPressed{ false };
+    bool chargingPlayerAttack{ false };
+    bool parryPressed{ false };
+    bool interactPressed{ false };
+    bool resetEnemiesRequested{ false };
+    bool clearProjectilesRequested{ false };
+    float posX{ 0.0f };
+    float posY{ 0.0f };
+    float posZ{ 0.0f };
+    float velocityY{ 0.0f };
+    bool grounded{ false };
+    float playerAngle{ 0.0f };
+    float cameraOffsetY{ 0.0f };
+    int lives{ StartingLives };
+    int playerHealth{ PlayerMaximumHealth };
+    float messageTime{ 0.0f };
     std::string statusMessage;
-    float titleTime{0.0f};
-    int currentFrame{0};
-    float animationTime{0.0f};
-    float playerEntranceTime{0.0f};
-    float playerTransitionTime{0.0f};
-    float playerDeathTime{0.0f};
-    float playerGuardUntil{0.0f};
-    bool wasMoving{false};
-    bool playerEntrancePlaying{false};
-    bool playerTransitionPlaying{false};
-    bool playerDeathPlaying{false};
-    int collectedCoins{0};
-    int coinMessageCount{0};
-    float coinMessageUntil{0.0f};
-    float starMessageUntil{0.0f};
-    float combatHintUntil{0.0f};
-    float playerAttackCooldown{0.0f};
-    float playerChargeTime{0.0f};
-    float playerInvulnerability{0.0f};
-    float parryUntil{0.0f};
-    float parryEffectUntil{0.0f};
-    float spectralCooldown{0.0f};
-    float spectralLockedHintUntil{0.0f};
-    float spectralReadyHintUntil{0.0f};
-    float spectralUnlockHintUntil{0.0f};
-    float spectralEffectUntil{0.0f};
-    glm::vec3 spectralEffectStart{0.0f};
-    glm::vec3 spectralEffectEnd{0.0f};
-    glm::vec3 playerAimDirection{1.0f, 0.0f, 0.0f};
-    int spectralGems{0};
-    bool spectralStepUnlocked{false};
-    bool spectralKeyPressed{false};
-    bool vanShopOpen{false};
-    float vanPromptUntil{0.0f};
-    float vanShopUntil{0.0f};
-    bool completed{false};
-    float deferredWorldLoadDelay{0.0f};
+    float titleTime{ 0.0f };
+    int currentFrame{ 0 };
+    float animationTime{ 0.0f };
+    float playerEntranceTime{ 0.0f };
+    float playerTransitionTime{ 0.0f };
+    float playerDeathTime{ 0.0f };
+    float playerGuardUntil{ 0.0f };
+    bool wasMoving{ false };
+    bool playerEntrancePlaying{ false };
+    bool playerTransitionPlaying{ false };
+    bool playerDeathPlaying{ false };
+    int collectedCoins{ 0 };
+    int coinMessageCount{ 0 };
+    float coinMessageUntil{ 0.0f };
+    float starMessageUntil{ 0.0f };
+    float combatHintUntil{ 0.0f };
+    float playerAttackCooldown{ 0.0f };
+    float playerChargeTime{ 0.0f };
+    float playerInvulnerability{ 0.0f };
+    float parryUntil{ 0.0f };
+    float parryEffectUntil{ 0.0f };
+    float spectralCooldown{ 0.0f };
+    float spectralLockedHintUntil{ 0.0f };
+    float spectralReadyHintUntil{ 0.0f };
+    float spectralUnlockHintUntil{ 0.0f };
+    float spectralEffectUntil{ 0.0f };
+    glm::vec3 spectralEffectStart{ 0.0f };
+    glm::vec3 spectralEffectEnd{ 0.0f };
+    glm::vec3 playerAimDirection{ 1.0f, 0.0f, 0.0f };
+    int spectralGems{ 0 };
+    bool spectralStepUnlocked{ false };
+    bool spectralKeyPressed{ false };
+    bool vanShopOpen{ false };
+    float vanPromptUntil{ 0.0f };
+    float vanShopUntil{ 0.0f };
+    bool completed{ false };
+    float deferredWorldLoadDelay{ 0.0f };
 
     void initializeAudio() {
         backgroundMusicOpen = backgroundMusic.open(resolveAssetPath("assets/audio/devil-never-cry-compatible.mp3"));
         if (backgroundMusicOpen) {
             backgroundMusicPlaying = backgroundMusic.playLoop();
-        } else {
+        }
+        else {
             std::cerr << "Mapa 1 background music could not be started." << std::endl;
         }
 
@@ -686,7 +689,7 @@ struct Mapa1::Impl {
     bool loadVanModel() {
         vanModelLoadAttempted = true;
         vanModel = {};
-        vanModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/devil_may_cry_5_van.glb"));
+        vanModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/devil_may_cry_5_van/scene.gltf"));
         if (vanModel.model.meshes.empty()) {
             std::cerr << "Mapa 1 van model could not be loaded." << std::endl;
             vanModelLoaded = false;
@@ -741,21 +744,21 @@ struct Mapa1::Impl {
                     }
 
                     const float normalY = std::fabs(normal.y / normalLength);
-                    const float minY = std::min({a.y, b.y, c.y});
-                    const float maxY = std::max({a.y, b.y, c.y});
+                    const float minY = std::min({ a.y, b.y, c.y });
+                    const float maxY = std::max({ a.y, b.y, c.y });
                     if (normalY < MinimumWalkableNormal || maxY < MinimumWalkableHeight) {
                         continue;
                     }
 
-                    const float minX = std::min({a.x, b.x, c.x});
-                    const float maxX = std::max({a.x, b.x, c.x});
-                    const float minZ = std::min({a.z, b.z, c.z});
-                    const float maxZ = std::max({a.z, b.z, c.z});
+                    const float minX = std::min({ a.x, b.x, c.x });
+                    const float maxX = std::max({ a.x, b.x, c.x });
+                    const float minZ = std::min({ a.z, b.z, c.z });
+                    const float maxZ = std::max({ a.z, b.z, c.z });
                     if (maxX - minX < 0.002f || maxZ - minZ < 0.002f) {
                         continue;
                     }
 
-                    terrainTriangles.push_back({a, b, c, minX, maxX, minZ, maxZ, &mesh.name});
+                    terrainTriangles.push_back({ a, b, c, minX, maxX, minZ, maxZ, &mesh.name });
                     terrainMin = glm::min(terrainMin, glm::min(glm::min(a, b), c));
                     terrainMax = glm::max(terrainMax, glm::max(glm::max(a, b), c));
                 }
@@ -778,6 +781,24 @@ struct Mapa1::Impl {
         };
     }
 
+    float vanRouteCenterDepth() const {
+        return platformTopCenter(VanIslandPlatformIndex).z;
+    }
+
+    bool playerNearVanRoute() const {
+        const float maximumJumpHeight = (JumpSpeed * JumpSpeed) / (2.0f * Gravity);
+        for (size_t i = VanRouteFirstPlatformIndex; i <= VanIslandPlatformIndex; ++i) {
+            const ExtraPlatform& platform = extraPlatforms[i];
+            const bool insideRoute = pointInPlatform(platform, posX, posZ, platform.projectIn2D && !mode3D);
+            const bool closeHeight = posY >= platform.height - 0.55f &&
+                posY <= platform.height + maximumJumpHeight + 0.45f;
+            if (insideRoute && closeHeight) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     glm::vec3 spectralLandingPoint(size_t platformIndex) const {
         glm::vec3 point = platformTopCenter(platformIndex);
         point.y += 0.06f;
@@ -786,6 +807,11 @@ struct Mapa1::Impl {
 
     glm::vec3 vanWorldPosition() const {
         return platformTopCenter(VanIslandPlatformIndex) + glm::vec3(0.0f, 0.10f, 0.0f);
+    }
+
+    glm::vec3 playerSpawnPosition() const {
+        const glm::vec3 van = vanWorldPosition();
+        return van + glm::vec3(PlayerSpawnDistanceFromVan, -0.10f, 0.0f);
     }
 
     void rebuildSpectralAnchors() {
@@ -799,13 +825,13 @@ struct Mapa1::Impl {
             spectralLandingPoint(FirstSpectralIslandIndex),
             true,
             0.0f
-        });
+            });
         spectralAnchors.push_back({
             platformTopCenter(FirstSpectralIslandIndex) + glm::vec3(0.0f, 0.70f, 0.0f),
             spectralLandingPoint(FinalSpectralIslandIndex),
             true,
             1.35f
-        });
+            });
     }
 
     bool terrainHeight(float x, float z, float& height) const {
@@ -835,7 +861,7 @@ struct Mapa1::Impl {
                     const float z = anchor.y + static_cast<float>(zStep) * step;
                     float height = -100.0f;
                     if (terrainHeight(x, z, height)) {
-                        position = {x, height + 0.72f, z};
+                        position = { x, height + 0.72f, z };
                         return true;
                     }
                 }
@@ -940,6 +966,12 @@ struct Mapa1::Impl {
             std::cerr << "Mapa 1 special routes are missing platforms or anchors." << std::endl;
             return false;
         }
+        for (size_t i = VanRouteFirstPlatformIndex; i <= VanIslandPlatformIndex; ++i) {
+            if (!extraPlatforms[i].visible || !extraPlatforms[i].projectIn2D) {
+                std::cerr << "Mapa 1 van route must stay visible and projected so it works in 2D and 3D." << std::endl;
+                return false;
+            }
+        }
 
         const float maximumJumpHeight = (JumpSpeed * JumpSpeed) / (2.0f * Gravity);
         const float maximumProjectedJumpDistance = MoveSpeed2D * (2.0f * JumpSpeed / Gravity);
@@ -980,29 +1012,39 @@ struct Mapa1::Impl {
 
         auto xRangeGap = [](const ExtraPlatform& a, const ExtraPlatform& b) {
             return std::max(0.0f, std::max(a.minX, b.minX) - std::min(a.maxX, b.maxX));
-        };
+            };
+        auto horizontalPlatformGap = [](const ExtraPlatform& a, const ExtraPlatform& b) {
+            const float gapX = std::max(0.0f, std::max(a.minX, b.minX) - std::min(a.maxX, b.maxX));
+            const float gapZ = std::max(0.0f, std::max(a.minZ, b.minZ) - std::min(a.maxZ, b.maxZ));
+            return glm::length(glm::vec2(gapX, gapZ));
+            };
 
         float maximumVanRouteRise = 0.0f;
         float maximumVanRouteProjectedGap = 0.0f;
         float maximumVanRoutePhysicalGap = 0.0f;
+        float minimumVanRouteProjectedGap = std::numeric_limits<float>::max();
+        float minimumVanRoutePhysicalGap = std::numeric_limits<float>::max();
         for (size_t i = VanRouteFirstPlatformIndex + 1; i <= VanIslandPlatformIndex; ++i) {
             const ExtraPlatform& previous = extraPlatforms[i - 1];
             const ExtraPlatform& current = extraPlatforms[i];
+            const float projectedGap = xRangeGap(previous, current);
+            const float physicalGap = horizontalPlatformGap(previous, current);
             maximumVanRouteRise = std::max(maximumVanRouteRise, current.height - previous.height);
-            maximumVanRouteProjectedGap = std::max(maximumVanRouteProjectedGap, xRangeGap(previous, current));
-            maximumVanRoutePhysicalGap = std::max(maximumVanRoutePhysicalGap, glm::length(glm::vec2(
-                (current.minX + current.maxX - previous.minX - previous.maxX) * 0.5f,
-                (current.minZ + current.maxZ - previous.minZ - previous.maxZ) * 0.5f)));
+            maximumVanRouteProjectedGap = std::max(maximumVanRouteProjectedGap, projectedGap);
+            maximumVanRoutePhysicalGap = std::max(maximumVanRoutePhysicalGap, physicalGap);
+            minimumVanRouteProjectedGap = std::min(minimumVanRouteProjectedGap, projectedGap);
+            minimumVanRoutePhysicalGap = std::min(minimumVanRoutePhysicalGap, physicalGap);
         }
 
         if (maximumVanRouteRise > maximumJumpHeight - 0.08f ||
-            maximumVanRouteProjectedGap > maximumProjectedJumpDistance - 0.08f) {
+            maximumVanRouteProjectedGap > maximumProjectedJumpDistance - 0.08f ||
+            maximumVanRoutePhysicalGap > maximumProjectedJumpDistance - 0.08f) {
             std::cerr << "Mapa 1 van route is unreachable after 2D projection." << std::endl;
             return false;
         }
 
-        if (maximumVanRoutePhysicalGap <= maximumProjectedJumpDistance + 1.0f) {
-            std::cerr << "Mapa 1 van route is not separated enough in 3D." << std::endl;
+        if (minimumVanRouteProjectedGap < 0.65f || minimumVanRoutePhysicalGap < 0.65f) {
+            std::cerr << "Mapa 1 van route platforms are too close together." << std::endl;
             return false;
         }
 
@@ -1023,7 +1065,8 @@ struct Mapa1::Impl {
             << " | projected bridge gap: " << maximumProjectedGap
             << " | physical bridge gap: " << maximumPhysicalGap
             << " | spectral gaps: " << firstSpectralGap << ", " << finalSpectralGap
-            << " | van route gap: " << maximumVanRouteProjectedGap << "/" << maximumVanRoutePhysicalGap
+            << " | van route gap: " << minimumVanRouteProjectedGap << "-" << maximumVanRouteProjectedGap
+            << "/" << minimumVanRoutePhysicalGap << "-" << maximumVanRoutePhysicalGap
             << " | coin spread: X " << coinSpread.x << " Z " << coinSpread.y << std::endl;
         return true;
     }
@@ -1155,8 +1198,8 @@ struct Mapa1::Impl {
         spectralReadyHintUntil = 0.0f;
         spectralUnlockHintUntil = 0.0f;
         spectralEffectUntil = 0.0f;
-        spectralEffectStart = {0.0f, 0.0f, 0.0f};
-        spectralEffectEnd = {0.0f, 0.0f, 0.0f};
+        spectralEffectStart = { 0.0f, 0.0f, 0.0f };
+        spectralEffectEnd = { 0.0f, 0.0f, 0.0f };
     }
 
     void unlockSpectralStep(float now) {
@@ -1199,7 +1242,8 @@ struct Mapa1::Impl {
         const bool nearby = nearVanShop();
         if (nearby) {
             vanPromptUntil = std::max(vanPromptUntil, now + 0.20f);
-        } else {
+        }
+        else {
             vanShopOpen = false;
         }
 
@@ -1208,9 +1252,11 @@ struct Mapa1::Impl {
             vanShopUntil = now + 9.5f;
             if (!spectralStepUnlocked && spectralGems >= SpectralGemRequirement) {
                 unlockSpectralStep(now);
-            } else if (!spectralStepUnlocked) {
+            }
+            else if (!spectralStepUnlocked) {
                 showStatus("NECESITAS 10 GEMAS - derrota demonios y vuelve a la camioneta");
-            } else {
+            }
+            else {
                 showStatus("PASO ESPECTRAL YA ESTA LISTO");
             }
         }
@@ -1241,7 +1287,7 @@ struct Mapa1::Impl {
         spectralCooldown = SpectralStepCooldown;
         spectralReadyHintUntil = 0.0f;
         spectralEffectUntil = now + 0.46f;
-        spectralEffectStart = {posX, posY + 0.58f, posZ};
+        spectralEffectStart = { posX, posY + 0.58f, posZ };
         spectralEffectEnd = anchor.target + glm::vec3(0.0f, 0.58f, 0.0f);
 
         const float previousX = posX;
@@ -1261,7 +1307,8 @@ struct Mapa1::Impl {
         if (anchorIndex >= 0) {
             if (spectralStepUnlocked) {
                 spectralReadyHintUntil = std::max(spectralReadyHintUntil, now + 0.20f);
-            } else {
+            }
+            else {
                 spectralLockedHintUntil = std::max(spectralLockedHintUntil, now + 0.20f);
             }
         }
@@ -1270,7 +1317,8 @@ struct Mapa1::Impl {
             if (!spectralStepUnlocked) {
                 spectralLockedHintUntil = std::max(spectralLockedHintUntil, now + SpectralHintTime);
                 showStatus("COMPRA PASO ESPECTRAL EN LA CAMIONETA CON 10 GEMAS");
-            } else if (spectralCooldown <= 0.0f) {
+            }
+            else if (spectralCooldown <= 0.0f) {
                 performSpectralStep(spectralAnchors[static_cast<size_t>(anchorIndex)], now);
             }
         }
@@ -1326,14 +1374,15 @@ struct Mapa1::Impl {
             mode3D = false;
         }
 
-        posX = 0.0f;
-        posZ = 0.0f;
+        const glm::vec3 spawn = playerSpawnPosition();
+        posX = spawn.x;
+        posZ = spawn.z;
         velocityY = 0.0f;
         cameraOffsetY = 0.0f;
-        playerAngle = mode3D ? 90.0f : 0.0f;
+        playerAngle = 0.0f;
 
-        float initialHeight = -1.0f;
-        posY = groundHeight(posX, posZ, initialHeight) ? initialHeight : 0.0f;
+        float initialHeight = spawn.y;
+        posY = groundHeight(posX, posZ, initialHeight) ? initialHeight : spawn.y;
         grounded = true;
         animationTime = 0.0f;
         wasMoving = false;
@@ -1392,7 +1441,7 @@ struct Mapa1::Impl {
             return false;
         }
 
-        enemy.position = {nextX, nextHeight, nextZ};
+        enemy.position = { nextX, nextHeight, nextZ };
         return true;
     }
 
@@ -1410,12 +1459,13 @@ struct Mapa1::Impl {
 
         glm::vec3 direction = target - origin;
         if (glm::length(direction) < 0.0001f) {
-            direction = {enemy.facingLeft ? -1.0f : 1.0f, 0.0f, 0.0f};
-        } else {
+            direction = { enemy.facingLeft ? -1.0f : 1.0f, 0.0f, 0.0f };
+        }
+        else {
             direction = glm::normalize(direction);
         }
 
-        projectiles.push_back({origin, direction * EnemyShotSpeed, ProjectileLifetime, false});
+        projectiles.push_back({ origin, direction * EnemyShotSpeed, ProjectileLifetime, false });
         if (mode3D) {
             showCombatRestriction(now);
         }
@@ -1434,7 +1484,7 @@ struct Mapa1::Impl {
         glfwGetCursorPos(window, &mouseX, &mouseY);
         const float aspect = static_cast<float>(width) / static_cast<float>(height);
         const glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-        const glm::mat4 view = glm::translate(glm::mat4(1.0f), {0.0f, -cameraOffsetY, -3.0f});
+        const glm::mat4 view = glm::translate(glm::mat4(1.0f), { 0.0f, -cameraOffsetY, -3.0f });
         const glm::vec4 viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
         const glm::vec3 nearPoint = glm::unProject(
             glm::vec3(static_cast<float>(mouseX), static_cast<float>(height) - static_cast<float>(mouseY), 0.0f),
@@ -1467,7 +1517,7 @@ struct Mapa1::Impl {
             true,
             charged ? EnemyMaximumHealth : 1,
             charged
-        });
+            });
     }
 
     void damagePlayer(float now) {
@@ -1480,7 +1530,8 @@ struct Mapa1::Impl {
         playerHealth = std::max(0, playerHealth - 1);
         if (playerHealth <= 0) {
             beginPlayerDeath(now);
-        } else {
+        }
+        else {
             showStatus("DANO RECIBIDO - salud: " + std::to_string(playerHealth) + "/" + std::to_string(PlayerMaximumHealth));
             if (wasMode3D) {
                 showCombatRestriction(now);
@@ -1516,9 +1567,9 @@ struct Mapa1::Impl {
                 if (distance > EnemyStopDistance) {
                     const glm::vec2 step = direction * EnemyMoveSpeed * dt;
                     if (!tryMoveEnemy(enemy, step)) {
-                        tryMoveEnemy(enemy, {step.x, 0.0f});
+                        tryMoveEnemy(enemy, { step.x, 0.0f });
                         if (mode3D) {
-                            tryMoveEnemy(enemy, {0.0f, step.y});
+                            tryMoveEnemy(enemy, { 0.0f, step.y });
                         }
                     }
                 }
@@ -1546,7 +1597,7 @@ struct Mapa1::Impl {
     int remainingEnemyCount() const {
         return static_cast<int>(std::count_if(enemies.begin(), enemies.end(), [](const DemonEnemy& enemy) {
             return enemy.alive;
-        }));
+            }));
     }
 
     bool parryEnemyProjectile(float now) {
@@ -1591,7 +1642,8 @@ struct Mapa1::Impl {
                             enemy.alive = false;
                             enemy.state = EnemyState::Dying;
                             registerEnemyDefeat(now);
-                        } else {
+                        }
+                        else {
                             enemy.state = EnemyState::Hurt;
                             enemy.hurtTime = 0.36f;
                             showStatus("GOLPE AL ENEMIGO - resistencia: " + std::to_string(enemy.health) + "/" + std::to_string(EnemyMaximumHealth));
@@ -1600,7 +1652,8 @@ struct Mapa1::Impl {
                         break;
                     }
                 }
-            } else if (!remove) {
+            }
+            else if (!remove) {
                 const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
                 if (touchesGameplayTarget(projectile.position, playerCenter, 0.34f, 0.58f)) {
                     if (!parryEnemyProjectile(now)) {
@@ -1612,7 +1665,8 @@ struct Mapa1::Impl {
 
             if (remove) {
                 projectiles.erase(projectiles.begin() + static_cast<std::ptrdiff_t>(i));
-            } else {
+            }
+            else {
                 ++i;
             }
         }
@@ -1622,7 +1676,8 @@ struct Mapa1::Impl {
         playerAttackCooldown = PlayerAttackCooldown;
         if (mode3D) {
             showCombatRestriction(now);
-        } else {
+        }
+        else {
             spawnPlayerProjectile(direction, charged);
         }
     }
@@ -1638,7 +1693,8 @@ struct Mapa1::Impl {
             playerAimDirection = mouseAimDirection(window);
             if (playerAimDirection.x < -0.05f) {
                 playerAngle = 180.0f;
-            } else if (playerAimDirection.x > 0.05f) {
+            }
+            else if (playerAimDirection.x > 0.05f) {
                 playerAngle = 0.0f;
             }
         }
@@ -1648,7 +1704,8 @@ struct Mapa1::Impl {
                 showCombatRestriction(now);
             }
             stopChargingPlayerAttack();
-        } else {
+        }
+        else {
             if (attackDown && !mouseAttackPressed && playerAttackCooldown <= 0.0f) {
                 chargingPlayerAttack = true;
                 playerChargeTime = 0.0f;
@@ -1679,10 +1736,19 @@ struct Mapa1::Impl {
         }
 
         glm::vec3 nearbyPosition;
-        if (!findTerrainEnemyPosition({posX + 2.0f, posZ}, nearbyPosition)) {
+        if (!findTerrainEnemyPosition({ 2.0f, 0.0f }, nearbyPosition)) {
             std::cerr << "Mapa 1 combat smoke test could not find nearby terrain." << std::endl;
             return false;
         }
+        auto placePlayerForCombatTest = [&]() {
+            posX = nearbyPosition.x - 2.0f;
+            posZ = nearbyPosition.z;
+            float playerTestHeight = nearbyPosition.y;
+            posY = groundHeight(posX, posZ, playerTestHeight) ? playerTestHeight : nearbyPosition.y;
+            velocityY = 0.0f;
+            grounded = true;
+            };
+        placePlayerForCombatTest();
 
         mode3D = false;
         projectiles.clear();
@@ -1696,7 +1762,7 @@ struct Mapa1::Impl {
         updateEnemies(0.0f, 0.0f);
         const bool enemyAttacksIn2D = std::any_of(projectiles.begin(), projectiles.end(), [](const Projectile& projectile) {
             return !projectile.fromPlayer;
-        });
+            });
 
         projectiles.clear();
         playerHealth = PlayerMaximumHealth;
@@ -1713,9 +1779,9 @@ struct Mapa1::Impl {
                 false,
                 1,
                 false
-            });
+                });
             updateProjectiles(0.0f, now);
-        };
+            };
         hitPlayer(1.0f);
         const int healthAfterFirstHit = playerHealth;
         const int livesAfterFirstHit = lives;
@@ -1734,6 +1800,7 @@ struct Mapa1::Impl {
             playerHealth == PlayerMaximumHealth &&
             lives == StartingLives - 1 &&
             !playerDeathPlaying;
+        placePlayerForCombatTest();
 
         projectiles.clear();
         clearProjectilesRequested = false;
@@ -1758,9 +1825,9 @@ struct Mapa1::Impl {
                 true,
                 damage,
                 charged
-            });
+                });
             updateProjectiles(0.0f, now);
-        };
+            };
         enemies[0].position = nearbyPosition;
         enemies[0].alive = true;
         enemies[0].health = EnemyMaximumHealth;
@@ -1781,7 +1848,7 @@ struct Mapa1::Impl {
         projectiles.clear();
         combatHintUntil = 0.0f;
         playerAttackCooldown = 0.0f;
-        tryPlayerAttack({1.0f, 0.0f, 0.0f}, false, 6.0f);
+        tryPlayerAttack({ 1.0f, 0.0f, 0.0f }, false, 6.0f);
         const bool playerAttackBlockedIn3D = projectiles.empty() && combatHintUntil > 6.0f;
 
         projectiles.clear();
@@ -1794,8 +1861,8 @@ struct Mapa1::Impl {
         const bool enemyStillAttacksIn3D =
             combatHintUntil > 7.0f &&
             std::any_of(projectiles.begin(), projectiles.end(), [](const Projectile& projectile) {
-                return !projectile.fromPlayer;
-            });
+            return !projectile.fromPlayer;
+                });
 
         const bool passed =
             enemyAttacksIn2D &&
@@ -1911,13 +1978,18 @@ struct Mapa1::Impl {
 
         const bool tabDown = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
         if (tabDown && !tabPressed) {
+            const bool keepVanRouteCentered = playerNearVanRoute();
             mode3D = !mode3D;
             stopChargingPlayerAttack();
             startModeTransitionAnimation();
             if (!mode3D) {
-                posZ = 0.0f;
+                posZ = keepVanRouteCentered ? vanRouteCenterDepth() : 0.0f;
                 playerAngle = 0.0f;
-            } else {
+            }
+            else {
+                if (keepVanRouteCentered) {
+                    posZ = vanRouteCenterDepth();
+                }
                 playerAngle = 90.0f;
             }
             std::cout << "Mapa 1 view changed to " << (mode3D ? "3D." : "2D.") << std::endl;
@@ -1931,7 +2003,8 @@ struct Mapa1::Impl {
         const bool movingNow = isMoving(window);
         if (movingNow || !grounded) {
             animationTime += dt;
-        } else {
+        }
+        else {
             currentFrame = 0;
             animationTime = 0.0f;
         }
@@ -1948,7 +2021,8 @@ struct Mapa1::Impl {
                 nextX += MoveSpeed2D * dt;
                 playerAngle = 0.0f;
             }
-        } else {
+        }
+        else {
             if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
                 nextX += MoveSpeed3D * dt;
                 playerAngle = 90.0f;
@@ -1990,7 +2064,8 @@ struct Mapa1::Impl {
             posY = floorHeight;
             velocityY = 0.0f;
             grounded = true;
-        } else {
+        }
+        else {
             grounded = false;
         }
 
@@ -2048,7 +2123,7 @@ struct Mapa1::Impl {
 
     glm::mat4 normalizedSwordMatrix(const glm::vec3& position, const glm::vec3& velocity, float length) const {
         const glm::vec3 extents = projectileSwordModel.maxBounds - projectileSwordModel.minBounds;
-        const float maximumExtent = std::max({extents.x, extents.y, extents.z, 0.001f});
+        const float maximumExtent = std::max({ extents.x, extents.y, extents.z, 0.001f });
         const glm::vec3 center = (projectileSwordModel.minBounds + projectileSwordModel.maxBounds) * 0.5f;
 
         glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
@@ -2071,17 +2146,17 @@ struct Mapa1::Impl {
     }
 
     void drawPipe() {
-        glm::mat4 model = glm::translate(glm::mat4(1.0f), {1.0f - posX, -0.44f, -posZ});
-        model = glm::scale(model, {0.28f, 0.95f, 0.28f});
-        drawColoredMesh(pipeBodyMesh, model, {0.36f, 0.72f, 0.32f, 1.0f});
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), { 1.0f - posX, -0.44f, -posZ });
+        model = glm::scale(model, { 0.28f, 0.95f, 0.28f });
+        drawColoredMesh(pipeBodyMesh, model, { 0.36f, 0.72f, 0.32f, 1.0f });
 
-        model = glm::translate(glm::mat4(1.0f), {1.0f - posX, 0.03f, -posZ});
-        model = glm::scale(model, {0.40f, 0.22f, 0.40f});
-        drawColoredMesh(pipeRimMesh, model, {0.48f, 0.82f, 0.38f, 1.0f});
+        model = glm::translate(glm::mat4(1.0f), { 1.0f - posX, 0.03f, -posZ });
+        model = glm::scale(model, { 0.40f, 0.22f, 0.40f });
+        drawColoredMesh(pipeRimMesh, model, { 0.48f, 0.82f, 0.38f, 1.0f });
 
-        model = glm::translate(glm::mat4(1.0f), {1.0f - posX, 0.15f, -posZ});
-        model = glm::scale(model, {0.30f, 0.025f, 0.30f});
-        drawColoredMesh(pipeOpeningMesh, model, {0.02f, 0.10f, 0.08f, 1.0f});
+        model = glm::translate(glm::mat4(1.0f), { 1.0f - posX, 0.15f, -posZ });
+        model = glm::scale(model, { 0.30f, 0.025f, 0.30f });
+        drawColoredMesh(pipeOpeningMesh, model, { 0.02f, 0.10f, 0.08f, 1.0f });
     }
 
     void drawParkourPlatforms() {
@@ -2095,17 +2170,17 @@ struct Mapa1::Impl {
             const float centerX = (platform.minX + platform.maxX) * 0.5f - posX;
             const float centerZ = renderedDepth((platform.minZ + platform.maxZ) * 0.5f, platform.projectIn2D) - posZ;
 
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), {centerX, platform.height - platform.thickness * 0.5f, centerZ});
-            model = glm::scale(model, {width, platform.thickness, depth});
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), { centerX, platform.height - platform.thickness * 0.5f, centerZ });
+            model = glm::scale(model, { width, platform.thickness, depth });
             drawTexturedMesh(platformMesh, model, platformSideTexture, platform.color);
 
-            model = glm::translate(glm::mat4(1.0f), {centerX, platform.height - platform.thickness + 0.028f, centerZ});
-            model = glm::scale(model, {width * 1.035f, 0.055f, depth * 1.035f});
+            model = glm::translate(glm::mat4(1.0f), { centerX, platform.height - platform.thickness + 0.028f, centerZ });
+            model = glm::scale(model, { width * 1.035f, 0.055f, depth * 1.035f });
             drawColoredMesh(platformMesh, model, platform.color);
 
-            model = glm::translate(glm::mat4(1.0f), {centerX, platform.height + 0.014f, centerZ});
-            model = glm::scale(model, {width * 0.96f, 0.028f, depth * 0.96f});
-            drawTexturedMesh(platformMesh, model, platformTopTexture, {0.48f, 0.82f, 0.42f, 1.0f});
+            model = glm::translate(glm::mat4(1.0f), { centerX, platform.height + 0.014f, centerZ });
+            model = glm::scale(model, { width * 0.96f, 0.028f, depth * 0.96f });
+            drawTexturedMesh(platformMesh, model, platformTopTexture, { 0.48f, 0.82f, 0.42f, 1.0f });
         }
     }
 
@@ -2118,20 +2193,20 @@ struct Mapa1::Impl {
             const float bob = std::sin(now * 2.4f + coin.phase) * 0.10f;
             glm::mat4 model = glm::translate(
                 glm::mat4(1.0f),
-                {coin.position.x - posX, coin.position.y + bob, renderedDepth(coin.position.z, coin.projectIn2D) - posZ});
-            model = glm::rotate(model, now * 5.2f + coin.phase, {0.0f, 1.0f, 0.0f});
-            model = glm::rotate(model, glm::half_pi<float>(), {1.0f, 0.0f, 0.0f});
-            drawColoredMesh(coinMesh, model, {1.0f, 0.74f, 0.08f, 1.0f});
+                { coin.position.x - posX, coin.position.y + bob, renderedDepth(coin.position.z, coin.projectIn2D) - posZ });
+            model = glm::rotate(model, now * 5.2f + coin.phase, { 0.0f, 1.0f, 0.0f });
+            model = glm::rotate(model, glm::half_pi<float>(), { 1.0f, 0.0f, 0.0f });
+            drawColoredMesh(coinMesh, model, { 1.0f, 0.74f, 0.08f, 1.0f });
         }
 
         if (star.active) {
             const float bob = std::sin(now * 2.8f) * 0.14f;
             glm::mat4 model = glm::translate(
                 glm::mat4(1.0f),
-                {star.position.x - posX, star.position.y + bob, renderedDepth(star.position.z, star.projectIn2D) - posZ});
-            model = glm::rotate(model, now * 2.8f, {0.0f, 1.0f, 0.0f});
+                { star.position.x - posX, star.position.y + bob, renderedDepth(star.position.z, star.projectIn2D) - posZ });
+            model = glm::rotate(model, now * 2.8f, { 0.0f, 1.0f, 0.0f });
             model = glm::scale(model, glm::vec3(0.88f));
-            drawColoredMesh(starMesh, model, {1.0f, 0.86f, 0.12f, 1.0f});
+            drawColoredMesh(starMesh, model, { 1.0f, 0.86f, 0.12f, 1.0f });
         }
     }
 
@@ -2147,15 +2222,18 @@ struct Mapa1::Impl {
                 frames = &enemyDeathMeshes;
                 framesPerSecond = 9.0f;
                 clampLastFrame = true;
-            } else if (enemy.state == EnemyState::Attack) {
+            }
+            else if (enemy.state == EnemyState::Attack) {
                 frames = &enemyAttackMeshes;
                 framesPerSecond = 9.0f;
                 clampLastFrame = true;
-            } else if (enemy.state == EnemyState::Hurt) {
+            }
+            else if (enemy.state == EnemyState::Hurt) {
                 frames = &enemyHurtMeshes;
                 framesPerSecond = 9.0f;
                 clampLastFrame = true;
-            } else if (enemy.state == EnemyState::Chase) {
+            }
+            else if (enemy.state == EnemyState::Chase) {
                 frames = &enemyRunMeshes;
                 framesPerSecond = 9.0f;
             }
@@ -2172,12 +2250,12 @@ struct Mapa1::Impl {
             const float renderZ = renderedDepth(enemy.position.z, true) - posZ + (!mode3D ? 0.16f : 0.0f);
             glm::mat4 model = glm::translate(
                 glm::mat4(1.0f),
-                {enemy.position.x - posX, enemy.position.y, renderZ});
+                { enemy.position.x - posX, enemy.position.y, renderZ });
             const float angle = mode3D
                 ? (enemy.facingLeft ? 270.0f : 90.0f)
                 : (enemy.facingLeft ? 180.0f : 0.0f);
-            model = glm::rotate(model, glm::radians(angle), {0.0f, 1.0f, 0.0f});
-            drawTexturedMesh((*frames)[frameIndex], model, enemyTexture, {0.92f, 0.16f, 0.12f, 1.0f});
+            model = glm::rotate(model, glm::radians(angle), { 0.0f, 1.0f, 0.0f });
+            drawTexturedMesh((*frames)[frameIndex], model, enemyTexture, { 0.92f, 0.16f, 0.12f, 1.0f });
         }
     }
 
@@ -2186,14 +2264,14 @@ struct Mapa1::Impl {
             const float renderZ = renderedDepth(projectile.position.z, true) - posZ + (!mode3D ? 0.28f : 0.0f);
             const float length = ProjectileSwordLength * (projectile.charged ? 1.55f : 1.0f);
             const glm::mat4 model = normalizedSwordMatrix(
-                {projectile.position.x - posX, projectile.position.y, renderZ},
+                { projectile.position.x - posX, projectile.position.y, renderZ },
                 projectile.velocity,
                 length);
             drawSwordModel(
                 model,
                 projectile.fromPlayer
-                    ? glm::vec4(0.18f, 0.66f, 1.00f, 1.0f)
-                    : glm::vec4(1.00f, 0.16f, 0.10f, 1.0f));
+                ? glm::vec4(0.18f, 0.66f, 1.00f, 1.0f)
+                : glm::vec4(1.00f, 0.16f, 0.10f, 1.0f));
         }
     }
 
@@ -2228,10 +2306,10 @@ struct Mapa1::Impl {
             const float previewLength = ProjectileSwordLength * (0.42f + ratio * 1.13f);
             const glm::vec3 offset = playerAimDirection * (0.42f + previewLength * 0.34f);
             const glm::mat4 model = normalizedSwordMatrix(
-                {offset.x, posY + 0.62f + offset.y, 0.36f},
+                { offset.x, posY + 0.62f + offset.y, 0.36f },
                 playerAimDirection,
                 previewLength);
-            drawSwordModel(model, {0.18f, 0.66f, 1.00f, 1.0f});
+            drawSwordModel(model, { 0.18f, 0.66f, 1.00f, 1.0f });
         }
 
         if (now <= spectralEffectUntil) {
@@ -2241,16 +2319,16 @@ struct Mapa1::Impl {
                 glm::mat4(1.0f),
                 mode3D ? glm::vec3(-0.08f, posY + 0.58f, 0.0f) : glm::vec3(0.0f, posY + 0.58f, 0.38f));
             if (mode3D) {
-                model = glm::rotate(model, glm::half_pi<float>(), {0.0f, 1.0f, 0.0f});
+                model = glm::rotate(model, glm::half_pi<float>(), { 0.0f, 1.0f, 0.0f });
             }
             model = glm::scale(model, glm::vec3(pulse));
-            drawColoredMesh(parryRingMesh, model, {0.18f, 0.72f, 1.00f, 1.0f});
+            drawColoredMesh(parryRingMesh, model, { 0.18f, 0.72f, 1.00f, 1.0f });
         }
 
     }
 
     void drawWorld() {
-        glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), {-posX, -1.0f, -posZ});
+        glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), { -posX, -1.0f, -posZ });
         modelMatrix = glm::scale(modelMatrix, glm::vec3(MapScale));
         modelMatrix = glm::translate(modelMatrix, MapCenter);
         shader.setMat4("model", modelMatrix);
@@ -2265,7 +2343,8 @@ struct Mapa1::Impl {
                     shader.setInt("modoRender", 0);
                     shader.setInt("tex0", 0);
                     material->texture->bind();
-                } else {
+                }
+                else {
                     shader.setInt("modoRender", 2);
                     shader.setVec4("colorMaterial", material != nullptr ? material->color : glm::vec4(1.0f));
                 }
@@ -2285,7 +2364,8 @@ struct Mapa1::Impl {
                 shader.setInt("modoRender", 0);
                 shader.setInt("tex0", 0);
                 material->texture->bind();
-            } else {
+            }
+            else {
                 shader.setInt("modoRender", 2);
                 shader.setVec4("colorMaterial", material != nullptr ? material->color : fallbackColor);
             }
@@ -2301,24 +2381,30 @@ struct Mapa1::Impl {
         }
 
         const glm::vec3 renderPosition(van.x - posX, van.y, renderZ);
+        float vanMarkerHeight = 1.45f;
 
         if (ensureVanModelLoaded()) {
             const glm::vec3 extents = vanModel.model.maxBounds - vanModel.model.minBounds;
-            const float maximumExtent = std::max({extents.x, extents.y, extents.z, 0.001f});
+            const float maximumExtent = std::max({ extents.x, extents.y, extents.z, 0.001f });
+            const float vanScale = VanModelDisplaySize / maximumExtent;
+            const float scaledHeight = extents.y * vanScale;
             const glm::vec3 center = (vanModel.model.minBounds + vanModel.model.maxBounds) * 0.5f;
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), renderPosition);
-            model = glm::rotate(model, glm::radians(mode3D ? -25.0f : 0.0f), {0.0f, 1.0f, 0.0f});
-            model = glm::scale(model, glm::vec3(3.0f / maximumExtent));
+            const glm::vec3 vanModelPosition = renderPosition + glm::vec3(0.0f, scaledHeight * 0.5f, 0.0f);
+            vanMarkerHeight = scaledHeight + 0.35f;
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), vanModelPosition);
+            model = glm::rotate(model, glm::radians(mode3D ? -25.0f : 0.0f), { 0.0f, 1.0f, 0.0f });
+            model = glm::scale(model, glm::vec3(vanScale));
             model = glm::translate(model, -center);
-            drawRuntimeModel(vanModel, model, {0.72f, 0.78f, 0.86f, 1.0f});
-        } else {
+            drawRuntimeModel(vanModel, model, { 0.72f, 0.78f, 0.86f, 1.0f });
+        }
+        else {
             glm::mat4 body = glm::translate(glm::mat4(1.0f), renderPosition + glm::vec3(0.0f, 0.35f, 0.0f));
-            body = glm::scale(body, {1.65f, 0.70f, 0.82f});
-            drawColoredMesh(platformMesh, body, {0.72f, 0.78f, 0.86f, 1.0f});
+            body = glm::scale(body, { 1.65f, 0.70f, 0.82f });
+            drawColoredMesh(platformMesh, body, { 0.72f, 0.78f, 0.86f, 1.0f });
         }
 
         const float pulse = 1.0f + std::sin(now * 4.0f) * 0.06f;
-        glm::mat4 marker = glm::translate(glm::mat4(1.0f), renderPosition + glm::vec3(0.0f, 1.45f, 0.0f));
+        glm::mat4 marker = glm::translate(glm::mat4(1.0f), renderPosition + glm::vec3(0.0f, vanMarkerHeight, 0.0f));
         marker = glm::scale(marker, glm::vec3(0.48f * pulse));
         drawColoredMesh(parryRingMesh, marker, spectralStepUnlocked
             ? glm::vec4(1.0f, 0.82f, 0.18f, 1.0f)
@@ -2343,29 +2429,34 @@ struct Mapa1::Impl {
         const Mesh* selectedMesh = &playerIdleMesh;
         if (playerDeathPlaying) {
             selectedMesh = animationFrame(playerDeathMeshes, playerDeathTime, PlayerDeathFramesPerSecond, false);
-        } else if (playerEntrancePlaying) {
+        }
+        else if (playerEntrancePlaying) {
             selectedMesh = animationFrame(playerEntranceMeshes, playerEntranceTime, PlayerEntranceFramesPerSecond, false);
-        } else if (playerTransitionPlaying) {
+        }
+        else if (playerTransitionPlaying) {
             selectedMesh = animationFrame(playerTransitionMeshes, playerTransitionTime, PlayerTransitionFramesPerSecond, false);
-        } else if (guardActive) {
+        }
+        else if (guardActive) {
             selectedMesh = airborne ? &playerGuardAirMesh : &playerGuardGroundMesh;
-        } else if (airborne && !playerJumpMeshes.empty()) {
+        }
+        else if (airborne && !playerJumpMeshes.empty()) {
             const size_t jumpIndex = velocityY > JumpSpeed * 0.22f
                 ? 0
                 : (velocityY > -JumpSpeed * 0.35f ? std::min<size_t>(1, playerJumpMeshes.size() - 1) : playerJumpMeshes.size() - 1);
             selectedMesh = &playerJumpMeshes[jumpIndex];
-        } else if (wasMoving) {
+        }
+        else if (wasMoving) {
             selectedMesh = animationFrame(playerRunMeshes, animationTime, PlayerRunFramesPerSecond, true);
         }
         if (selectedMesh == nullptr) {
             selectedMesh = &playerIdleMesh;
         }
 
-        glm::mat4 model = glm::translate(glm::mat4(1.0f), {0.0f, posY + bounce, 0.22f});
-        model = glm::rotate(model, glm::radians(playerAngle), {0.0f, 1.0f, 0.0f});
-        model = glm::rotate(model, glm::radians(walkTilt + jumpTilt), {0.0f, 0.0f, 1.0f});
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), { 0.0f, posY + bounce, 0.22f });
+        model = glm::rotate(model, glm::radians(playerAngle), { 0.0f, 1.0f, 0.0f });
+        model = glm::rotate(model, glm::radians(walkTilt + jumpTilt), { 0.0f, 0.0f, 1.0f });
         model = glm::scale(model, jumpScale);
-        drawTexturedMesh(*selectedMesh, model, playerAtlasTexture, {1.0f, 1.0f, 1.0f, 1.0f});
+        drawTexturedMesh(*selectedMesh, model, playerAtlasTexture, { 1.0f, 1.0f, 1.0f, 1.0f });
     }
 
     bool initialize(bool enableAudio) {
@@ -2396,16 +2487,16 @@ struct Mapa1::Impl {
             for (const AtlasFrame& frame : frames) {
                 meshes.push_back(createPlayerSpriteMesh(frame, playerAtlasWidth, playerAtlasHeight));
             }
-        };
+            };
 
-        playerIdleMesh = createPlayerSpriteMesh({641, 547, 42, 62}, playerAtlasWidth, playerAtlasHeight);
-        playerGuardGroundMesh = createPlayerSpriteMesh({2, 380, 35, 55}, playerAtlasWidth, playerAtlasHeight);
-        playerGuardAirMesh = createPlayerSpriteMesh({58, 380, 37, 49}, playerAtlasWidth, playerAtlasHeight);
+        playerIdleMesh = createPlayerSpriteMesh({ 641, 547, 42, 62 }, playerAtlasWidth, playerAtlasHeight);
+        playerGuardGroundMesh = createPlayerSpriteMesh({ 2, 380, 35, 55 }, playerAtlasWidth, playerAtlasHeight);
+        playerGuardAirMesh = createPlayerSpriteMesh({ 58, 380, 37, 49 }, playerAtlasWidth, playerAtlasHeight);
         buildPlayerMeshes({
             {2, 199, 48, 62},
             {62, 202, 54, 54},
             {133, 198, 48, 63}
-        }, playerJumpMeshes);
+            }, playerJumpMeshes);
         buildPlayerMeshes({
             {2, 296, 43, 52},
             {55, 296, 46, 52},
@@ -2415,7 +2506,7 @@ struct Mapa1::Impl {
             {286, 296, 51, 52},
             {346, 296, 45, 52},
             {407, 296, 50, 52}
-        }, playerRunMeshes);
+            }, playerRunMeshes);
         buildPlayerMeshes({
             {0, 547, 55, 62},
             {55, 547, 62, 62},
@@ -2430,14 +2521,14 @@ struct Mapa1::Impl {
             {551, 547, 39, 62},
             {596, 547, 42, 62},
             {641, 547, 42, 62}
-        }, playerEntranceMeshes);
+            }, playerEntranceMeshes);
         buildPlayerMeshes({
             {0, 725, 60, 58},
             {66, 725, 58, 58},
             {132, 725, 70, 58},
             {203, 725, 50, 58},
             {253, 725, 70, 58}
-        }, playerDeathMeshes);
+            }, playerDeathMeshes);
         buildPlayerMeshes({
             {0, 2030, 72, 58},
             {94, 2030, 44, 58},
@@ -2452,7 +2543,7 @@ struct Mapa1::Impl {
             {595, 2030, 36, 58},
             {642, 2030, 38, 58},
             {688, 2030, 42, 58}
-        }, playerTransitionMeshes);
+            }, playerTransitionMeshes);
 
         projectileSwordModel = ModelLoader::loadModel(resolveAssetPath("assets/items/vergil_summoned_sword/scene.gltf"));
         if (projectileSwordModel.meshes.empty()) {
@@ -2538,7 +2629,7 @@ struct Mapa1::Impl {
             for (const AtlasFrame& frame : frames) {
                 meshes.push_back(createSpriteMesh(frame, 0.88f, 0.82f, 256, 192));
             }
-        };
+            };
         buildEnemyMeshes(enemyIdleFrames, enemyIdleMeshes);
         buildEnemyMeshes(enemyRunFrames, enemyRunMeshes);
         buildEnemyMeshes(enemyAttackFrames, enemyAttackMeshes);
@@ -2578,7 +2669,7 @@ struct Mapa1::Impl {
         parryUntil = 0.0f;
         parryEffectUntil = 0.0f;
         resetSpectralProgress();
-        playerAimDirection = {1.0f, 0.0f, 0.0f};
+        playerAimDirection = { 1.0f, 0.0f, 0.0f };
         playerHealth = PlayerMaximumHealth;
         projectiles.clear();
         resetPlayer(true);
@@ -2609,11 +2700,12 @@ struct Mapa1::Impl {
 
         glm::mat4 view(1.0f);
         if (!mode3D) {
-            view = glm::translate(view, {0.0f, -cameraOffsetY, -3.0f});
-        } else {
+            view = glm::translate(view, { 0.0f, -cameraOffsetY, -3.0f });
+        }
+        else {
             const glm::vec3 cameraPosition(-3.0f, cameraOffsetY + 0.55f, 0.0f);
             const glm::vec3 cameraTarget(0.0f, cameraOffsetY, 0.0f);
-            view = glm::lookAt(cameraPosition, cameraTarget, {0.0f, 1.0f, 0.0f});
+            view = glm::lookAt(cameraPosition, cameraTarget, { 0.0f, 1.0f, 0.0f });
         }
 
         glEnable(GL_DEPTH_TEST);
