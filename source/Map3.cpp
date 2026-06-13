@@ -26,29 +26,31 @@ constexpr float Map3EnemyHitCooldown = 0.85f;
 constexpr float Map3DodgeDistance = 1.75f;
 constexpr float Map3DodgeCooldown = 0.72f;
 constexpr float Map3DodgeActiveTime = 0.28f;
-constexpr float Map3ParryActiveTime = 0.42f;
+constexpr float Map3ParryActiveTime = 0.30f;
 constexpr float Map3ParryRadius = 1.24f;
-constexpr float Map3EnemyProjectileSpeed = 3.15f;
-constexpr float Map3EnemyProjectileCooldown = 4.0f;
+constexpr float Map3EnemyProjectileSpeed = 1.45f;
+constexpr float Map3EnemyProjectileCooldown = 5.0f;
 constexpr int Map3EnemyProjectileBurstCount = 3;
-constexpr float Map3EnemyProjectileBurstDelay = 0.26f;
+constexpr float Map3EnemyProjectileBurstDelay = 1.0f;
 constexpr float Map3ProjectileLifetime = 4.25f;
 constexpr float Map3ReflectedProjectileSpeed = 4.65f;
 constexpr float Map3ProjectileHitRadius = 0.42f;
 constexpr int Map3InitialEnemyCount = 2;
 constexpr float Map3EnemyWaveInterval = 10.0f;
-constexpr float Map3EnemyVisualSize = 0.56f;
-constexpr float Map3EnemyCollisionHalf = 0.20f;
+constexpr float Map3EnemyVisualSize = 0.38f;
+constexpr float Map3EnemyCollisionHalf = 0.14f;
 constexpr float Map3EnemyPreferredRange2D = 2.05f;
 constexpr float Map3EnemyPreferredRange3D = 2.45f;
 constexpr float Map3EnemyMinimumSpawnDistance = 3.2f;
-constexpr float Map3EnemyProjectileCollisionRadius = 0.15f;
-constexpr float Map3EnemyProjectileVisualRadius = 0.34f;
-constexpr float Map3ReflectedProjectileVisualRadius = 0.36f;
+constexpr float Map3EnemyMinimumSeparation = 0.86f;
+constexpr float Map3EnemyRelocationDistance = 3.35f;
+constexpr float Map3EnemyProjectileCollisionRadius = 0.10f;
+constexpr float Map3EnemyProjectileVisualRadius = 0.22f;
+constexpr float Map3ReflectedProjectileVisualRadius = 0.24f;
 constexpr float Map3PathCenterZOffset = 0.72f;
 constexpr float Map3FinishX = 12.0f;
 constexpr float Map3Camera3DDistance = 1.5f;
-constexpr float Map3Camera2DDistance = 2.0f;
+constexpr float Map3Camera2DDistance = 2.2f;
 constexpr float Map3Camera2DTargetHeight = 0.70f;
 constexpr float Map3Camera2DHeight = 0.20f;
 constexpr float Map3PlayerHeight = 0.34f;
@@ -526,7 +528,7 @@ bool updateMap3Projectiles(Map3Runtime& map3, float deltaTime, bool parryActive,
 
 void spawnMap3EnemyProjectile(const glm::vec3& enemyPosition, const glm::vec3& shotDirection, std::vector<Map3Projectile>& projectiles) {
     projectiles.push_back({
-        enemyPosition + glm::vec3(0.0f, 0.38f, 0.0f) + shotDirection * 0.38f,
+        enemyPosition + glm::vec3(0.0f, 0.24f, 0.0f) + shotDirection * 0.24f,
         shotDirection * Map3EnemyProjectileSpeed,
         Map3ProjectileLifetime,
         false
@@ -625,11 +627,12 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
             enemy.yaw = std::atan2(direction.x, direction.z);
 
             if (enemy.shotCooldown <= 0.0f && enemy.burstShotsRemaining <= 0 && distance <= Map3EnemyDetectionRange * 0.92f && distance >= preferredRange * 0.62f) {
-                glm::vec3 shotDirection = playerPosition + glm::vec3(0.0f, 0.45f, 0.0f) - (enemy.position + glm::vec3(0.0f, 0.38f, 0.0f));
+                glm::vec3 shotDirection = playerPosition + glm::vec3(0.0f, 0.20f, 0.0f) - (enemy.position + glm::vec3(0.0f, 0.24f, 0.0f));
                 if (currentMode == PlayMode::Mode2D) {
                     shotDirection.z = 0.0f;
                 }
                 if (glm::length(shotDirection) > 0.05f) {
+                    shotDirection.y = std::clamp(shotDirection.y, -0.08f, 0.04f);
                     shotDirection = glm::normalize(shotDirection);
                     enemy.burstShotDirection = shotDirection;
                     spawnMap3EnemyProjectile(enemy.position, enemy.burstShotDirection, projectiles);
@@ -649,8 +652,17 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
             }
         }
 
-        if (!dodgeActive && map3BoundsIntersect(player.bounds(), enemyBounds(enemy))) {
-            hitPlayer = true;
+    }
+
+    keepEnemiesSeparated(player, environment, colliders);
+
+    if (!dodgeActive) {
+        const Bounds playerBounds = player.bounds();
+        for (const Enemy& enemy : m_enemies) {
+            if (enemy.alive && map3BoundsIntersect(playerBounds, enemyBounds(enemy))) {
+                hitPlayer = true;
+                break;
+            }
         }
     }
 
@@ -670,8 +682,6 @@ void Map3EnemyManager::render(const Shader& shader, float timeSeconds, const glm
         if (!m_parts.empty()) {
             for (const MissionRenderablePart& part : m_parts) {
                 Material material = part.material;
-                material.baseColor = glm::mix(material.baseColor, glm::vec3(1.0f, 0.56f, 0.24f), 0.22f);
-                material.emissive += glm::vec3(0.16f, 0.06f, 0.025f);
                 material.fogAmount = 0.05f;
                 if (enemy.hurtTimer > 0.0f) {
                     material.baseColor = glm::mix(material.baseColor, glm::vec3(1.0f, 0.25f, 0.18f), 0.65f);
@@ -683,7 +693,6 @@ void Map3EnemyManager::render(const Shader& shader, float timeSeconds, const glm
             }
         } else {
             Material material = m_fallbackMaterial;
-            material.emissive += glm::vec3(0.16f, 0.06f, 0.025f);
             material.fogAmount = 0.05f;
             if (enemy.hurtTimer > 0.0f) {
                 material.baseColor = {1.0f, 0.22f, 0.18f};
@@ -864,6 +873,125 @@ bool Map3EnemyManager::tryMoveEnemy(Enemy& enemy, const Environment& environment
 
     enemy.position = target;
     return true;
+}
+
+void Map3EnemyManager::keepEnemiesSeparated(const Player& player, const Environment& environment, const std::vector<Bounds>& colliders) {
+    for (std::size_t first = 0; first < m_enemies.size(); ++first) {
+        if (!m_enemies[first].alive) {
+            continue;
+        }
+
+        for (std::size_t second = first + 1; second < m_enemies.size(); ++second) {
+            if (!m_enemies[second].alive) {
+                continue;
+            }
+
+            const glm::vec3 delta = m_enemies[second].position - m_enemies[first].position;
+            const float distance = currentMode == PlayMode::Mode2D
+                ? std::abs(delta.x)
+                : glm::length(glm::vec2(delta.x, delta.z));
+            if (distance >= Map3EnemyMinimumSeparation) {
+                continue;
+            }
+
+            if (!relocateEnemyOppositePlayer(second, player, environment, colliders)) {
+                relocateEnemyOppositePlayer(first, player, environment, colliders);
+            }
+        }
+    }
+}
+
+bool Map3EnemyManager::relocateEnemyOppositePlayer(std::size_t enemyIndex, const Player& player, const Environment& environment, const std::vector<Bounds>& colliders) {
+    if (enemyIndex >= m_enemies.size() || !m_enemies[enemyIndex].alive) {
+        return false;
+    }
+
+    Enemy& enemy = m_enemies[enemyIndex];
+    const glm::vec3 playerPosition = player.position();
+    glm::vec3 fromPlayer = enemy.position - playerPosition;
+    fromPlayer.y = 0.0f;
+    if (currentMode == PlayMode::Mode2D) {
+        fromPlayer.z = 0.0f;
+    }
+    if (glm::length(fromPlayer) <= 0.05f) {
+        fromPlayer = enemy.position.x >= playerPosition.x
+            ? glm::vec3(1.0f, 0.0f, 0.0f)
+            : glm::vec3(-1.0f, 0.0f, 0.0f);
+    }
+
+    const glm::vec3 opposite = -glm::normalize(fromPlayer);
+    const std::array<float, 7> angleOffsets = {0.0f, 0.45f, -0.45f, 0.90f, -0.90f, 1.35f, -1.35f};
+    for (float angleOffset : angleOffsets) {
+        glm::vec3 direction = opposite;
+        if (currentMode == PlayMode::Mode3D) {
+            const float cosine = std::cos(angleOffset);
+            const float sine = std::sin(angleOffset);
+            direction = {
+                opposite.x * cosine - opposite.z * sine,
+                0.0f,
+                opposite.x * sine + opposite.z * cosine
+            };
+        } else {
+            direction = opposite.x >= 0.0f
+                ? glm::vec3(1.0f, 0.0f, 0.0f)
+                : glm::vec3(-1.0f, 0.0f, 0.0f);
+        }
+
+        const glm::vec3 anchor = playerPosition + direction * Map3EnemyRelocationDistance;
+        glm::vec3 candidate = findSpawnPosition(environment, colliders, playerPosition, glm::vec2(anchor.x, anchor.z));
+        if (currentMode == PlayMode::Mode2D) {
+            candidate.z = locked2DDepth;
+        }
+
+        float floorY = candidate.y;
+        if (!findFloorAt(colliders, candidate.x, candidate.z, playerPosition.y, floorY)) {
+            continue;
+        }
+        candidate.y = floorY + 0.001f;
+
+        const Bounds candidateBounds{candidate + glm::vec3(0.0f, Map3EnemyCollisionHalf, 0.0f), glm::vec3(Map3EnemyCollisionHalf)};
+        bool overlapsWorld = false;
+        for (const Bounds& collider : colliders) {
+            const float top = collider.center.y + collider.halfExtent.y;
+            if (std::abs(top - floorY) <= 0.08f) {
+                continue;
+            }
+            if (map3BoundsIntersect(candidateBounds, collider)) {
+                overlapsWorld = true;
+                break;
+            }
+        }
+        if (overlapsWorld || enemyCrowdsOthers(candidate, enemyIndex)) {
+            continue;
+        }
+
+        enemy.position = candidate;
+        enemy.spawnPosition = candidate;
+        enemy.yaw = std::atan2(playerPosition.x - candidate.x, playerPosition.z - candidate.z);
+        enemy.burstShotsRemaining = 0;
+        enemy.burstShotTimer = 0.0f;
+        enemy.shotCooldown = std::max(enemy.shotCooldown, 0.65f);
+        return true;
+    }
+
+    return false;
+}
+
+bool Map3EnemyManager::enemyCrowdsOthers(const glm::vec3& position, std::size_t ignoredIndex) const {
+    for (std::size_t index = 0; index < m_enemies.size(); ++index) {
+        if (index == ignoredIndex || !m_enemies[index].alive) {
+            continue;
+        }
+
+        const glm::vec3 delta = position - m_enemies[index].position;
+        const float distance = currentMode == PlayMode::Mode2D
+            ? std::abs(delta.x)
+            : glm::length(glm::vec2(delta.x, delta.z));
+        if (distance < Map3EnemyMinimumSeparation * 1.18f) {
+            return true;
+        }
+    }
+    return false;
 }
 
 Bounds Map3EnemyManager::enemyBounds(const Enemy& enemy) const {

@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -51,6 +52,9 @@ private:
     glm::vec3 findSpawnPosition(const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn, const glm::vec2& anchor) const;
     bool findFloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float& floorY) const;
     bool tryMoveEnemy(Enemy& enemy, const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& step) const;
+    void keepEnemiesSeparated(const Player& player, const Environment& environment, const std::vector<Bounds>& colliders);
+    bool relocateEnemyOppositePlayer(std::size_t enemyIndex, const Player& player, const Environment& environment, const std::vector<Bounds>& colliders);
+    bool enemyCrowdsOthers(const glm::vec3& position, std::size_t ignoredIndex) const;
     Bounds enemyBounds(const Enemy& enemy) const;
     glm::mat4 enemyModelMatrix(const Enemy& enemy, float timeSeconds) const;
 

@@ -49,11 +49,12 @@ struct Mode2DRestrictionRange {
     float minX{0.0f};
     float maxX{0.0f};
     PlayMode blockedMode{PlayMode::Mode2D};
+    bool blocksJump{false};
 };
 
 constexpr std::array<Mode2DRestrictionRange, 2> Mode2DRestrictionRanges{{
-    {-8.9f, -8.5f, PlayMode::Mode2D},
-    {-4.2f, -1.7f, PlayMode::Mode3D}
+    {-8.9f, -8.5f, PlayMode::Mode2D, false},
+    {-4.2f, -1.7f, PlayMode::Mode3D, true}
 }};
 
 enum class EstadoJuego {
@@ -143,6 +144,20 @@ bool environmentUsable(const Environment& environment) {
 bool modeRestrictedAtX(PlayMode mode, float x) {
     for (const Mode2DRestrictionRange& range : Mode2DRestrictionRanges) {
         if (range.blockedMode != mode) {
+            continue;
+        }
+        const float minX = std::min(range.minX, range.maxX);
+        const float maxX = std::max(range.minX, range.maxX);
+        if (x >= minX && x <= maxX) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool jumpRestrictedAtX(float x) {
+    for (const Mode2DRestrictionRange& range : Mode2DRestrictionRanges) {
+        if (!range.blocksJump) {
             continue;
         }
         const float minX = std::min(range.minX, range.maxX);
@@ -2078,7 +2093,7 @@ PlayerInput buildPlayerInput(GLFWwindow* window, const Player& player) {
     const bool jumpDown = currentMode == PlayMode::Mode2D
         ? (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         : (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
-    input.jumpPressed = jumpDown && !lastJumpKey;
+    input.jumpPressed = jumpDown && !lastJumpKey && !jumpRestrictedAtX(player.position().x);
     lastJumpKey = jumpDown;
     return input;
 }
