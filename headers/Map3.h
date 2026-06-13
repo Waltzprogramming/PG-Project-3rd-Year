@@ -41,6 +41,8 @@ private:
         float hurtTimer{0.0f};
         float shotCooldown{0.0f};
         float burstShotTimer{0.0f};
+        float stuckTimer{0.0f};
+        float attackIdleTimer{0.0f};
         glm::vec3 burstShotDirection{0.0f};
         int burstShotsRemaining{0};
         int health{2};
@@ -49,7 +51,7 @@ private:
 
     bool loadEnemyModel();
     void buildFallbackModel();
-    glm::vec3 findSpawnPosition(const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn, const glm::vec2& anchor) const;
+    glm::vec3 findSpawnPosition(const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& playerSpawn, const glm::vec2& anchor, std::size_t ignoredEnemy = static_cast<std::size_t>(-1)) const;
     bool findFloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float& floorY) const;
     bool tryMoveEnemy(Enemy& enemy, const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& step) const;
     void keepEnemiesSeparated(const Player& player, const Environment& environment, const std::vector<Bounds>& colliders);
