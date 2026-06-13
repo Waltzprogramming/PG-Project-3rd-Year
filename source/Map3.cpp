@@ -58,6 +58,19 @@ constexpr glm::vec3 Map3PlayerCollisionHalf{0.048f, Map3PlayerHeight * 0.46f, 0.
 constexpr float Map3PlayerVisualYOffset = -0.24f;
 constexpr float Map3PlayerSpeed3D = 1.55f;
 constexpr float Map3PlayerSpeed2D = 1.75f;
+constexpr float Map3JumpBlockedMinX = -4.2f;
+constexpr float Map3JumpBlockedMaxX = -1.7f;
+
+struct Map3ModeRestrictionRange {
+    float minX{0.0f};
+    float maxX{0.0f};
+    PlayMode blockedMode{PlayMode::Mode2D};
+};
+
+constexpr std::array<Map3ModeRestrictionRange, 2> Map3ModeRestrictionRanges{{
+    {-8.9f, -8.5f, PlayMode::Mode2D},
+    {-4.2f, -1.7f, PlayMode::Mode3D}
+}};
 
 bool isMap3Environment(const Environment& environment) {
     std::string source = environment.levelSource();
@@ -76,6 +89,91 @@ bool map3BoundsIntersect(const Bounds& a, const Bounds& b) {
     const glm::vec3 delta = glm::abs(a.center - b.center);
     const glm::vec3 total = a.halfExtent + b.halfExtent;
     return delta.x < total.x && delta.y < total.y && delta.z < total.z;
+}
+
+bool map3JumpRestrictedAtX(float x) {
+    const float minX = std::min(Map3JumpBlockedMinX, Map3JumpBlockedMaxX);
+    const float maxX = std::max(Map3JumpBlockedMinX, Map3JumpBlockedMaxX);
+    return x >= minX && x <= maxX;
+}
+
+bool map3ModeRestrictedAtX(PlayMode mode, float x) {
+    for (const Map3ModeRestrictionRange& range : Map3ModeRestrictionRanges) {
+        if (range.blockedMode != mode) {
+            continue;
+        }
+        const float minX = std::min(range.minX, range.maxX);
+        const float maxX = std::max(range.minX, range.maxX);
+        if (x >= minX && x <= maxX) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void appendMap3DimensionRestrictionColliders(std::vector<Bounds>& colliders, const Environment& environment, float lockedDepth) {
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    if (worldMax.y <= worldMin.y || worldMax.z <= worldMin.z) {
+        return;
+    }
+
+    const float yCenter = (worldMin.y + worldMax.y) * 0.5f;
+    const float yHalf = (worldMax.y - worldMin.y) * 0.5f + 4.0f;
+    const float zHalf = std::max((worldMax.z - worldMin.z) * 0.5f + 1.0f, 2.0f);
+    for (const Map3ModeRestrictionRange& range : Map3ModeRestrictionRanges) {
+        if (range.blockedMode != currentMode) {
+            continue;
+        }
+        const float minX = std::min(range.minX, range.maxX);
+        const float maxX = std::max(range.minX, range.maxX);
+        colliders.push_back({{(minX + maxX) * 0.5f, yCenter, lockedDepth}, {(maxX - minX) * 0.5f, yHalf, zHalf}});
+    }
+}
+
+PlayerInput buildMap3PlayerInput(GLFWwindow* window, const Player& player) {
+    const bool toggleDown = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
+    if (toggleDown && !lastToggleKey) {
+        if (currentMode == PlayMode::Mode3D) {
+            if (map3ModeRestrictedAtX(PlayMode::Mode2D, player.position().x)) {
+                modeSwitchUnavailableUntil = glfwGetTime() + 1.8;
+            } else {
+                currentMode = PlayMode::Mode2D;
+                locked2DDepth = player.position().z;
+                modeSwitchUnavailableUntil = 0.0;
+            }
+        } else {
+            if (map3ModeRestrictedAtX(PlayMode::Mode3D, player.position().x)) {
+                modeSwitchUnavailableUntil = glfwGetTime() + 1.8;
+            } else {
+                currentMode = PlayMode::Mode3D;
+                modeSwitchUnavailableUntil = 0.0;
+            }
+        }
+    }
+    lastToggleKey = toggleDown;
+
+    PlayerInput input;
+    input.mode = currentMode;
+    input.cameraYawRadians = glm::radians(cameraYawDegrees);
+    input.lockedDepth = locked2DDepth;
+
+    const bool left = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+    const bool right = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+    const bool forward = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+    const bool backward = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+    input.move.x = (right ? 1.0f : 0.0f) - (left ? 1.0f : 0.0f);
+    input.move.y = currentMode == PlayMode::Mode3D ? (forward ? 1.0f : 0.0f) - (backward ? 1.0f : 0.0f) : 0.0f;
+    if (glm::length(input.move) > 1.0f) {
+        input.move = glm::normalize(input.move);
+    }
+
+    const bool jumpDown = currentMode == PlayMode::Mode2D
+        ? (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        : (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
+    input.jumpPressed = jumpDown && !lastJumpKey && !map3JumpRestrictedAtX(player.position().x);
+    lastJumpKey = jumpDown;
+    return input;
 }
 
 glm::vec3 map3MoveDirectionFromInput(const PlayerInput& input) {
@@ -1096,7 +1194,7 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
     const bool dodgeActive = now <= map3.dodgeActiveUntil;
 
     if (!map3.gameOver && !map3.mission.levelComplete()) {
-        PlayerInput playerInput = buildPlayerInput(window, map3.player);
+        PlayerInput playerInput = buildMap3PlayerInput(window, map3.player);
         const bool actionDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
         const bool actionPressed = actionDown && !lastShieldKey;
         lastShieldKey = actionDown;
@@ -1106,7 +1204,7 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
 
         const std::vector<Bounds>& colliders = map3ActiveColliders(map3);
         std::vector<Bounds> playerColliders = colliders;
-        appendDimensionRestrictionColliders(playerColliders, map3.environment, locked2DDepth);
+        appendMap3DimensionRestrictionColliders(playerColliders, map3.environment, locked2DDepth);
         prepareMap3Jump(map3.player, playerInput, map3.environment, playerColliders);
         map3.player.update(playerInput, playerColliders, map3.environment.worldMin(), map3.environment.worldMax(), frameDelta);
 

@@ -26,9 +26,9 @@ extern float locked2DDepth;
 extern glm::vec3 gameplayCameraPosition;
 extern glm::vec3 gameplayCameraTarget;
 extern bool cameraInitialized;
+extern double modeSwitchUnavailableUntil;
 
 bool environmentUsable(const Environment& environment);
-bool modeRestrictedAtX(PlayMode mode, float x);
 void appendDimensionRestrictionColliders(std::vector<Bounds>& colliders, const Environment& environment, float lockedDepth);
 std::string resolveAssetPath(const std::string& path);
 std::string resolveFirstExistingAsset(const std::initializer_list<std::string>& paths);

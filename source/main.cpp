@@ -45,18 +45,6 @@ constexpr float Map4Camera2DDistance = 3.35f;
 constexpr float DefaultCamera2DTargetHeight = 0.56f;
 constexpr float DefaultCamera2DHeight = 0.88f;
 
-struct Mode2DRestrictionRange {
-    float minX{0.0f};
-    float maxX{0.0f};
-    PlayMode blockedMode{PlayMode::Mode2D};
-    bool blocksJump{false};
-};
-
-constexpr std::array<Mode2DRestrictionRange, 2> Mode2DRestrictionRanges{{
-    {-8.9f, -8.5f, PlayMode::Mode2D, false},
-    {-4.2f, -1.7f, PlayMode::Mode3D, true}
-}};
-
 enum class EstadoJuego {
     MENU_PRINCIPAL,
     MENU_MUNDOS,
@@ -141,52 +129,10 @@ bool environmentUsable(const Environment& environment) {
         worldMax.z > worldMin.z;
 }
 
-bool modeRestrictedAtX(PlayMode mode, float x) {
-    for (const Mode2DRestrictionRange& range : Mode2DRestrictionRanges) {
-        if (range.blockedMode != mode) {
-            continue;
-        }
-        const float minX = std::min(range.minX, range.maxX);
-        const float maxX = std::max(range.minX, range.maxX);
-        if (x >= minX && x <= maxX) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool jumpRestrictedAtX(float x) {
-    for (const Mode2DRestrictionRange& range : Mode2DRestrictionRanges) {
-        if (!range.blocksJump) {
-            continue;
-        }
-        const float minX = std::min(range.minX, range.maxX);
-        const float maxX = std::max(range.minX, range.maxX);
-        if (x >= minX && x <= maxX) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void appendDimensionRestrictionColliders(std::vector<Bounds>& colliders, const Environment& environment, float lockedDepth) {
-    const glm::vec3 worldMin = environment.worldMin();
-    const glm::vec3 worldMax = environment.worldMax();
-    if (worldMax.y <= worldMin.y || worldMax.z <= worldMin.z) {
-        return;
-    }
-
-    const float yCenter = (worldMin.y + worldMax.y) * 0.5f;
-    const float yHalf = (worldMax.y - worldMin.y) * 0.5f + 4.0f;
-    const float zHalf = std::max((worldMax.z - worldMin.z) * 0.5f + 1.0f, 2.0f);
-    for (const Mode2DRestrictionRange& range : Mode2DRestrictionRanges) {
-        if (range.blockedMode != currentMode) {
-            continue;
-        }
-        const float minX = std::min(range.minX, range.maxX);
-        const float maxX = std::max(range.minX, range.maxX);
-        colliders.push_back({{(minX + maxX) * 0.5f, yCenter, lockedDepth}, {(maxX - minX) * 0.5f, yHalf, zHalf}});
-    }
+    (void)colliders;
+    (void)environment;
+    (void)lockedDepth;
 }
 
 std::string resolveAssetPath(const std::string& path) {
@@ -2057,20 +2003,12 @@ PlayerInput buildPlayerInput(GLFWwindow* window, const Player& player) {
     const bool toggleDown = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
     if (toggleDown && !lastToggleKey) {
         if (currentMode == PlayMode::Mode3D) {
-            if (modeRestrictedAtX(PlayMode::Mode2D, player.position().x)) {
-                modeSwitchUnavailableUntil = glfwGetTime() + 1.8;
-            } else {
-                currentMode = PlayMode::Mode2D;
-                locked2DDepth = player.position().z;
-                modeSwitchUnavailableUntil = 0.0;
-            }
+            currentMode = PlayMode::Mode2D;
+            locked2DDepth = player.position().z;
+            modeSwitchUnavailableUntil = 0.0;
         } else {
-            if (modeRestrictedAtX(PlayMode::Mode3D, player.position().x)) {
-                modeSwitchUnavailableUntil = glfwGetTime() + 1.8;
-            } else {
-                currentMode = PlayMode::Mode3D;
-                modeSwitchUnavailableUntil = 0.0;
-            }
+            currentMode = PlayMode::Mode3D;
+            modeSwitchUnavailableUntil = 0.0;
         }
     }
     lastToggleKey = toggleDown;
@@ -2093,7 +2031,7 @@ PlayerInput buildPlayerInput(GLFWwindow* window, const Player& player) {
     const bool jumpDown = currentMode == PlayMode::Mode2D
         ? (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         : (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
-    input.jumpPressed = jumpDown && !lastJumpKey && !jumpRestrictedAtX(player.position().x);
+    input.jumpPressed = jumpDown && !lastJumpKey;
     lastJumpKey = jumpDown;
     return input;
 }
