@@ -246,7 +246,7 @@ void prepareMap3Jump(Player& player, PlayerInput& input, const Environment& envi
 }
 
 void resetMap3View(const Player& player) {
-    currentMode = PlayMode::Mode3D;
+    currentMode = PlayMode::Mode2D;
     lastToggleKey = false;
     lastJumpKey = false;
     lastShieldKey = false;
@@ -854,8 +854,10 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
         map3.damageCooldown = std::max(0.0f, map3.damageCooldown - frameDelta);
 
         const std::vector<Bounds>& colliders = map3ActiveColliders(map3);
-        prepareMap3Jump(map3.player, playerInput, map3.environment, colliders);
-        map3.player.update(playerInput, colliders, map3.environment.worldMin(), map3.environment.worldMax(), frameDelta);
+        std::vector<Bounds> playerColliders = colliders;
+        appendDimensionRestrictionColliders(playerColliders, map3.environment, locked2DDepth);
+        prepareMap3Jump(map3.player, playerInput, map3.environment, playerColliders);
+        map3.player.update(playerInput, playerColliders, map3.environment.worldMin(), map3.environment.worldMax(), frameDelta);
 
         if (actionPressed) {
             if (currentMode == PlayMode::Mode3D && map3.dodgeCooldown <= 0.0f) {

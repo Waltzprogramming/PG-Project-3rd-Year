@@ -46,6 +46,7 @@ struct MenuContext {
     TextSprite tituloCreditos;
     TextSprite textoCreditos;
     TextSprite noDisponible;
+    TextSprite modoNoDisponible;
     std::array<TextSprite, MissionCoinTotal + 1> coinCounters;
     std::array<TextSprite, MissionCoinTotal + 1> coinMessages;
     TextSprite estrellaLista;

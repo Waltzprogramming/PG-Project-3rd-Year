@@ -1281,7 +1281,9 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
                 mapa4.shieldActive = false;
             }
         }
-        mapa4.player.update(playerInput, mapa4.environment.collisionPreview(), mapa4.environment.worldMin(), mapa4.environment.worldMax(), frameDelta);
+        std::vector<Bounds> playerColliders = mapa4.environment.collisionPreview();
+        appendDimensionRestrictionColliders(playerColliders, mapa4.environment, locked2DDepth);
+        mapa4.player.update(playerInput, playerColliders, mapa4.environment.worldMin(), mapa4.environment.worldMax(), frameDelta);
         mapa4.lightPickups.update(mapa4.player, now, frameDelta, mapa4.lightEnergy);
         mapa4.coinCollectDelay = std::max(0.0f, mapa4.coinCollectDelay - frameDelta);
         updateMarioMapa4PipeTeleport(mapa4, frameDelta, teleportPressed);
