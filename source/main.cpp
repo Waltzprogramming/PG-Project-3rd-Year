@@ -39,14 +39,10 @@ constexpr int WindowWidth = 1600;
 constexpr int WindowHeight = 900;
 constexpr int MaxLights = 24;
 constexpr float DefaultCamera3DDistance = 4.25f;
-constexpr float Map3Camera3DDistance = 1.5f;
 constexpr float Map4Camera3DDistance = 3.10f;
 constexpr float DefaultCamera2DDistance = 6.2f;
-constexpr float Map3Camera2DDistance = 2.0f;
 constexpr float Map4Camera2DDistance = 3.35f;
 constexpr float DefaultCamera2DTargetHeight = 0.56f;
-constexpr float Map3Camera2DTargetHeight = 0.70f;
-constexpr float Map3Camera2DHeight = 0.20f;
 constexpr float DefaultCamera2DHeight = 0.88f;
 
 enum class EstadoJuego {
@@ -105,7 +101,7 @@ double lastMouseX = WindowWidth * 0.5;
 double lastMouseY = WindowHeight * 0.5;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
-PlayMode currentMode = PlayMode::Mode3D;
+PlayMode currentMode = PlayMode::Mode2D;
 EstadoJuego appState = EstadoJuego::MENU_PRINCIPAL;
 EstadoJuego lastCursorState = EstadoJuego::MENU_PRINCIPAL;
 bool lastToggleKey = false;
@@ -120,6 +116,7 @@ float locked2DDepth = 0.0f;
 glm::vec3 gameplayCameraPosition{0.0f, 6.0f, 14.0f};
 glm::vec3 gameplayCameraTarget{0.0f, 2.0f, 0.0f};
 bool cameraInitialized = false;
+double modeSwitchUnavailableUntil = 0.0;
 
 bool environmentUsable(const Environment& environment) {
     // Comprueba si un mapa cargó colisiones y límites válidos antes de usarlo en juego.
@@ -131,11 +128,10 @@ bool environmentUsable(const Environment& environment) {
         worldMax.z > worldMin.z;
 }
 
-bool isMap3Environment(const Environment& environment) {
-    std::string source = environment.levelSource();
-    std::replace(source.begin(), source.end(), '\\', '/');
-    return source.find("assets/mundo3/") != std::string::npos ||
-        source.find("game_pirate_adventure_map") != std::string::npos;
+void appendDimensionRestrictionColliders(std::vector<Bounds>& colliders, const Environment& environment, float lockedDepth) {
+    (void)colliders;
+    (void)environment;
+    (void)lockedDepth;
 }
 
 std::string resolveAssetPath(const std::string& path) {
@@ -514,6 +510,20 @@ void drawUnavailableMessage(MenuContext& menu, int width, int height, float time
     drawRect(menu, {panel.x + 6.0f, panel.y + 8.0f, panel.width, panel.height}, {0.02f, 0.04f, 0.08f, 0.45f});
     drawRect(menu, panel, {0.95f, 0.52f, 0.18f, 0.96f});
     drawText(menu, menu.noDisponible, panel.x + (panel.width - menu.noDisponible.size.x) * 0.5f, panel.y + 13.0f);
+}
+
+void drawModeSwitchUnavailableMessage(MenuContext& menu, int width, int height, float timeSeconds) {
+    if (timeSeconds > static_cast<float>(modeSwitchUnavailableUntil)) {
+        return;
+    }
+
+    beginUiFrame(menu, width, height);
+    const Rect panel = centeredRect(width * 0.5f, height - 132.0f, 360.0f, 64.0f);
+    drawRect(menu, {panel.x + 6.0f, panel.y + 8.0f, panel.width, panel.height}, {0.02f, 0.04f, 0.08f, 0.45f});
+    drawRect(menu, panel, {0.95f, 0.52f, 0.18f, 0.96f});
+    drawText(menu, menu.modoNoDisponible,
+        panel.x + (panel.width - menu.modoNoDisponible.size.x) * 0.5f,
+        panel.y + (panel.height - menu.modoNoDisponible.size.y) * 0.5f);
 }
 
 bool MissionManager::initialize() {
@@ -1631,34 +1641,6 @@ void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int he
     }
 }
 
-std::wstring formatMap3PlayerX(float x) {
-    const int tenths = static_cast<int>(std::lround(x * 10.0f));
-    const int absoluteTenths = std::abs(tenths);
-    std::wstring value = tenths < 0 ? L"-" : L"";
-    value += std::to_wstring(absoluteTenths / 10);
-    value += L".";
-    value += std::to_wstring(absoluteTenths % 10);
-    return value;
-}
-
-void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, int height) {
-    static int cachedXTenths = std::numeric_limits<int>::min();
-    const int currentXTenths = static_cast<int>(std::lround(map3.player.position().x * 10.0f));
-    if (currentXTenths != cachedXTenths || !menu.map3PlayerX.texture || !menu.map3PlayerX.texture->valid()) {
-        cachedXTenths = currentXTenths;
-        menu.map3PlayerX = createTextSprite(formatMap3PlayerX(map3.player.position().x), 38, glm::vec3(1.0f), 180, false, true);
-    }
-
-    beginUiFrame(menu, width, height);
-    const float panelWidth = std::max(116.0f, menu.map3PlayerX.size.x + 34.0f);
-    const Rect panel = centeredRect(width * 0.5f, 20.0f, panelWidth, 56.0f);
-    drawRect(menu, {panel.x + 5.0f, panel.y + 6.0f, panel.width, panel.height}, {0.01f, 0.02f, 0.05f, 0.46f});
-    drawRect(menu, panel, {0.06f, 0.16f, 0.30f, 0.88f});
-    drawText(menu, menu.map3PlayerX,
-        panel.x + (panel.width - menu.map3PlayerX.size.x) * 0.5f,
-        panel.y + (panel.height - menu.map3PlayerX.size.y) * 0.5f - 1.0f);
-}
-
 void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int height, float timeSeconds) {
     // HUD de combate de Mapa 1 reutilizado como referencia visual para otros sistemas.
     beginUiFrame(menu, width, height);
@@ -1851,8 +1833,8 @@ void mostrarCreditos(MenuContext& menu, int width, int height, float timeSeconds
 }
 
 void resetGameplayView(const Player& player) {
-    // Restaura la cámara libre y el estado de entrada para comenzar en 3D.
-    currentMode = PlayMode::Mode3D;
+    // Restaura la camara y el estado de entrada para comenzar en 2D.
+    currentMode = PlayMode::Mode2D;
     lastToggleKey = false;
     lastJumpKey = false;
     lastInteractKey = false;
@@ -2022,8 +2004,10 @@ PlayerInput buildPlayerInput(GLFWwindow* window, const Player& player) {
         if (currentMode == PlayMode::Mode3D) {
             currentMode = PlayMode::Mode2D;
             locked2DDepth = player.position().z;
+            modeSwitchUnavailableUntil = 0.0;
         } else {
             currentMode = PlayMode::Mode3D;
+            modeSwitchUnavailableUntil = 0.0;
         }
     }
     lastToggleKey = toggleDown;
@@ -2071,9 +2055,7 @@ void updateGameplayCamera(const Player& player, const Environment& environment, 
         const bool marioMap4 = isMarioMapa4Environment(environment);
         const float yaw = glm::radians(cameraYawDegrees);
         const float pitch = glm::radians(cameraPitchDegrees);
-        const float distance = marioMap4
-            ? Map4Camera3DDistance
-            : (isMap3Environment(environment) ? Map3Camera3DDistance : DefaultCamera3DDistance);
+        const float distance = marioMap4 ? Map4Camera3DDistance : DefaultCamera3DDistance;
         const float horizontalDistance = std::cos(pitch) * distance;
         const glm::vec3 orbitOffset(
             std::sin(yaw) * horizontalDistance,
@@ -2082,12 +2064,11 @@ void updateGameplayCamera(const Player& player, const Environment& environment, 
         desiredTarget = player.position() + glm::vec3(0.0f, marioMap4 ? 0.44f : 0.50f, 0.0f);
         desiredPosition = desiredTarget + orbitOffset;
     } else {
-        const bool map3Environment = isMap3Environment(environment);
-        const float camera2DTargetHeight = map3Environment ? Map3Camera2DTargetHeight : DefaultCamera2DTargetHeight;
-        const float camera2DHeight = map3Environment ? Map3Camera2DHeight : DefaultCamera2DHeight;
+        const float camera2DTargetHeight = DefaultCamera2DTargetHeight;
+        const float camera2DHeight = DefaultCamera2DHeight;
         const float camera2DDistance = isMarioMapa4Environment(environment)
             ? Map4Camera2DDistance
-            : (map3Environment ? Map3Camera2DDistance : DefaultCamera2DDistance);
+            : DefaultCamera2DDistance;
         desiredTarget = player.position() + glm::vec3(0.0f, camera2DTargetHeight, 0.0f);
         desiredPosition = desiredTarget + glm::vec3(0.0f, camera2DHeight, camera2DDistance);
     }
@@ -2210,6 +2191,7 @@ bool initializeMenu(MenuContext& menu) {
         L"Mundo 2: [Nombre del estudiante]",
         27, white, 610, true, false);
     menu.noDisponible = createTextSprite(L"Este mundo a\u00fan no est\u00e1 disponible", 26, white, 510, false, true);
+    menu.modoNoDisponible = createTextSprite(L"No est\u00e1 disponible", 28, white, 330, false, true);
     for (int i = 0; i <= MissionCoinTotal; ++i) {
         menu.coinCounters[i] = createTextSprite(formatCoinProgress(i), 28, white, 132, false, true);
         menu.coinMessages[i] = createTextSprite(formatCoinProgress(i), 31, white, 132, false, true);
@@ -2251,7 +2233,9 @@ void renderMundo2(GLFWwindow* window, Mundo2Runtime& mundo2, MenuContext& menu, 
     const bool interactPressed = interactDown && !lastInteractKey;
     lastInteractKey = interactDown;
 
-    mundo2.player.update(playerInput, mundo2.environment.collisionPreview(), mundo2.environment.worldMin(), mundo2.environment.worldMax(), deltaTime);
+    std::vector<Bounds> playerColliders = mundo2.environment.collisionPreview();
+    appendDimensionRestrictionColliders(playerColliders, mundo2.environment, locked2DDepth);
+    mundo2.player.update(playerInput, playerColliders, mundo2.environment.worldMin(), mundo2.environment.worldMax(), deltaTime);
     mundo2.mission.update(mundo2.player, now);
     mundo2.toad.update(mundo2.player, interactPressed, now);
     updateGameplayCamera(mundo2.player, mundo2.environment, mundo2.mission, now, deltaTime);
@@ -2389,6 +2373,7 @@ int main(int argc, char** argv) {
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
             } else {
                 renderMundo2(window, mundo2, menu, sceneShader, lavaShader, now);
+                drawModeSwitchUnavailableMessage(menu, width, height, now);
             }
         } else if (appState == EstadoJuego::MUNDO_3) {
             if (!iniciarMap3(map3)) {
@@ -2403,6 +2388,7 @@ int main(int argc, char** argv) {
                 } else if (map3.gameOver) {
                     drawGameOverHud(menu, width, height);
                 }
+                drawModeSwitchUnavailableMessage(menu, width, height, now);
             }
         } else if (appState == EstadoJuego::MUNDO_4) {
             if (!iniciarMapa4(mapa4)) {
@@ -2417,6 +2403,7 @@ int main(int argc, char** argv) {
                 if (mapa4.gameOver) {
                     drawGameOverHud(menu, width, height);
                 }
+                drawModeSwitchUnavailableMessage(menu, width, height, now);
             }
         } else {
             glDisable(GL_DEPTH_TEST);

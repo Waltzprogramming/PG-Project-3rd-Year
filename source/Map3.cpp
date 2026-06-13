@@ -21,27 +21,63 @@
 namespace {
 constexpr float Map3EnemySpeed3D = 1.18f;
 constexpr float Map3EnemySpeed2D = 1.38f;
-constexpr float Map3EnemyDetectionRange = 6.2f;
+constexpr float Map3EnemyDetectionRange = 7.4f;
 constexpr float Map3EnemyHitCooldown = 0.85f;
 constexpr float Map3DodgeDistance = 1.75f;
 constexpr float Map3DodgeCooldown = 0.72f;
 constexpr float Map3DodgeActiveTime = 0.28f;
-constexpr float Map3ParryActiveTime = 0.42f;
+constexpr float Map3ParryActiveTime = 0.30f;
 constexpr float Map3ParryRadius = 1.24f;
-constexpr float Map3EnemyProjectileSpeed = 3.05f;
-constexpr float Map3EnemyProjectileCooldown = 1.65f;
+constexpr float Map3EnemyProjectileSpeed = 1.45f;
+constexpr float Map3EnemyProjectileCooldown = 5.0f;
+constexpr int Map3EnemyProjectileBurstCount = 3;
+constexpr float Map3EnemyProjectileBurstDelay = 1.0f;
 constexpr float Map3ProjectileLifetime = 4.25f;
 constexpr float Map3ReflectedProjectileSpeed = 4.65f;
 constexpr float Map3ProjectileHitRadius = 0.42f;
-constexpr int Map3InitialEnemyCount = 5;
-constexpr float Map3EnemyWaveInterval = 30.0f;
-constexpr float Map3EnemyVisualSize = 0.44f;
-constexpr float Map3EnemyCollisionHalf = 0.22f;
-constexpr float Map3EnemyPreferredRange2D = 1.28f;
-constexpr float Map3EnemyPreferredRange3D = 1.58f;
-constexpr float Map3EnemyMinimumSpawnDistance = 5.2f;
+constexpr int Map3InitialEnemyCount = 2;
+constexpr float Map3EnemyWaveInterval = 10.0f;
+constexpr float Map3EnemyVisualSize = 0.38f;
+constexpr float Map3EnemyCollisionHalf = 0.14f;
+constexpr float Map3EnemyPreferredRange2D = 2.05f;
+constexpr float Map3EnemyPreferredRange3D = 2.45f;
+constexpr float Map3EnemyMinimumSpawnDistance = 3.2f;
+constexpr float Map3EnemyMinimumSeparation = 0.86f;
+constexpr float Map3EnemyRelocationDistance = 3.35f;
+constexpr float Map3EnemyProjectileCollisionRadius = 0.10f;
+constexpr float Map3EnemyProjectileVisualRadius = 0.22f;
+constexpr float Map3ReflectedProjectileVisualRadius = 0.24f;
 constexpr float Map3PathCenterZOffset = 0.72f;
 constexpr float Map3FinishX = 12.0f;
+constexpr float Map3Camera3DDistance = 1.5f;
+constexpr float Map3Camera2DDistance = 2.2f;
+constexpr float Map3Camera2DTargetHeight = 0.70f;
+constexpr float Map3Camera2DHeight = 0.20f;
+constexpr float Map3PlayerHeight = 0.34f;
+constexpr glm::vec3 Map3PlayerCollisionHalf{0.048f, Map3PlayerHeight * 0.46f, 0.038f};
+constexpr float Map3PlayerVisualYOffset = -0.24f;
+constexpr float Map3PlayerSpeed3D = 1.55f;
+constexpr float Map3PlayerSpeed2D = 1.75f;
+constexpr float Map3JumpBlockedMinX = -4.2f;
+constexpr float Map3JumpBlockedMaxX = -1.7f;
+
+struct Map3ModeRestrictionRange {
+    float minX{0.0f};
+    float maxX{0.0f};
+    PlayMode blockedMode{PlayMode::Mode2D};
+};
+
+constexpr std::array<Map3ModeRestrictionRange, 2> Map3ModeRestrictionRanges{{
+    {-8.9f, -8.5f, PlayMode::Mode2D},
+    {-4.2f, -1.7f, PlayMode::Mode3D}
+}};
+
+bool isMap3Environment(const Environment& environment) {
+    std::string source = environment.levelSource();
+    std::replace(source.begin(), source.end(), '\\', '/');
+    return source.find("assets/mundo3/") != std::string::npos ||
+        source.find("game_pirate_adventure_map") != std::string::npos;
+}
 
 bool isMap3PirateEnvironment(const Environment& environment) {
     std::string source = environment.levelSource();
@@ -53,6 +89,91 @@ bool map3BoundsIntersect(const Bounds& a, const Bounds& b) {
     const glm::vec3 delta = glm::abs(a.center - b.center);
     const glm::vec3 total = a.halfExtent + b.halfExtent;
     return delta.x < total.x && delta.y < total.y && delta.z < total.z;
+}
+
+bool map3JumpRestrictedAtX(float x) {
+    const float minX = std::min(Map3JumpBlockedMinX, Map3JumpBlockedMaxX);
+    const float maxX = std::max(Map3JumpBlockedMinX, Map3JumpBlockedMaxX);
+    return x >= minX && x <= maxX;
+}
+
+bool map3ModeRestrictedAtX(PlayMode mode, float x) {
+    for (const Map3ModeRestrictionRange& range : Map3ModeRestrictionRanges) {
+        if (range.blockedMode != mode) {
+            continue;
+        }
+        const float minX = std::min(range.minX, range.maxX);
+        const float maxX = std::max(range.minX, range.maxX);
+        if (x >= minX && x <= maxX) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void appendMap3DimensionRestrictionColliders(std::vector<Bounds>& colliders, const Environment& environment, float lockedDepth) {
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    if (worldMax.y <= worldMin.y || worldMax.z <= worldMin.z) {
+        return;
+    }
+
+    const float yCenter = (worldMin.y + worldMax.y) * 0.5f;
+    const float yHalf = (worldMax.y - worldMin.y) * 0.5f + 4.0f;
+    const float zHalf = std::max((worldMax.z - worldMin.z) * 0.5f + 1.0f, 2.0f);
+    for (const Map3ModeRestrictionRange& range : Map3ModeRestrictionRanges) {
+        if (range.blockedMode != currentMode) {
+            continue;
+        }
+        const float minX = std::min(range.minX, range.maxX);
+        const float maxX = std::max(range.minX, range.maxX);
+        colliders.push_back({{(minX + maxX) * 0.5f, yCenter, lockedDepth}, {(maxX - minX) * 0.5f, yHalf, zHalf}});
+    }
+}
+
+PlayerInput buildMap3PlayerInput(GLFWwindow* window, const Player& player) {
+    const bool toggleDown = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
+    if (toggleDown && !lastToggleKey) {
+        if (currentMode == PlayMode::Mode3D) {
+            if (map3ModeRestrictedAtX(PlayMode::Mode2D, player.position().x)) {
+                modeSwitchUnavailableUntil = glfwGetTime() + 1.8;
+            } else {
+                currentMode = PlayMode::Mode2D;
+                locked2DDepth = player.position().z;
+                modeSwitchUnavailableUntil = 0.0;
+            }
+        } else {
+            if (map3ModeRestrictedAtX(PlayMode::Mode3D, player.position().x)) {
+                modeSwitchUnavailableUntil = glfwGetTime() + 1.8;
+            } else {
+                currentMode = PlayMode::Mode3D;
+                modeSwitchUnavailableUntil = 0.0;
+            }
+        }
+    }
+    lastToggleKey = toggleDown;
+
+    PlayerInput input;
+    input.mode = currentMode;
+    input.cameraYawRadians = glm::radians(cameraYawDegrees);
+    input.lockedDepth = locked2DDepth;
+
+    const bool left = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+    const bool right = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+    const bool forward = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+    const bool backward = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+    input.move.x = (right ? 1.0f : 0.0f) - (left ? 1.0f : 0.0f);
+    input.move.y = currentMode == PlayMode::Mode3D ? (forward ? 1.0f : 0.0f) - (backward ? 1.0f : 0.0f) : 0.0f;
+    if (glm::length(input.move) > 1.0f) {
+        input.move = glm::normalize(input.move);
+    }
+
+    const bool jumpDown = currentMode == PlayMode::Mode2D
+        ? (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        : (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
+    input.jumpPressed = jumpDown && !lastJumpKey && !map3JumpRestrictedAtX(player.position().x);
+    lastJumpKey = jumpDown;
+    return input;
 }
 
 glm::vec3 map3MoveDirectionFromInput(const PlayerInput& input) {
@@ -246,7 +367,7 @@ void prepareMap3Jump(Player& player, PlayerInput& input, const Environment& envi
 }
 
 void resetMap3View(const Player& player) {
-    currentMode = PlayMode::Mode3D;
+    currentMode = PlayMode::Mode2D;
     lastToggleKey = false;
     lastJumpKey = false;
     lastShieldKey = false;
@@ -262,6 +383,71 @@ void resetMap3ViewForEnvironment(const Environment& environment, const Player& p
         cameraYawDegrees = -90.0f;
         cameraPitchDegrees = 14.0f;
     }
+}
+
+void configureMap3Player(Player& player) {
+    player.configureCharacterMetrics(
+        Map3PlayerHeight,
+        Map3PlayerCollisionHalf,
+        Map3PlayerVisualYOffset,
+        Map3PlayerSpeed3D,
+        Map3PlayerSpeed2D);
+}
+
+void updateMap3GameplayCamera(const Player& player, const Environment& environment, const MissionManager& mission, float timeSeconds, float dt) {
+    if (!isMap3Environment(environment)) {
+        updateGameplayCamera(player, environment, mission, timeSeconds, dt);
+        return;
+    }
+
+    const glm::vec3 playerTarget = player.position() + glm::vec3(0.0f, 0.50f, 0.0f);
+    glm::vec3 desiredTarget = playerTarget;
+    glm::vec3 desiredPosition;
+
+    if (mission.starFocusActive(timeSeconds)) {
+        const glm::vec3 star = mission.starPosition();
+        glm::vec3 viewDirection = player.position() - star;
+        viewDirection.y = 0.0f;
+        if (glm::length(viewDirection) < 0.1f) {
+            viewDirection = glm::vec3(0.0f, 0.0f, 1.0f);
+        }
+        viewDirection = glm::normalize(viewDirection);
+        desiredTarget = star + glm::vec3(0.0f, 0.34f, 0.0f);
+        desiredPosition = desiredTarget + viewDirection * 4.8f + glm::vec3(0.0f, 2.15f, 0.0f);
+    } else if (currentMode == PlayMode::Mode3D) {
+        const float yaw = glm::radians(cameraYawDegrees);
+        const float pitch = glm::radians(cameraPitchDegrees);
+        const float horizontalDistance = std::cos(pitch) * Map3Camera3DDistance;
+        const glm::vec3 orbitOffset(
+            std::sin(yaw) * horizontalDistance,
+            0.55f + std::sin(pitch) * Map3Camera3DDistance,
+            std::cos(yaw) * horizontalDistance);
+        desiredTarget = player.position() + glm::vec3(0.0f, 0.50f, 0.0f);
+        desiredPosition = desiredTarget + orbitOffset;
+    } else {
+        desiredTarget = player.position() + glm::vec3(0.0f, Map3Camera2DTargetHeight, 0.0f);
+        desiredPosition = desiredTarget + glm::vec3(0.0f, Map3Camera2DHeight, Map3Camera2DDistance);
+    }
+
+    const float smoothing = 1.0f - std::exp(-7.2f * dt);
+    if (!cameraInitialized) {
+        gameplayCameraPosition = desiredPosition;
+        gameplayCameraTarget = desiredTarget;
+        cameraInitialized = true;
+    } else {
+        gameplayCameraPosition = glm::mix(gameplayCameraPosition, desiredPosition, smoothing);
+        gameplayCameraTarget = glm::mix(gameplayCameraTarget, desiredTarget, smoothing);
+    }
+}
+
+std::wstring formatMap3PlayerX(float x) {
+    const int tenths = static_cast<int>(std::lround(x * 10.0f));
+    const int absoluteTenths = std::abs(tenths);
+    std::wstring value = tenths < 0 ? L"-" : L"";
+    value += std::to_wstring(absoluteTenths / 10);
+    value += L".";
+    value += std::to_wstring(absoluteTenths % 10);
+    return value;
 }
 
 Mesh createMap3ActionMesh() {
@@ -312,18 +498,31 @@ void renderMap3Projectiles(const Shader& shader, const std::vector<Map3Projectil
             continue;
         }
 
-        Material material;
-        material.baseColor = projectile.reflected ? glm::vec3(0.20f, 0.82f, 1.0f) : glm::vec3(1.0f, 0.22f, 0.16f);
-        material.emissive = projectile.reflected ? glm::vec3(0.05f, 0.18f, 0.24f) : glm::vec3(0.24f, 0.03f, 0.02f);
-        material.roughness = 0.42f;
-        material.fogAmount = 0.08f;
+        auto drawLayer = [&](float radius, const glm::vec3& baseColor, const glm::vec3& emissive, float opacity) {
+            Material material;
+            material.baseColor = baseColor;
+            material.emissive = emissive;
+            material.roughness = 0.28f;
+            material.fogAmount = 0.02f;
+            material.opacity = opacity;
 
-        glm::mat4 model(1.0f);
-        model = glm::translate(model, projectile.position);
-        model = glm::scale(model, glm::vec3(projectile.reflected ? 0.26f : 0.22f));
-        shader.setMat4("uModel", model);
-        bindSceneMaterial(shader, material);
-        projectileMesh.draw();
+            glm::mat4 model(1.0f);
+            model = glm::translate(model, projectile.position);
+            model = glm::scale(model, glm::vec3(radius));
+            shader.setMat4("uModel", model);
+            bindSceneMaterial(shader, material);
+            projectileMesh.draw();
+        };
+
+        glDepthMask(GL_FALSE);
+        if (projectile.reflected) {
+            drawLayer(Map3ReflectedProjectileVisualRadius * 1.65f, {0.30f, 0.92f, 1.0f}, {0.20f, 0.72f, 0.95f}, 0.32f);
+            drawLayer(Map3ReflectedProjectileVisualRadius, {0.72f, 0.98f, 1.0f}, {0.22f, 0.92f, 1.15f}, 0.96f);
+        } else {
+            drawLayer(Map3EnemyProjectileVisualRadius * 1.65f, {1.0f, 0.44f, 0.12f}, {0.92f, 0.24f, 0.04f}, 0.34f);
+            drawLayer(Map3EnemyProjectileVisualRadius, {1.0f, 0.88f, 0.18f}, {1.20f, 0.30f, 0.08f}, 0.98f);
+        }
+        glDepthMask(GL_TRUE);
     }
 }
 
@@ -396,9 +595,8 @@ bool updateMap3Projectiles(Map3Runtime& map3, float deltaTime, bool parryActive,
         }
 
         if (!remove && !projectile.reflected && !dodgeActive) {
-            const float horizontalDistance = glm::length(glm::vec2(projectile.position.x - playerCenter.x, projectile.position.z - playerCenter.z));
-            const float verticalDistance = std::abs(projectile.position.y - playerCenter.y);
-            if (horizontalDistance <= 0.44f && verticalDistance <= 0.78f) {
+            const Bounds projectileBounds{projectile.position, glm::vec3(Map3EnemyProjectileCollisionRadius)};
+            if (map3BoundsIntersect(projectileBounds, playerBounds)) {
                 hitPlayer = true;
                 remove = true;
             }
@@ -424,6 +622,15 @@ bool updateMap3Projectiles(Map3Runtime& map3, float deltaTime, bool parryActive,
     }
 
     return hitPlayer;
+}
+
+void spawnMap3EnemyProjectile(const glm::vec3& enemyPosition, const glm::vec3& shotDirection, std::vector<Map3Projectile>& projectiles) {
+    projectiles.push_back({
+        enemyPosition + glm::vec3(0.0f, 0.24f, 0.0f) + shotDirection * 0.24f,
+        shotDirection * Map3EnemyProjectileSpeed,
+        Map3ProjectileLifetime,
+        false
+    });
 }
 }
 
@@ -452,22 +659,24 @@ void Map3EnemyManager::addEnemies(int count, const Environment& environment, con
 
     const glm::vec3 worldMin = environment.worldMin();
     const glm::vec3 worldMax = environment.worldMax();
-    const glm::vec2 center((worldMin.x + worldMax.x) * 0.5f, (worldMin.z + worldMax.z) * 0.5f);
     const glm::vec2 span(std::max(worldMax.x - worldMin.x, 1.0f), std::max(worldMax.z - worldMin.z, 1.0f));
     const size_t baseIndex = m_enemies.size();
 
     for (int index = 0; index < count; ++index) {
         const size_t absoluteIndex = baseIndex + static_cast<size_t>(index);
-        const float lane = static_cast<float>((absoluteIndex % 5) - 2) * 0.16f;
-        const float progress = std::fmod(0.22f + static_cast<float>(absoluteIndex) * 0.137f, 0.76f);
-        const glm::vec2 anchor = center + glm::vec2(
-            -span.x * 0.38f + span.x * progress,
-            lane * span.y);
+        const float lane = static_cast<float>((absoluteIndex % 5) - 2) * 0.18f;
+        const float forwardDistance = 3.65f + static_cast<float>(absoluteIndex % 4) * 0.72f;
+        const float anchorX = std::clamp(playerSpawn.x + forwardDistance, worldMin.x + 0.8f, worldMax.x - 0.8f);
+        const float anchorZ = std::clamp(playerSpawn.z + lane * std::min(span.y, 3.2f), worldMin.z + 0.45f, worldMax.z - 0.45f);
+        const glm::vec2 anchor(anchorX, anchorZ);
         Enemy enemy;
         enemy.position = findSpawnPosition(environment, colliders, playerSpawn, anchor);
         enemy.spawnPosition = enemy.position;
         enemy.phase = static_cast<float>(absoluteIndex) * 1.21f;
         enemy.shotCooldown = 0.35f + static_cast<float>(absoluteIndex % 7) * 0.22f;
+        enemy.burstShotTimer = 0.0f;
+        enemy.burstShotDirection = glm::vec3(0.0f);
+        enemy.burstShotsRemaining = 0;
         enemy.health = 2;
         enemy.alive = true;
         m_enemies.push_back(enemy);
@@ -485,10 +694,21 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
 
         enemy.hurtTimer = std::max(0.0f, enemy.hurtTimer - deltaTime);
         enemy.shotCooldown = std::max(0.0f, enemy.shotCooldown - deltaTime);
+        enemy.burstShotTimer = std::max(0.0f, enemy.burstShotTimer - deltaTime);
         glm::vec3 toPlayer = playerPosition - enemy.position;
         if (currentMode == PlayMode::Mode2D) {
             toPlayer.z = 0.0f;
             enemy.position.z += (locked2DDepth - enemy.position.z) * std::min(1.0f, deltaTime * 5.0f);
+        }
+
+        if (enemy.burstShotsRemaining > 0 && enemy.burstShotTimer <= 0.0f) {
+            spawnMap3EnemyProjectile(enemy.position, enemy.burstShotDirection, projectiles);
+            --enemy.burstShotsRemaining;
+            if (enemy.burstShotsRemaining > 0) {
+                enemy.burstShotTimer = Map3EnemyProjectileBurstDelay;
+            } else {
+                enemy.shotCooldown = Map3EnemyProjectileCooldown;
+            }
         }
 
         const float distance = glm::length(toPlayer);
@@ -499,25 +719,23 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
             const float preferredRange = currentMode == PlayMode::Mode2D ? Map3EnemyPreferredRange2D : Map3EnemyPreferredRange3D;
             if (distance > preferredRange) {
                 tryMoveEnemy(enemy, environment, colliders, direction * speed * deltaTime);
-            } else if (distance < preferredRange * 0.72f) {
-                tryMoveEnemy(enemy, environment, colliders, -direction * speed * 0.72f * deltaTime);
+            } else if (distance < preferredRange * 0.90f) {
+                tryMoveEnemy(enemy, environment, colliders, -direction * speed * 0.86f * deltaTime);
             }
             enemy.yaw = std::atan2(direction.x, direction.z);
 
-            if (enemy.shotCooldown <= 0.0f && distance <= Map3EnemyDetectionRange * 0.92f && distance >= preferredRange * 0.62f) {
-                glm::vec3 shotDirection = playerPosition + glm::vec3(0.0f, 0.45f, 0.0f) - (enemy.position + glm::vec3(0.0f, 0.38f, 0.0f));
+            if (enemy.shotCooldown <= 0.0f && enemy.burstShotsRemaining <= 0 && distance <= Map3EnemyDetectionRange * 0.92f && distance >= preferredRange * 0.62f) {
+                glm::vec3 shotDirection = playerPosition + glm::vec3(0.0f, 0.20f, 0.0f) - (enemy.position + glm::vec3(0.0f, 0.24f, 0.0f));
                 if (currentMode == PlayMode::Mode2D) {
                     shotDirection.z = 0.0f;
                 }
                 if (glm::length(shotDirection) > 0.05f) {
+                    shotDirection.y = std::clamp(shotDirection.y, -0.08f, 0.04f);
                     shotDirection = glm::normalize(shotDirection);
-                    projectiles.push_back({
-                        enemy.position + glm::vec3(0.0f, 0.38f, 0.0f) + shotDirection * 0.38f,
-                        shotDirection * Map3EnemyProjectileSpeed,
-                        Map3ProjectileLifetime,
-                        false
-                    });
-                    enemy.shotCooldown = Map3EnemyProjectileCooldown + std::fmod(enemy.phase, 0.45f);
+                    enemy.burstShotDirection = shotDirection;
+                    spawnMap3EnemyProjectile(enemy.position, enemy.burstShotDirection, projectiles);
+                    enemy.burstShotsRemaining = Map3EnemyProjectileBurstCount - 1;
+                    enemy.burstShotTimer = Map3EnemyProjectileBurstDelay;
                 }
             }
         } else {
@@ -532,8 +750,17 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
             }
         }
 
-        if (!dodgeActive && map3BoundsIntersect(player.bounds(), enemyBounds(enemy))) {
-            hitPlayer = true;
+    }
+
+    keepEnemiesSeparated(player, environment, colliders);
+
+    if (!dodgeActive) {
+        const Bounds playerBounds = player.bounds();
+        for (const Enemy& enemy : m_enemies) {
+            if (enemy.alive && map3BoundsIntersect(playerBounds, enemyBounds(enemy))) {
+                hitPlayer = true;
+                break;
+            }
         }
     }
 
@@ -553,6 +780,7 @@ void Map3EnemyManager::render(const Shader& shader, float timeSeconds, const glm
         if (!m_parts.empty()) {
             for (const MissionRenderablePart& part : m_parts) {
                 Material material = part.material;
+                material.fogAmount = 0.05f;
                 if (enemy.hurtTimer > 0.0f) {
                     material.baseColor = glm::mix(material.baseColor, glm::vec3(1.0f, 0.25f, 0.18f), 0.65f);
                     material.emissive += glm::vec3(0.25f, 0.02f, 0.01f);
@@ -563,6 +791,7 @@ void Map3EnemyManager::render(const Shader& shader, float timeSeconds, const glm
             }
         } else {
             Material material = m_fallbackMaterial;
+            material.fogAmount = 0.05f;
             if (enemy.hurtTimer > 0.0f) {
                 material.baseColor = {1.0f, 0.22f, 0.18f};
             }
@@ -744,6 +973,125 @@ bool Map3EnemyManager::tryMoveEnemy(Enemy& enemy, const Environment& environment
     return true;
 }
 
+void Map3EnemyManager::keepEnemiesSeparated(const Player& player, const Environment& environment, const std::vector<Bounds>& colliders) {
+    for (std::size_t first = 0; first < m_enemies.size(); ++first) {
+        if (!m_enemies[first].alive) {
+            continue;
+        }
+
+        for (std::size_t second = first + 1; second < m_enemies.size(); ++second) {
+            if (!m_enemies[second].alive) {
+                continue;
+            }
+
+            const glm::vec3 delta = m_enemies[second].position - m_enemies[first].position;
+            const float distance = currentMode == PlayMode::Mode2D
+                ? std::abs(delta.x)
+                : glm::length(glm::vec2(delta.x, delta.z));
+            if (distance >= Map3EnemyMinimumSeparation) {
+                continue;
+            }
+
+            if (!relocateEnemyOppositePlayer(second, player, environment, colliders)) {
+                relocateEnemyOppositePlayer(first, player, environment, colliders);
+            }
+        }
+    }
+}
+
+bool Map3EnemyManager::relocateEnemyOppositePlayer(std::size_t enemyIndex, const Player& player, const Environment& environment, const std::vector<Bounds>& colliders) {
+    if (enemyIndex >= m_enemies.size() || !m_enemies[enemyIndex].alive) {
+        return false;
+    }
+
+    Enemy& enemy = m_enemies[enemyIndex];
+    const glm::vec3 playerPosition = player.position();
+    glm::vec3 fromPlayer = enemy.position - playerPosition;
+    fromPlayer.y = 0.0f;
+    if (currentMode == PlayMode::Mode2D) {
+        fromPlayer.z = 0.0f;
+    }
+    if (glm::length(fromPlayer) <= 0.05f) {
+        fromPlayer = enemy.position.x >= playerPosition.x
+            ? glm::vec3(1.0f, 0.0f, 0.0f)
+            : glm::vec3(-1.0f, 0.0f, 0.0f);
+    }
+
+    const glm::vec3 opposite = -glm::normalize(fromPlayer);
+    const std::array<float, 7> angleOffsets = {0.0f, 0.45f, -0.45f, 0.90f, -0.90f, 1.35f, -1.35f};
+    for (float angleOffset : angleOffsets) {
+        glm::vec3 direction = opposite;
+        if (currentMode == PlayMode::Mode3D) {
+            const float cosine = std::cos(angleOffset);
+            const float sine = std::sin(angleOffset);
+            direction = {
+                opposite.x * cosine - opposite.z * sine,
+                0.0f,
+                opposite.x * sine + opposite.z * cosine
+            };
+        } else {
+            direction = opposite.x >= 0.0f
+                ? glm::vec3(1.0f, 0.0f, 0.0f)
+                : glm::vec3(-1.0f, 0.0f, 0.0f);
+        }
+
+        const glm::vec3 anchor = playerPosition + direction * Map3EnemyRelocationDistance;
+        glm::vec3 candidate = findSpawnPosition(environment, colliders, playerPosition, glm::vec2(anchor.x, anchor.z));
+        if (currentMode == PlayMode::Mode2D) {
+            candidate.z = locked2DDepth;
+        }
+
+        float floorY = candidate.y;
+        if (!findFloorAt(colliders, candidate.x, candidate.z, playerPosition.y, floorY)) {
+            continue;
+        }
+        candidate.y = floorY + 0.001f;
+
+        const Bounds candidateBounds{candidate + glm::vec3(0.0f, Map3EnemyCollisionHalf, 0.0f), glm::vec3(Map3EnemyCollisionHalf)};
+        bool overlapsWorld = false;
+        for (const Bounds& collider : colliders) {
+            const float top = collider.center.y + collider.halfExtent.y;
+            if (std::abs(top - floorY) <= 0.08f) {
+                continue;
+            }
+            if (map3BoundsIntersect(candidateBounds, collider)) {
+                overlapsWorld = true;
+                break;
+            }
+        }
+        if (overlapsWorld || enemyCrowdsOthers(candidate, enemyIndex)) {
+            continue;
+        }
+
+        enemy.position = candidate;
+        enemy.spawnPosition = candidate;
+        enemy.yaw = std::atan2(playerPosition.x - candidate.x, playerPosition.z - candidate.z);
+        enemy.burstShotsRemaining = 0;
+        enemy.burstShotTimer = 0.0f;
+        enemy.shotCooldown = std::max(enemy.shotCooldown, 0.65f);
+        return true;
+    }
+
+    return false;
+}
+
+bool Map3EnemyManager::enemyCrowdsOthers(const glm::vec3& position, std::size_t ignoredIndex) const {
+    for (std::size_t index = 0; index < m_enemies.size(); ++index) {
+        if (index == ignoredIndex || !m_enemies[index].alive) {
+            continue;
+        }
+
+        const glm::vec3 delta = position - m_enemies[index].position;
+        const float distance = currentMode == PlayMode::Mode2D
+            ? std::abs(delta.x)
+            : glm::length(glm::vec2(delta.x, delta.z));
+        if (distance < Map3EnemyMinimumSeparation * 1.18f) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Bounds Map3EnemyManager::enemyBounds(const Enemy& enemy) const {
     return {enemy.position + glm::vec3(0.0f, Map3EnemyCollisionHalf, 0.0f), glm::vec3(Map3EnemyCollisionHalf)};
 }
@@ -776,7 +1124,7 @@ bool iniciarMap3(Map3Runtime& map3) {
             map3.dodgeActiveUntil = 0.0f;
             map3.parryActiveUntil = 0.0f;
             map3.nextEnemyWaveAt = 0.0f;
-            map3.nextEnemyWaveSize = Map3InitialEnemyCount + 1;
+            map3.nextEnemyWaveSize = Map3InitialEnemyCount;
             map3.projectiles.clear();
             map3.gameOver = false;
             map3.skipFirstUpdateFrame = true;
@@ -795,6 +1143,7 @@ bool iniciarMap3(Map3Runtime& map3) {
         "assets/mundo3/DS _ DSi - Flower Sun and Rain_ Murder and Mystery in Paradise - Playable Characters - Sumio Mondo (Horse)/SumioMondoS4/ch_01_switchskin.dae"
     });
     map3.player.load(playerPath);
+    configureMap3Player(map3.player);
 
     map3.collisionBounds = isMap3PirateEnvironment(map3.environment)
         ? buildMap3PirateCollision(map3.environment)
@@ -813,7 +1162,7 @@ bool iniciarMap3(Map3Runtime& map3) {
     map3.dodgeActiveUntil = 0.0f;
     map3.parryActiveUntil = 0.0f;
     map3.nextEnemyWaveAt = 0.0f;
-    map3.nextEnemyWaveSize = Map3InitialEnemyCount + 1;
+    map3.nextEnemyWaveSize = Map3InitialEnemyCount;
     map3.projectiles.clear();
     map3.gameOver = false;
     map3.skipFirstUpdateFrame = true;
@@ -845,7 +1194,7 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
     const bool dodgeActive = now <= map3.dodgeActiveUntil;
 
     if (!map3.gameOver && !map3.mission.levelComplete()) {
-        PlayerInput playerInput = buildPlayerInput(window, map3.player);
+        PlayerInput playerInput = buildMap3PlayerInput(window, map3.player);
         const bool actionDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
         const bool actionPressed = actionDown && !lastShieldKey;
         lastShieldKey = actionDown;
@@ -854,8 +1203,10 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
         map3.damageCooldown = std::max(0.0f, map3.damageCooldown - frameDelta);
 
         const std::vector<Bounds>& colliders = map3ActiveColliders(map3);
-        prepareMap3Jump(map3.player, playerInput, map3.environment, colliders);
-        map3.player.update(playerInput, colliders, map3.environment.worldMin(), map3.environment.worldMax(), frameDelta);
+        std::vector<Bounds> playerColliders = colliders;
+        appendMap3DimensionRestrictionColliders(playerColliders, map3.environment, locked2DDepth);
+        prepareMap3Jump(map3.player, playerInput, map3.environment, playerColliders);
+        map3.player.update(playerInput, playerColliders, map3.environment.worldMin(), map3.environment.worldMax(), frameDelta);
 
         if (actionPressed) {
             if (currentMode == PlayMode::Mode3D && map3.dodgeCooldown <= 0.0f) {
@@ -875,6 +1226,7 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
         if (now >= map3.nextEnemyWaveAt) {
             map3.enemies.addEnemies(map3.nextEnemyWaveSize, map3.environment, colliders, map3.player.position());
             map3.nextEnemyWaveAt = now + Map3EnemyWaveInterval;
+            ++map3.nextEnemyWaveSize;
         }
 
         const bool enemyTouchedPlayer = map3.enemies.update(map3.player, map3.environment, colliders, frameDelta, now, activeDodgeAfterInput, map3.projectiles);
@@ -892,7 +1244,7 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
         }
     }
 
-    updateGameplayCamera(map3.player, map3.environment, map3.mission, now, frameDelta);
+    updateMap3GameplayCamera(map3.player, map3.environment, map3.mission, now, frameDelta);
 
     int width = 0;
     int height = 0;
@@ -929,4 +1281,22 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
 
 bool map3DefensiveActionActive(const Map3Runtime& map3, float timeSeconds) {
     return timeSeconds <= map3.parryActiveUntil || timeSeconds <= map3.dodgeActiveUntil;
+}
+
+void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, int height) {
+    static int cachedXTenths = std::numeric_limits<int>::min();
+    const int currentXTenths = static_cast<int>(std::lround(map3.player.position().x * 10.0f));
+    if (currentXTenths != cachedXTenths || !menu.map3PlayerX.texture || !menu.map3PlayerX.texture->valid()) {
+        cachedXTenths = currentXTenths;
+        menu.map3PlayerX = createTextSprite(formatMap3PlayerX(map3.player.position().x), 38, glm::vec3(1.0f), 180, false, true);
+    }
+
+    beginUiFrame(menu, width, height);
+    const float panelWidth = std::max(116.0f, menu.map3PlayerX.size.x + 34.0f);
+    const Rect panel = centeredRect(width * 0.5f, 20.0f, panelWidth, 56.0f);
+    drawRect(menu, {panel.x + 5.0f, panel.y + 6.0f, panel.width, panel.height}, {0.01f, 0.02f, 0.05f, 0.46f});
+    drawRect(menu, panel, {0.06f, 0.16f, 0.30f, 0.88f});
+    drawText(menu, menu.map3PlayerX,
+        panel.x + (panel.width - menu.map3PlayerX.size.x) * 0.5f,
+        panel.y + (panel.height - menu.map3PlayerX.size.y) * 0.5f - 1.0f);
 }
