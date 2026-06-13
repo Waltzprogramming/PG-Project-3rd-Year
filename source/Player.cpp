@@ -101,25 +101,31 @@ bool Player::load(const std::string& modelPath) {
     }
 
     m_modelCenter = (m_modelMin + m_modelMax) * 0.5f;
-    const float modelHeight = std::max(m_modelMax.y - m_modelMin.y, 0.001f);
     const std::string normalizedModelPath = normalizeAssetKey(resolvePath(modelPath).string());
-    m_map3Variant = normalizedModelPath.find("assets/mundo3/") != std::string::npos;
     m_deadpoolVariant = normalizedModelPath.find("assets/characters/deadpool") != std::string::npos;
     m_marioMapVariant =
         normalizedModelPath.find("assets/mapa 4/luffy") != std::string::npos ||
         m_deadpoolVariant;
-    const float desiredHeight = m_map3Variant ? 0.34f : (m_deadpoolVariant ? 0.62f : (m_marioMapVariant ? 0.50f : 0.76f));
-    m_modelScale = desiredHeight / modelHeight;
-    m_collisionHalf = m_map3Variant
-        ? glm::vec3(0.048f, desiredHeight * 0.46f, 0.038f)
-        : (m_deadpoolVariant
+    const float desiredHeight = m_deadpoolVariant ? 0.62f : (m_marioMapVariant ? 0.50f : 0.76f);
+    const glm::vec3 collisionHalf = m_deadpoolVariant
         ? glm::vec3(0.17f, desiredHeight * 0.5f, 0.13f)
         : (m_marioMapVariant
             ? glm::vec3(0.14f, desiredHeight * 0.5f, 0.11f)
-            : glm::vec3(0.16f, desiredHeight * 0.5f, 0.12f)));
-    m_visualYOffset = m_map3Variant ? -0.24f : 0.0f;
+            : glm::vec3(0.16f, desiredHeight * 0.5f, 0.12f));
+    const float maxSpeed3D = m_marioMapVariant ? 2.55f : 4.25f;
+    const float maxSpeed2D = m_marioMapVariant ? 2.85f : 4.65f;
+    configureCharacterMetrics(desiredHeight, collisionHalf, 0.0f, maxSpeed3D, maxSpeed2D);
     m_modelYawOffset = 0.0f;
     return true;
+}
+
+void Player::configureCharacterMetrics(float desiredHeight, const glm::vec3& collisionHalf, float visualYOffset, float maxSpeed3D, float maxSpeed2D) {
+    const float modelHeight = std::max(m_modelMax.y - m_modelMin.y, 0.001f);
+    m_modelScale = desiredHeight / modelHeight;
+    m_collisionHalf = collisionHalf;
+    m_visualYOffset = visualYOffset;
+    m_maxSpeed3D = maxSpeed3D;
+    m_maxSpeed2D = maxSpeed2D;
 }
 
 void Player::spawnAt(const glm::vec3& feetPosition) {
@@ -203,11 +209,7 @@ void Player::updateHorizontalVelocity(const PlayerInput& input, float deltaTime)
         m_facingYaw = std::atan2(desiredDirection.x, desiredDirection.z);
     }
 
-    const float maxSpeed = m_map3Variant
-        ? (input.mode == PlayMode::Mode3D ? 1.55f : 1.75f)
-        : (m_marioMapVariant
-        ? (input.mode == PlayMode::Mode3D ? 2.55f : 2.85f)
-        : (input.mode == PlayMode::Mode3D ? 4.25f : 4.65f));
+    const float maxSpeed = input.mode == PlayMode::Mode3D ? m_maxSpeed3D : m_maxSpeed2D;
     const glm::vec3 targetVelocity = desiredDirection * maxSpeed;
     const float acceleration = m_grounded ? 30.0f : 12.0f;
     const float deceleration = m_grounded ? 18.0f : 5.0f;

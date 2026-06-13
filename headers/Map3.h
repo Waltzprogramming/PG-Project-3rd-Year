@@ -11,6 +11,7 @@
 #include <vector>
 
 struct GLFWwindow;
+struct MenuContext;
 
 struct Map3Projectile {
     glm::vec3 position{0.0f};
@@ -38,6 +39,9 @@ private:
         float phase{0.0f};
         float hurtTimer{0.0f};
         float shotCooldown{0.0f};
+        float burstShotTimer{0.0f};
+        glm::vec3 burstShotDirection{0.0f};
+        int burstShotsRemaining{0};
         int health{2};
         bool alive{true};
     };
@@ -77,7 +81,7 @@ struct Map3Runtime {
     float dodgeActiveUntil{0.0f};
     float parryActiveUntil{0.0f};
     float nextEnemyWaveAt{0.0f};
-    int nextEnemyWaveSize{6};
+    int nextEnemyWaveSize{2};
     std::vector<Map3Projectile> projectiles;
     std::vector<Bounds> collisionBounds;
     bool gameOver{false};
@@ -86,4 +90,5 @@ struct Map3Runtime {
 bool iniciarMap3(Map3Runtime& map3);
 void volverAlMenu(Map3Runtime& map3);
 void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader, const Shader& lavaShader, float now);
+void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, int height);
 bool map3DefensiveActionActive(const Map3Runtime& map3, float timeSeconds);

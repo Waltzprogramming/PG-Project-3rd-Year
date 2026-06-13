@@ -66,6 +66,7 @@ struct MenuContext {
 
 TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::vec3& color, int maxWidth, bool multiline, bool bold);
 Rect centeredRect(float centerX, float y, float width, float height);
+void beginUiFrame(MenuContext& menu, int width, int height);
 void drawRect(MenuContext& menu, const Rect& rect, const glm::vec4& color);
 void drawText(MenuContext& menu, const TextSprite& text, float x, float y, const glm::vec4& tint);
 inline void drawText(MenuContext& menu, const TextSprite& text, float x, float y) {
