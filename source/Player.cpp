@@ -111,7 +111,7 @@ bool Player::load(const std::string& modelPath) {
     const float desiredHeight = m_map3Variant ? 0.34f : (m_deadpoolVariant ? 0.62f : (m_marioMapVariant ? 0.50f : 0.76f));
     m_modelScale = desiredHeight / modelHeight;
     m_collisionHalf = m_map3Variant
-        ? glm::vec3(0.07f, desiredHeight * 0.5f, 0.055f)
+        ? glm::vec3(0.048f, desiredHeight * 0.46f, 0.038f)
         : (m_deadpoolVariant
         ? glm::vec3(0.17f, desiredHeight * 0.5f, 0.13f)
         : (m_marioMapVariant

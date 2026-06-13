@@ -21,25 +21,28 @@
 namespace {
 constexpr float Map3EnemySpeed3D = 1.18f;
 constexpr float Map3EnemySpeed2D = 1.38f;
-constexpr float Map3EnemyDetectionRange = 6.2f;
+constexpr float Map3EnemyDetectionRange = 7.4f;
 constexpr float Map3EnemyHitCooldown = 0.85f;
 constexpr float Map3DodgeDistance = 1.75f;
 constexpr float Map3DodgeCooldown = 0.72f;
 constexpr float Map3DodgeActiveTime = 0.28f;
 constexpr float Map3ParryActiveTime = 0.42f;
 constexpr float Map3ParryRadius = 1.24f;
-constexpr float Map3EnemyProjectileSpeed = 3.05f;
+constexpr float Map3EnemyProjectileSpeed = 3.15f;
 constexpr float Map3EnemyProjectileCooldown = 1.65f;
 constexpr float Map3ProjectileLifetime = 4.25f;
 constexpr float Map3ReflectedProjectileSpeed = 4.65f;
 constexpr float Map3ProjectileHitRadius = 0.42f;
 constexpr int Map3InitialEnemyCount = 5;
 constexpr float Map3EnemyWaveInterval = 30.0f;
-constexpr float Map3EnemyVisualSize = 0.44f;
-constexpr float Map3EnemyCollisionHalf = 0.22f;
-constexpr float Map3EnemyPreferredRange2D = 1.28f;
-constexpr float Map3EnemyPreferredRange3D = 1.58f;
-constexpr float Map3EnemyMinimumSpawnDistance = 5.2f;
+constexpr float Map3EnemyVisualSize = 0.56f;
+constexpr float Map3EnemyCollisionHalf = 0.20f;
+constexpr float Map3EnemyPreferredRange2D = 2.05f;
+constexpr float Map3EnemyPreferredRange3D = 2.45f;
+constexpr float Map3EnemyMinimumSpawnDistance = 3.2f;
+constexpr float Map3EnemyProjectileCollisionRadius = 0.15f;
+constexpr float Map3EnemyProjectileVisualRadius = 0.34f;
+constexpr float Map3ReflectedProjectileVisualRadius = 0.36f;
 constexpr float Map3PathCenterZOffset = 0.72f;
 constexpr float Map3FinishX = 12.0f;
 
@@ -312,18 +315,31 @@ void renderMap3Projectiles(const Shader& shader, const std::vector<Map3Projectil
             continue;
         }
 
-        Material material;
-        material.baseColor = projectile.reflected ? glm::vec3(0.20f, 0.82f, 1.0f) : glm::vec3(1.0f, 0.22f, 0.16f);
-        material.emissive = projectile.reflected ? glm::vec3(0.05f, 0.18f, 0.24f) : glm::vec3(0.24f, 0.03f, 0.02f);
-        material.roughness = 0.42f;
-        material.fogAmount = 0.08f;
+        auto drawLayer = [&](float radius, const glm::vec3& baseColor, const glm::vec3& emissive, float opacity) {
+            Material material;
+            material.baseColor = baseColor;
+            material.emissive = emissive;
+            material.roughness = 0.28f;
+            material.fogAmount = 0.02f;
+            material.opacity = opacity;
 
-        glm::mat4 model(1.0f);
-        model = glm::translate(model, projectile.position);
-        model = glm::scale(model, glm::vec3(projectile.reflected ? 0.26f : 0.22f));
-        shader.setMat4("uModel", model);
-        bindSceneMaterial(shader, material);
-        projectileMesh.draw();
+            glm::mat4 model(1.0f);
+            model = glm::translate(model, projectile.position);
+            model = glm::scale(model, glm::vec3(radius));
+            shader.setMat4("uModel", model);
+            bindSceneMaterial(shader, material);
+            projectileMesh.draw();
+        };
+
+        glDepthMask(GL_FALSE);
+        if (projectile.reflected) {
+            drawLayer(Map3ReflectedProjectileVisualRadius * 1.65f, {0.30f, 0.92f, 1.0f}, {0.20f, 0.72f, 0.95f}, 0.32f);
+            drawLayer(Map3ReflectedProjectileVisualRadius, {0.72f, 0.98f, 1.0f}, {0.22f, 0.92f, 1.15f}, 0.96f);
+        } else {
+            drawLayer(Map3EnemyProjectileVisualRadius * 1.65f, {1.0f, 0.44f, 0.12f}, {0.92f, 0.24f, 0.04f}, 0.34f);
+            drawLayer(Map3EnemyProjectileVisualRadius, {1.0f, 0.88f, 0.18f}, {1.20f, 0.30f, 0.08f}, 0.98f);
+        }
+        glDepthMask(GL_TRUE);
     }
 }
 
@@ -396,9 +412,8 @@ bool updateMap3Projectiles(Map3Runtime& map3, float deltaTime, bool parryActive,
         }
 
         if (!remove && !projectile.reflected && !dodgeActive) {
-            const float horizontalDistance = glm::length(glm::vec2(projectile.position.x - playerCenter.x, projectile.position.z - playerCenter.z));
-            const float verticalDistance = std::abs(projectile.position.y - playerCenter.y);
-            if (horizontalDistance <= 0.44f && verticalDistance <= 0.78f) {
+            const Bounds projectileBounds{projectile.position, glm::vec3(Map3EnemyProjectileCollisionRadius)};
+            if (map3BoundsIntersect(projectileBounds, playerBounds)) {
                 hitPlayer = true;
                 remove = true;
             }
@@ -452,17 +467,16 @@ void Map3EnemyManager::addEnemies(int count, const Environment& environment, con
 
     const glm::vec3 worldMin = environment.worldMin();
     const glm::vec3 worldMax = environment.worldMax();
-    const glm::vec2 center((worldMin.x + worldMax.x) * 0.5f, (worldMin.z + worldMax.z) * 0.5f);
     const glm::vec2 span(std::max(worldMax.x - worldMin.x, 1.0f), std::max(worldMax.z - worldMin.z, 1.0f));
     const size_t baseIndex = m_enemies.size();
 
     for (int index = 0; index < count; ++index) {
         const size_t absoluteIndex = baseIndex + static_cast<size_t>(index);
-        const float lane = static_cast<float>((absoluteIndex % 5) - 2) * 0.16f;
-        const float progress = std::fmod(0.22f + static_cast<float>(absoluteIndex) * 0.137f, 0.76f);
-        const glm::vec2 anchor = center + glm::vec2(
-            -span.x * 0.38f + span.x * progress,
-            lane * span.y);
+        const float lane = static_cast<float>((absoluteIndex % 5) - 2) * 0.18f;
+        const float forwardDistance = 3.65f + static_cast<float>(absoluteIndex % 4) * 0.72f;
+        const float anchorX = std::clamp(playerSpawn.x + forwardDistance, worldMin.x + 0.8f, worldMax.x - 0.8f);
+        const float anchorZ = std::clamp(playerSpawn.z + lane * std::min(span.y, 3.2f), worldMin.z + 0.45f, worldMax.z - 0.45f);
+        const glm::vec2 anchor(anchorX, anchorZ);
         Enemy enemy;
         enemy.position = findSpawnPosition(environment, colliders, playerSpawn, anchor);
         enemy.spawnPosition = enemy.position;
@@ -499,8 +513,8 @@ bool Map3EnemyManager::update(const Player& player, const Environment& environme
             const float preferredRange = currentMode == PlayMode::Mode2D ? Map3EnemyPreferredRange2D : Map3EnemyPreferredRange3D;
             if (distance > preferredRange) {
                 tryMoveEnemy(enemy, environment, colliders, direction * speed * deltaTime);
-            } else if (distance < preferredRange * 0.72f) {
-                tryMoveEnemy(enemy, environment, colliders, -direction * speed * 0.72f * deltaTime);
+            } else if (distance < preferredRange * 0.90f) {
+                tryMoveEnemy(enemy, environment, colliders, -direction * speed * 0.86f * deltaTime);
             }
             enemy.yaw = std::atan2(direction.x, direction.z);
 
@@ -553,6 +567,9 @@ void Map3EnemyManager::render(const Shader& shader, float timeSeconds, const glm
         if (!m_parts.empty()) {
             for (const MissionRenderablePart& part : m_parts) {
                 Material material = part.material;
+                material.baseColor = glm::mix(material.baseColor, glm::vec3(1.0f, 0.56f, 0.24f), 0.22f);
+                material.emissive += glm::vec3(0.16f, 0.06f, 0.025f);
+                material.fogAmount = 0.05f;
                 if (enemy.hurtTimer > 0.0f) {
                     material.baseColor = glm::mix(material.baseColor, glm::vec3(1.0f, 0.25f, 0.18f), 0.65f);
                     material.emissive += glm::vec3(0.25f, 0.02f, 0.01f);
@@ -563,6 +580,8 @@ void Map3EnemyManager::render(const Shader& shader, float timeSeconds, const glm
             }
         } else {
             Material material = m_fallbackMaterial;
+            material.emissive += glm::vec3(0.16f, 0.06f, 0.025f);
+            material.fogAmount = 0.05f;
             if (enemy.hurtTimer > 0.0f) {
                 material.baseColor = {1.0f, 0.22f, 0.18f};
             }
