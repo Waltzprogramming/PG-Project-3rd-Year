@@ -86,6 +86,7 @@ struct Map3Runtime {
     float dodgeCooldown{0.0f};
     float dodgeActiveUntil{0.0f};
     float parryActiveUntil{0.0f};
+    float invisibleWallNoticeUntil{0.0f};
     float nextEnemyWaveAt{0.0f};
     int nextEnemyWaveSize{2};
     std::vector<Map3Projectile> projectiles;

@@ -63,6 +63,8 @@ constexpr float Map3FinishX = 12.0f;
 constexpr float Map3BackwardWallX = -14.2f;
 constexpr float Map3Late2DWallX = 9.6f;
 constexpr float Map3InvisibleWallHalfThickness = 0.12f;
+constexpr float Map3InvisibleWallProbeDistance = 0.18f;
+constexpr float Map3InvisibleWallNoticeDuration = 1.85f;
 constexpr float Map3Camera3DDistance = 2.35f;
 constexpr float Map3Camera3DTargetHeight = 0.30f;
 constexpr float Map3Camera3DBaseHeight = 0.72f;
@@ -143,11 +145,12 @@ bool map3ModeRestrictedAtX(PlayMode mode, float x, bool levelComplete = false) {
     return false;
 }
 
-void appendMap3DimensionRestrictionColliders(std::vector<Bounds>& colliders, const Environment& environment, float lockedDepth) {
+std::vector<Bounds> buildMap3InvisibleWallColliders(const Environment& environment, float lockedDepth) {
+    std::vector<Bounds> walls;
     const glm::vec3 worldMin = environment.worldMin();
     const glm::vec3 worldMax = environment.worldMax();
     if (worldMax.x <= worldMin.x || worldMax.y <= worldMin.y || worldMax.z <= worldMin.z) {
-        return;
+        return walls;
     }
 
     const float yCenter = (worldMin.y + worldMax.y) * 0.5f;
@@ -155,10 +158,10 @@ void appendMap3DimensionRestrictionColliders(std::vector<Bounds>& colliders, con
     const float zCenter = (worldMin.z + worldMax.z) * 0.5f;
     const float zHalf = std::max((worldMax.z - worldMin.z) * 0.5f + 1.0f, 2.0f);
     if (Map3BackwardWallX > worldMin.x && Map3BackwardWallX < worldMax.x) {
-        colliders.push_back({{Map3BackwardWallX - Map3InvisibleWallHalfThickness, yCenter, zCenter}, {Map3InvisibleWallHalfThickness, yHalf, zHalf}});
+        walls.push_back({{Map3BackwardWallX - Map3InvisibleWallHalfThickness, yCenter, zCenter}, {Map3InvisibleWallHalfThickness, yHalf, zHalf}});
     }
     if (currentMode == PlayMode::Mode2D && Map3Late2DWallX > worldMin.x && Map3Late2DWallX < worldMax.x) {
-        colliders.push_back({{Map3Late2DWallX + Map3InvisibleWallHalfThickness, yCenter, lockedDepth}, {Map3InvisibleWallHalfThickness, yHalf, zHalf}});
+        walls.push_back({{Map3Late2DWallX + Map3InvisibleWallHalfThickness, yCenter, lockedDepth}, {Map3InvisibleWallHalfThickness, yHalf, zHalf}});
     }
 
     for (const Map3ModeRestrictionRange& range : Map3ModeRestrictionRanges) {
@@ -167,8 +170,14 @@ void appendMap3DimensionRestrictionColliders(std::vector<Bounds>& colliders, con
         }
         const float minX = std::min(range.minX, range.maxX);
         const float maxX = std::max(range.minX, range.maxX);
-        colliders.push_back({{(minX + maxX) * 0.5f, yCenter, lockedDepth}, {(maxX - minX) * 0.5f, yHalf, zHalf}});
+        walls.push_back({{(minX + maxX) * 0.5f, yCenter, lockedDepth}, {(maxX - minX) * 0.5f, yHalf, zHalf}});
     }
+    return walls;
+}
+
+void appendMap3DimensionRestrictionColliders(std::vector<Bounds>& colliders, const Environment& environment, float lockedDepth) {
+    std::vector<Bounds> walls = buildMap3InvisibleWallColliders(environment, lockedDepth);
+    colliders.insert(colliders.end(), walls.begin(), walls.end());
 }
 
 PlayerInput buildMap3PlayerInput(GLFWwindow* window, const Player& player, bool levelComplete) {
@@ -228,6 +237,29 @@ glm::vec3 map3MoveDirectionFromInput(const PlayerInput& input) {
         return {std::sin(input.cameraYawRadians), 0.0f, std::cos(input.cameraYawRadians)};
     }
     return glm::normalize(direction);
+}
+
+bool map3PlayerPushingInvisibleWall(const Player& player, const PlayerInput& input, const std::vector<Bounds>& invisibleWalls) {
+    if (invisibleWalls.empty() || glm::length(input.move) <= 0.05f) {
+        return false;
+    }
+
+    glm::vec3 direction = map3MoveDirectionFromInput(input);
+    direction.y = 0.0f;
+    if (glm::length(direction) <= 0.05f) {
+        return false;
+    }
+    direction = glm::normalize(direction);
+
+    Bounds probe = player.bounds();
+    probe.center += direction * Map3InvisibleWallProbeDistance;
+    probe.halfExtent += glm::vec3(0.018f, 0.0f, 0.018f);
+    for (const Bounds& wall : invisibleWalls) {
+        if (map3BoundsIntersect(probe, wall)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool positionOverlapsWorld(const Bounds& bounds, const std::vector<Bounds>& colliders) {
@@ -1483,6 +1515,7 @@ bool iniciarMap3(Map3Runtime& map3) {
             map3.dodgeCooldown = 0.0f;
             map3.dodgeActiveUntil = 0.0f;
             map3.parryActiveUntil = 0.0f;
+            map3.invisibleWallNoticeUntil = 0.0f;
             map3.nextEnemyWaveAt = 0.0f;
             map3.nextEnemyWaveSize = Map3InitialEnemyCount;
             map3.projectiles.clear();
@@ -1521,6 +1554,7 @@ bool iniciarMap3(Map3Runtime& map3) {
     map3.dodgeCooldown = 0.0f;
     map3.dodgeActiveUntil = 0.0f;
     map3.parryActiveUntil = 0.0f;
+    map3.invisibleWallNoticeUntil = 0.0f;
     map3.nextEnemyWaveAt = 0.0f;
     map3.nextEnemyWaveSize = Map3InitialEnemyCount;
     map3.projectiles.clear();
@@ -1543,6 +1577,7 @@ void volverAlMenu(Map3Runtime& map3) {
     map3.dodgeCooldown = 0.0f;
     map3.dodgeActiveUntil = 0.0f;
     map3.parryActiveUntil = 0.0f;
+    map3.invisibleWallNoticeUntil = 0.0f;
     map3.projectiles.clear();
 }
 
@@ -1564,9 +1599,13 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
 
         const std::vector<Bounds>& colliders = map3ActiveColliders(map3);
         std::vector<Bounds> playerColliders = colliders;
-        appendMap3DimensionRestrictionColliders(playerColliders, map3.environment, locked2DDepth);
+        std::vector<Bounds> invisibleWallColliders = buildMap3InvisibleWallColliders(map3.environment, locked2DDepth);
+        playerColliders.insert(playerColliders.end(), invisibleWallColliders.begin(), invisibleWallColliders.end());
         prepareMap3Jump(map3.player, playerInput, map3.environment, playerColliders);
         map3.player.update(playerInput, playerColliders, map3.environment.worldMin(), map3.environment.worldMax(), frameDelta);
+        if (map3PlayerPushingInvisibleWall(map3.player, playerInput, invisibleWallColliders)) {
+            map3.invisibleWallNoticeUntil = now + Map3InvisibleWallNoticeDuration;
+        }
 
         if (actionPressed) {
             if (currentMode == PlayMode::Mode3D && map3.dodgeCooldown <= 0.0f) {
@@ -1646,10 +1685,20 @@ bool map3DefensiveActionActive(const Map3Runtime& map3, float timeSeconds) {
 
 void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, int height) {
     static int cachedXTenths = std::numeric_limits<int>::min();
+    static TextSprite invisibleWallNotice;
     const int currentXTenths = static_cast<int>(std::lround(map3.player.position().x * 10.0f));
     if (currentXTenths != cachedXTenths || !menu.map3PlayerX.texture || !menu.map3PlayerX.texture->valid()) {
         cachedXTenths = currentXTenths;
         menu.map3PlayerX = createTextSprite(formatMap3PlayerX(map3.player.position().x), 38, glm::vec3(1.0f), 180, false, true);
+    }
+    if (!invisibleWallNotice.texture || !invisibleWallNotice.texture->valid()) {
+        invisibleWallNotice = createTextSprite(
+            L"No puedes pasar. Tal vez desde otra perspectiva sea posible.",
+            24,
+            glm::vec3(1.0f),
+            720,
+            false,
+            true);
     }
 
     beginUiFrame(menu, width, height);
@@ -1660,4 +1709,16 @@ void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, 
     drawText(menu, menu.map3PlayerX,
         panel.x + (panel.width - menu.map3PlayerX.size.x) * 0.5f,
         panel.y + (panel.height - menu.map3PlayerX.size.y) * 0.5f - 1.0f);
+
+    if (static_cast<float>(glfwGetTime()) <= map3.invisibleWallNoticeUntil) {
+        const float maxPanelWidth = std::max(280.0f, static_cast<float>(width) - 48.0f);
+        const float noticeWidth = std::min(maxPanelWidth, std::max(560.0f, invisibleWallNotice.size.x + 44.0f));
+        const Rect noticePanel = centeredRect(width * 0.5f, panel.y + panel.height + 12.0f, noticeWidth, 52.0f);
+        drawRect(menu, {noticePanel.x + 5.0f, noticePanel.y + 6.0f, noticePanel.width, noticePanel.height}, {0.01f, 0.02f, 0.05f, 0.42f});
+        drawRect(menu, noticePanel, {0.08f, 0.20f, 0.32f, 0.92f});
+        drawText(menu, invisibleWallNotice,
+            noticePanel.x + (noticePanel.width - invisibleWallNotice.size.x) * 0.5f,
+            noticePanel.y + (noticePanel.height - invisibleWallNotice.size.y) * 0.5f - 1.0f,
+            glm::vec4(1.0f, 0.94f, 0.76f, 1.0f));
+    }
 }
