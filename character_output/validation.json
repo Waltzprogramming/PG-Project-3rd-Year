@@ -1,0 +1,33 @@
+{
+  "mesh_count": 1,
+  "mesh_names": [
+    "PINKX_Character"
+  ],
+  "armature_count": 1,
+  "mesh_vertices": 31933,
+  "bones": 18,
+  "actions": [
+    {
+      "name": "Jump_Stylized",
+      "frame_start": 1.0,
+      "frame_end": 40.0
+    },
+    {
+      "name": "Walk_Stylized",
+      "frame_start": 1.0,
+      "frame_end": 25.0
+    }
+  ],
+  "materials": [
+    "Dots Stroke",
+    "Material",
+    "PINKX_PBR"
+  ],
+  "images": [
+    "Render Result",
+    "Viewer Node",
+    "texture_pbr_20250901",
+    "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+    "texture_pbr_20250901_normal"
+  ]
+}

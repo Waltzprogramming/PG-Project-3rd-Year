@@ -110,6 +110,8 @@ bool lastEscapeKey = false;
 bool lastInteractKey = false;
 bool lastMouseButton = false;
 bool lastShieldKey = false;
+double pendingScrollY = 0.0;
+float mapa1ShopScroll = 0.0f;
 float cameraYawDegrees = 0.0f;
 float cameraPitchDegrees = 18.0f;
 float locked2DDepth = 0.0f;
@@ -1641,7 +1643,210 @@ void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int he
     }
 }
 
-void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int height, float timeSeconds) {
+void drawRedGemIcon(MenuContext& menu, const Texture2D& texture, const Rect& rect, float timeSeconds) {
+    const float pulse = 0.92f + std::sin(timeSeconds * 5.0f) * 0.08f;
+    const Rect glow = scaleRect(rect, 1.22f * pulse);
+    drawRect(menu, glow, {0.84f, 0.01f, 0.04f, 0.18f});
+    if (texture.valid()) {
+        drawTexture(menu, texture, rect, {1.0f, 0.24f, 0.28f, 1.0f}, true);
+    }
+    else {
+        drawRect(menu, scaleRect(rect, 0.72f), {0.94f, 0.02f, 0.06f, 1.0f});
+    }
+}
+
+bool drawMapa1ShopButton(
+    MenuContext& menu,
+    const TextSprite& text,
+    const Rect& rect,
+    const glm::vec2& mouse,
+    bool clicked,
+    float timeSeconds,
+    bool enabled = true,
+    bool owned = false) {
+    const bool hovered = enabled &&
+        mouse.x >= rect.x && mouse.x <= rect.x + rect.width &&
+        mouse.y >= rect.y && mouse.y <= rect.y + rect.height;
+    const float pulse = 0.5f + 0.5f * std::sin(timeSeconds * 7.5f);
+    drawRect(menu, {rect.x + 7.0f, rect.y + 8.0f, rect.width, rect.height}, {0.0f, 0.0f, 0.0f, 0.58f});
+    drawRect(menu, {rect.x - 2.0f, rect.y - 2.0f, rect.width + 4.0f, rect.height + 4.0f},
+        owned ? glm::vec4(0.66f, 0.66f, 0.70f, 0.95f) : glm::vec4(0.92f, 0.04f, 0.06f, 0.98f));
+    drawRect(menu, rect,
+        owned ? glm::vec4(0.15f, 0.16f, 0.19f, 0.98f)
+        : enabled
+            ? (hovered ? glm::vec4(0.72f, 0.02f, 0.04f, 1.0f) : glm::vec4(0.22f, 0.02f, 0.04f, 0.98f))
+            : glm::vec4(0.10f, 0.10f, 0.12f, 0.92f));
+    if (hovered) {
+        drawRect(menu, {rect.x + 5.0f, rect.y + 5.0f, rect.width - 10.0f, rect.height - 10.0f},
+            {1.0f, 0.16f, 0.18f, 0.12f + pulse * 0.10f});
+        drawRect(menu, {rect.x, rect.y, 7.0f, rect.height}, {1.0f, 0.18f, 0.12f, 0.90f});
+    }
+    drawText(menu, text,
+        rect.x + (rect.width - text.size.x) * 0.5f,
+        rect.y + (rect.height - text.size.y) * 0.5f,
+        enabled || owned ? glm::vec4(1.0f) : glm::vec4(0.58f, 0.60f, 0.64f, 0.92f));
+    return hovered && clicked;
+}
+
+void drawMapa1Shop(
+    MenuContext& menu,
+    Mapa1& mapa1,
+    int width,
+    int height,
+    float timeSeconds,
+    const glm::vec2& mouse,
+    bool clicked,
+    float scrollY) {
+    drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.01f, 0.01f, 0.015f, 0.86f});
+
+    const float panelWidth = std::min(1160.0f, static_cast<float>(width) - 48.0f);
+    const float panelHeight = std::min(680.0f, static_cast<float>(height) - 42.0f);
+    const Rect panel = centeredRect(width * 0.5f, (height - panelHeight) * 0.5f, panelWidth, panelHeight);
+    drawRect(menu, {panel.x + 12.0f, panel.y + 14.0f, panel.width, panel.height}, {0.0f, 0.0f, 0.0f, 0.66f});
+    drawRect(menu, {panel.x - 3.0f, panel.y - 3.0f, panel.width + 6.0f, panel.height + 6.0f}, {0.72f, 0.02f, 0.04f, 0.98f});
+    drawRect(menu, panel, {0.035f, 0.035f, 0.045f, 0.99f});
+
+    const float headerHeight = 92.0f;
+    drawRect(menu, {panel.x, panel.y, panel.width, headerHeight}, {0.11f, 0.01f, 0.02f, 1.0f});
+    drawRect(menu, {panel.x, panel.y + headerHeight - 5.0f, panel.width, 5.0f}, {0.94f, 0.03f, 0.05f, 1.0f});
+    drawRect(menu, {panel.x + 22.0f, panel.y + 18.0f, 8.0f, 56.0f}, {0.98f, 0.06f, 0.08f, 1.0f});
+    drawText(menu, menu.tiendaTitulo, panel.x + 43.0f, panel.y + 9.0f);
+    drawText(menu, menu.tiendaSubtitulo, panel.x + 48.0f, panel.y + 52.0f, {0.82f, 0.82f, 0.86f, 1.0f});
+
+    const int gemCount = std::clamp(mapa1.spectralGemCount(), 0, 99);
+    const Rect balance{panel.x + panel.width - 330.0f, panel.y + 20.0f, 148.0f, 54.0f};
+    drawRect(menu, balance, {0.02f, 0.02f, 0.025f, 0.98f});
+    drawRedGemIcon(menu, mapa1.gemIconTexture(), {balance.x + 12.0f, balance.y + 9.0f, 36.0f, 36.0f}, timeSeconds);
+    drawText(menu, menu.gemCounters[gemCount], balance.x + 52.0f, balance.y + (balance.height - menu.gemCounters[gemCount].size.y) * 0.5f);
+
+    const Rect closeRect{panel.x + panel.width - 166.0f, panel.y + 20.0f, 140.0f, 54.0f};
+    if (drawMapa1ShopButton(menu, menu.tiendaCerrar, closeRect, mouse, clicked, timeSeconds)) {
+        mapa1.closeShop();
+        return;
+    }
+
+    const float sidebarWidth = 220.0f;
+    const Rect sidebar{panel.x, panel.y + headerHeight, sidebarWidth, panel.height - headerHeight};
+    drawRect(menu, sidebar, {0.055f, 0.055f, 0.065f, 1.0f});
+    drawRect(menu, {sidebar.x + sidebar.width - 3.0f, sidebar.y, 3.0f, sidebar.height}, {0.28f, 0.28f, 0.32f, 1.0f});
+    drawRect(menu, {sidebar.x + 16.0f, sidebar.y + 24.0f, sidebar.width - 31.0f, 58.0f}, {0.68f, 0.02f, 0.04f, 1.0f});
+    drawText(menu, menu.tiendaHabilidades, sidebar.x + 27.0f, sidebar.y + 31.0f);
+    drawText(menu, menu.tiendaManual, sidebar.x + 28.0f, sidebar.y + 105.0f, {0.72f, 0.72f, 0.76f, 1.0f});
+    drawText(menu, menu.tiendaCabina, sidebar.x + 28.0f, sidebar.y + 151.0f, {0.72f, 0.72f, 0.76f, 1.0f});
+    drawText(menu, menu.tiendaAyudaScroll, sidebar.x + 19.0f, sidebar.y + sidebar.height - 98.0f, {0.68f, 0.68f, 0.72f, 1.0f});
+
+    const Rect viewport{
+        panel.x + sidebarWidth + 22.0f,
+        panel.y + headerHeight + 18.0f,
+        panel.width - sidebarWidth - 48.0f,
+        panel.height - headerHeight - 42.0f
+    };
+    constexpr float contentHeight = 1075.0f;
+    const float maximumScroll = std::max(0.0f, contentHeight - viewport.height);
+    mapa1ShopScroll = std::clamp(mapa1ShopScroll - scrollY * 54.0f, 0.0f, maximumScroll);
+
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(
+        static_cast<int>(viewport.x),
+        std::max(0, height - static_cast<int>(viewport.y + viewport.height)),
+        std::max(0, static_cast<int>(viewport.width)),
+        std::max(0, static_cast<int>(viewport.height)));
+
+    const float contentX = viewport.x + 5.0f;
+    const float contentY = viewport.y - mapa1ShopScroll;
+    const float cardWidth = viewport.width - 26.0f;
+    auto drawSkillCard = [&](float y, const TextSprite& title, const TextSprite& description,
+        const TextSprite& control, int cost, bool owned, bool spectral) {
+        const Rect card{contentX, y, cardWidth, 184.0f};
+        drawRect(menu, {card.x + 8.0f, card.y + 9.0f, card.width, card.height}, {0.0f, 0.0f, 0.0f, 0.46f});
+        drawRect(menu, {card.x - 2.0f, card.y - 2.0f, card.width + 4.0f, card.height + 4.0f},
+            owned ? glm::vec4(0.40f, 0.42f, 0.46f, 0.92f) : glm::vec4(0.58f, 0.02f, 0.04f, 0.96f));
+        drawRect(menu, card, {0.075f, 0.075f, 0.09f, 0.99f});
+        drawRect(menu, {card.x, card.y, 9.0f, card.height}, owned
+            ? glm::vec4(0.62f, 0.64f, 0.68f, 1.0f)
+            : glm::vec4(0.95f, 0.04f, 0.06f, 1.0f));
+        drawText(menu, title, card.x + 26.0f, card.y + 15.0f);
+        drawText(menu, description, card.x + 25.0f, card.y + 61.0f, {0.82f, 0.82f, 0.86f, 1.0f});
+        drawText(menu, control, card.x + 25.0f, card.y + 124.0f, {0.95f, 0.24f, 0.26f, 1.0f});
+        drawRedGemIcon(menu, mapa1.gemIconTexture(), {card.x + card.width - 250.0f, card.y + 19.0f, 32.0f, 32.0f}, timeSeconds);
+
+        const bool enoughGems = mapa1.spectralGemCount() >= cost;
+        const TextSprite& buttonText = owned
+            ? menu.habilidadAdquirida
+            : (enoughGems
+                ? (spectral ? menu.comprarCincoGemas : menu.comprarTresGemas)
+                : menu.gemasInsuficientes);
+        const Rect buyRect{card.x + card.width - 210.0f, card.y + 116.0f, 184.0f, 48.0f};
+        const bool pointerInsideViewport =
+            mouse.x >= viewport.x && mouse.x <= viewport.x + viewport.width &&
+            mouse.y >= viewport.y && mouse.y <= viewport.y + viewport.height;
+        if (drawMapa1ShopButton(menu, buttonText, buyRect, mouse, clicked && pointerInsideViewport,
+            timeSeconds, enoughGems && !owned, owned)) {
+            if (spectral) {
+                mapa1.purchaseSpectralStep();
+            }
+            else {
+                mapa1.purchaseDamageParry();
+            }
+        }
+    };
+
+    drawSkillCard(
+        contentY,
+        menu.saltoEspectralTitulo,
+        menu.saltoEspectralDescripcion,
+        menu.saltoEspectralControl,
+        mapa1.spectralGemRequirement(),
+        mapa1.spectralUnlocked(),
+        true);
+    drawSkillCard(
+        contentY + 210.0f,
+        menu.parryRetornoTitulo,
+        menu.parryRetornoDescripcion,
+        menu.parryRetornoControl,
+        mapa1.damageParryCost(),
+        mapa1.damageParryUnlocked(),
+        false);
+
+    drawText(menu, menu.manualTitulo, contentX + 6.0f, contentY + 425.0f);
+    const std::array<const TextSprite*, 7> manualEntries = {
+        &menu.manualMovimiento,
+        &menu.manualSalto,
+        &menu.manualDimension,
+        &menu.manualDisparo,
+        &menu.manualCarga,
+        &menu.manualParry,
+        &menu.manualTienda
+    };
+    float manualY = contentY + 480.0f;
+    for (size_t index = 0; index < manualEntries.size(); ++index) {
+        const Rect item{contentX, manualY, cardWidth, 72.0f};
+        drawRect(menu, item, index % 2 == 0
+            ? glm::vec4(0.075f, 0.075f, 0.09f, 0.98f)
+            : glm::vec4(0.055f, 0.055f, 0.068f, 0.98f));
+        drawRect(menu, {item.x, item.y, 5.0f, item.height}, {0.82f, 0.03f, 0.05f, 0.96f});
+        drawText(menu, *manualEntries[index], item.x + 18.0f, item.y + (item.height - manualEntries[index]->size.y) * 0.5f);
+        manualY += 82.0f;
+    }
+    glDisable(GL_SCISSOR_TEST);
+
+    const Rect scrollTrack{viewport.x + viewport.width - 8.0f, viewport.y, 5.0f, viewport.height};
+    drawRect(menu, scrollTrack, {0.20f, 0.20f, 0.23f, 0.82f});
+    const float thumbHeight = std::max(42.0f, viewport.height * viewport.height / contentHeight);
+    const float thumbTravel = viewport.height - thumbHeight;
+    const float thumbY = scrollTrack.y + (maximumScroll > 0.0f ? mapa1ShopScroll / maximumScroll : 0.0f) * thumbTravel;
+    drawRect(menu, {scrollTrack.x - 2.0f, thumbY, 9.0f, thumbHeight}, {0.94f, 0.04f, 0.06f, 0.96f});
+}
+
+void drawMapa1CombatHud(
+    MenuContext& menu,
+    Mapa1& mapa1,
+    int width,
+    int height,
+    float timeSeconds,
+    const glm::vec2& mouse,
+    bool clicked,
+    float scrollY) {
     // HUD de combate de Mapa 1 reutilizado como referencia visual para otros sistemas.
     beginUiFrame(menu, width, height);
     const Rect healthPanel{22.0f, 22.0f, 282.0f, 72.0f};
@@ -1685,6 +1890,32 @@ void drawMapa1CombatHud(MenuContext& menu, const Mapa1& mapa1, int width, int he
         drawText(menu, menu.combateSolo2D,
             panel.x + (panel.width - menu.combateSolo2D.size.x) * 0.5f,
             panel.y + (panel.height - menu.combateSolo2D.size.y) * 0.5f);
+    }
+
+    const Rect gemPanel{std::max(18.0f, static_cast<float>(width) - 246.0f), 92.0f, 218.0f, 58.0f};
+    drawRect(menu, {gemPanel.x + 6.0f, gemPanel.y + 7.0f, gemPanel.width, gemPanel.height}, {0.0f, 0.0f, 0.0f, 0.48f});
+    drawRect(menu, {gemPanel.x - 2.0f, gemPanel.y - 2.0f, gemPanel.width + 4.0f, gemPanel.height + 4.0f}, {0.76f, 0.02f, 0.04f, 0.96f});
+    drawRect(menu, gemPanel, {0.07f, 0.03f, 0.05f, 0.94f});
+    drawRedGemIcon(menu, mapa1.gemIconTexture(), {gemPanel.x + 12.0f, gemPanel.y + 10.0f, 38.0f, 38.0f}, timeSeconds);
+    drawText(menu, menu.gemCounters[std::clamp(mapa1.spectralGemCount(), 0, 99)], gemPanel.x + 57.0f, gemPanel.y + 7.0f);
+
+    const Rect shopButton{std::max(18.0f, static_cast<float>(width) - 246.0f), static_cast<float>(height) - 78.0f, 218.0f, 52.0f};
+    if (!mapa1.shopOpen() &&
+        drawMapa1ShopButton(menu, menu.tiendaBoton, shopButton, mouse, clicked, timeSeconds)) {
+        mapa1.openShop();
+    }
+
+    if (!mapa1.shopOpen() && mapa1.showVanPrompt(timeSeconds)) {
+        const Rect prompt = centeredRect(width * 0.5f, static_cast<float>(height) - 126.0f, 470.0f, 54.0f);
+        drawRect(menu, {prompt.x + 7.0f, prompt.y + 8.0f, prompt.width, prompt.height}, {0.0f, 0.0f, 0.0f, 0.54f});
+        drawRect(menu, prompt, {0.45f, 0.01f, 0.03f, 0.96f});
+        drawText(menu, menu.cabinaPrompt,
+            prompt.x + (prompt.width - menu.cabinaPrompt.size.x) * 0.5f,
+            prompt.y + (prompt.height - menu.cabinaPrompt.size.y) * 0.5f);
+    }
+
+    if (mapa1.shopOpen()) {
+        drawMapa1Shop(menu, mapa1, width, height, timeSeconds, mouse, clicked, scrollY);
     }
 }
 
@@ -1923,6 +2154,10 @@ void framebufferSizeCallback(GLFWwindow*, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
+void scrollCallback(GLFWwindow*, double, double yOffset) {
+    pendingScrollY += yOffset;
+}
+
 void mouseCallback(GLFWwindow*, double x, double y) {
     // Solo actualiza deltas de mouse; la cámara decide después cómo usarlos.
     if (appState != EstadoJuego::MUNDO_2 && appState != EstadoJuego::MUNDO_3 && appState != EstadoJuego::MUNDO_4) {
@@ -1978,9 +2213,14 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
             appState = EstadoJuego::MENU_PRINCIPAL;
             break;
         case EstadoJuego::MUNDO_1:
-            mapa1.shutdown();
-            glfwSetWindowTitle(window, "Paper Pinix");
-            appState = EstadoJuego::MENU_PRINCIPAL;
+            if (mapa1.shopOpen()) {
+                mapa1.closeShop();
+            }
+            else {
+                mapa1.shutdown();
+                glfwSetWindowTitle(window, "Paper Pinix");
+                appState = EstadoJuego::MENU_PRINCIPAL;
+            }
             break;
         case EstadoJuego::MUNDO_2:
             volverAlMenu(mundo2);
@@ -2205,6 +2445,45 @@ bool initializeMenu(MenuContext& menu) {
     menu.mapa4Hint = createTextSprite(L"Follow the light and find the golden coins", 20, white, 520, false, true);
     menu.cargandoAtaque = createTextSprite(L"CARGANDO TIRO", 21, white, 250, false, false);
     menu.parryActivo = createTextSprite(L"PARRY", 23, white, 150, false, true);
+    menu.tiendaBoton = createTextSprite(L"TIENDA  [B]", 23, white, 190, false, true);
+    menu.tiendaTitulo = createTextSprite(L"CABINA DEL CAZADOR", 38, white, 520, false, true);
+    menu.tiendaSubtitulo = createTextSprite(L"ARCHIVO DE HABILIDADES // MUNDO 01", 18, glm::vec3(0.78f), 500, false, false);
+    menu.tiendaCerrar = createTextSprite(L"CERRAR", 19, white, 120, false, true);
+    menu.tiendaHabilidades = createTextSprite(L"HABILIDADES", 19, white, 175, false, true);
+    menu.tiendaManual = createTextSprite(L"MANUAL", 19, white, 150, false, true);
+    menu.tiendaCabina = createTextSprite(L"CABINA", 19, white, 150, false, true);
+    menu.tiendaSaldo = createTextSprite(L"GEMAS ROJAS", 17, white, 160, false, true);
+    for (int i = 0; i < static_cast<int>(menu.gemCounters.size()); ++i) {
+        menu.gemCounters[static_cast<size_t>(i)] =
+            createTextSprite(L"x " + twoDigits(i), 24, white, 105, false, true);
+    }
+    menu.saltoEspectralTitulo = createTextSprite(L"SALTO ESPECTRAL", 28, white, 330, false, true);
+    menu.saltoEspectralDescripcion = createTextSprite(
+        L"Rompe la distancia entre anclas azules y alcanza islas imposibles.\n"
+        L"Una compra permanente hasta reiniciar completamente el mundo.",
+        18, white, 570, true, false);
+    menu.saltoEspectralControl = createTextSprite(L"USO: ac\u00e9rcate a un ancla azul y pulsa Q", 18, white, 500, false, true);
+    menu.parryRetornoTitulo = createTextSprite(L"PARRY: RETORNO REAL", 28, white, 390, false, true);
+    menu.parryRetornoDescripcion = createTextSprite(
+        L"Un parry perfecto ya no solo bloquea: devuelve el proyectil\n"
+        L"con fuerza suficiente para destruir al demonio que lo lanz\u00f3.",
+        18, white, 590, true, false);
+    menu.parryRetornoControl = createTextSprite(L"USO: pulsa F justo antes de recibir el impacto", 18, white, 510, false, true);
+    menu.comprarCincoGemas = createTextSprite(L"COMPRAR  5", 18, white, 165, false, true);
+    menu.comprarTresGemas = createTextSprite(L"COMPRAR  3", 18, white, 165, false, true);
+    menu.habilidadAdquirida = createTextSprite(L"ADQUIRIDA", 18, white, 155, false, true);
+    menu.gemasInsuficientes = createTextSprite(L"FALTAN GEMAS", 16, white, 165, false, true);
+    menu.manualTitulo = createTextSprite(L"MANUAL DE COMBATE Y MOVIMIENTO", 28, white, 560, false, true);
+    menu.manualMovimiento = createTextSprite(L"MOVERSE // 2D: A y D     3D: W, A, S y D", 18, white, 650, false, true);
+    menu.manualSalto = createTextSprite(L"SALTAR // W en 2D     ESPACIO en 3D", 18, white, 620, false, true);
+    menu.manualDimension = createTextSprite(L"CAMBIAR DIMENSI\u00d3N // TAB alterna entre 2D y 3D", 18, white, 680, false, true);
+    menu.manualDisparo = createTextSprite(L"DISPARAR // apunta con el mouse y haz clic izquierdo", 18, white, 680, false, true);
+    menu.manualCarga = createTextSprite(L"TIRO CARGADO // mant\u00e9n clic izquierdo y suelta al llenarse", 18, white, 720, false, true);
+    menu.manualParry = createTextSprite(L"PARRY // pulsa F en el instante anterior al impacto", 18, white, 670, false, true);
+    menu.manualTienda = createTextSprite(L"TIENDA REMOTA // pulsa B desde cualquier lugar del mapa", 18, white, 690, false, true);
+    menu.cabinaPrompt = createTextSprite(L"PULSA E PARA USAR LA CABINA TELEF\u00d3NICA", 22, white, 440, false, true);
+    menu.tiendaAyudaScroll = createTextSprite(L"RUEDA DEL MOUSE\nPARA DESPLAZAR", 16, white, 180, true, true);
+    menu.enemigosRestantes = createTextSprite(L"LOS DEMONIOS SUELTAN GEMAS ROJAS", 17, white, 310, false, true);
     menu.promptHablarToad = createTextSprite(L"Pulsa F para hablar", 28, white, 330, false, true);
     menu.nombreToad = createTextSprite(L"Toad", 30, titleColor, 170, false, true);
     menu.dialogoToad = createTextSprite(
@@ -2291,6 +2570,7 @@ int main(int argc, char** argv) {
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
     glfwSetCursorPosCallback(window, mouseCallback);
+    glfwSetScrollCallback(window, scrollCallback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
     glewExperimental = GL_TRUE;
@@ -2355,6 +2635,8 @@ int main(int argc, char** argv) {
         const bool mouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
         const bool clicked = mouseDown && !lastMouseButton;
         lastMouseButton = mouseDown;
+        const float scrollY = static_cast<float>(pendingScrollY);
+        pendingScrollY = 0.0;
 
         int width = 0;
         int height = 0;
@@ -2366,7 +2648,15 @@ int main(int argc, char** argv) {
             } else {
                 mapa1.render(window, deltaTime);
                 drawMissionHud(menu, mapa1, width, height, now);
-                drawMapa1CombatHud(menu, mapa1, width, height, now);
+                drawMapa1CombatHud(
+                    menu,
+                    mapa1,
+                    width,
+                    height,
+                    now,
+                    {static_cast<float>(cursorX), static_cast<float>(cursorY)},
+                    clicked,
+                    scrollY);
             }
         } else if (appState == EstadoJuego::MUNDO_2) {
             if (!iniciarMundo2(mundo2)) {

@@ -67,14 +67,19 @@ namespace {
     constexpr float PlayerDeathFramesPerSecond = 7.0f;
     constexpr float PlayerTransitionFramesPerSecond = 16.0f;
     constexpr int EnemySpawnCount = 11;
-    constexpr int SpectralGemRequirement = 10;
+    constexpr int SpectralGemRequirement = 5;
+    constexpr int DamageParryGemRequirement = 3;
+    constexpr int MaximumStoredGems = 99;
+    constexpr float GemPickupRadius = 0.62f;
+    constexpr float GemPickupVerticalRange = 0.82f;
     constexpr float SpectralAnchorPromptRange = 0.95f;
     constexpr float SpectralAnchorVerticalRange = 1.35f;
     constexpr float VanPromptRange = 3.25f;
     constexpr float VanPromptVerticalRange = 4.80f;
     constexpr float VanRenderRangeX = 30.0f;
     constexpr float VanRenderRangeZ = 30.0f;
-    constexpr float VanModelDisplaySize = 6.60f;
+    constexpr float VanModelDisplaySize = 4.20f;
+    constexpr float GemModelDisplaySize = 0.62f;
     constexpr float PlayerSpawnDistanceFromVan = 2.25f;
     constexpr float SpectralStepCooldown = 0.75f;
     constexpr float SpectralHintTime = 3.8f;
@@ -133,6 +138,12 @@ namespace {
         glm::vec3 target{ 0.0f };
         bool projectIn2D{ true };
         float phase{ 0.0f };
+    };
+
+    struct DroppedGem {
+        glm::vec3 position{ 0.0f };
+        float phase{ 0.0f };
+        bool projectIn2D{ true };
     };
 
     enum class EnemyState {
@@ -478,6 +489,7 @@ struct Mapa1::Impl {
     std::vector<WorldModel> worldModels;
     std::vector<std::string> deferredWorldModelPaths;
     WorldModel vanModel;
+    WorldModel gemModel;
     std::unordered_map<std::string, std::shared_ptr<Texture2D>> textureCache;
     Texture2D playerAtlasTexture;
     LoadedModel projectileSwordModel;
@@ -523,7 +535,7 @@ struct Mapa1::Impl {
         {PlatformShape::Rectangle, 18.70f, 20.20f, -10.50f, -8.90f, 2.90f, 0.28f, {0.46f, 0.84f, 1.00f, 1.0f}, "isla_ancla_01", true, true},
         {PlatformShape::Rectangle, 23.65f, 25.25f, 7.90f, 9.55f, 3.05f, 0.28f, {0.18f, 0.68f, 1.00f, 1.0f}, "isla_espectral_01", true, true},
         {PlatformShape::Rectangle, 31.80f, 34.20f, -12.20f, -10.10f, 3.22f, 0.30f, {0.70f, 0.88f, 1.00f, 1.0f}, "isla_espectral_final", true, true},
-        {PlatformShape::Rectangle, -37.00f, -33.90f, -1.40f, 1.60f, 0.42f, 0.22f, {0.36f, 0.64f, 0.42f, 1.0f}, "van_camino_mapa", true, true},
+        {PlatformShape::Rectangle, -37.00f, -31.90f, -1.40f, 1.60f, 0.42f, 0.22f, {0.36f, 0.64f, 0.42f, 1.0f}, "van_camino_mapa", true, true},
         {PlatformShape::Rectangle, -40.80f, -38.00f, -1.50f, 1.50f, 0.58f, 0.22f, {0.40f, 0.68f, 0.48f, 1.0f}, "van_camino_01", true, true},
         {PlatformShape::Rectangle, -44.60f, -41.80f, -1.50f, 1.50f, 0.76f, 0.22f, {0.44f, 0.72f, 0.54f, 1.0f}, "van_camino_02", true, true},
         {PlatformShape::Rectangle, -48.40f, -45.60f, -1.50f, 1.50f, 0.94f, 0.22f, {0.48f, 0.76f, 0.60f, 1.0f}, "van_camino_03", true, true},
@@ -534,10 +546,12 @@ struct Mapa1::Impl {
     std::vector<SpectralAnchor> spectralAnchors;
     std::vector<DemonEnemy> enemies;
     std::vector<Projectile> projectiles;
+    std::vector<DroppedGem> droppedGems;
 
     bool initialized{ false };
     bool vanModelLoaded{ false };
     bool vanModelLoadAttempted{ false };
+    bool gemModelLoaded{ false };
     bool backgroundMusicOpen{ false };
     bool backgroundMusicPlaying{ false };
     bool parrySoundOpen{ false };
@@ -547,6 +561,7 @@ struct Mapa1::Impl {
     bool chargingPlayerAttack{ false };
     bool parryPressed{ false };
     bool interactPressed{ false };
+    bool shopTogglePressed{ false };
     bool resetEnemiesRequested{ false };
     bool clearProjectilesRequested{ false };
     float posX{ 0.0f };
@@ -591,6 +606,7 @@ struct Mapa1::Impl {
     glm::vec3 playerAimDirection{ 1.0f, 0.0f, 0.0f };
     int spectralGems{ 0 };
     bool spectralStepUnlocked{ false };
+    bool damageParryPurchased{ false };
     bool spectralKeyPressed{ false };
     bool vanShopOpen{ false };
     float vanPromptUntil{ 0.0f };
@@ -651,7 +667,30 @@ struct Mapa1::Impl {
         for (const LoadedMaterial& material : materials) {
             MapMaterial runtimeMaterial;
             runtimeMaterial.color = glm::vec4(material.diffuseColor, material.opacity);
-            runtimeMaterial.texture = textureFor(material.diffuseTexturePath);
+            if (!material.embeddedTextureData.empty()) {
+                auto embedded = std::make_shared<Texture2D>();
+                bool loaded = false;
+                if (material.embeddedTextureCompressed) {
+                    loaded = embedded->loadFromMemory(
+                        material.embeddedTextureData.data(),
+                        static_cast<int>(material.embeddedTextureData.size()),
+                        false);
+                }
+                else if (material.embeddedTextureWidth > 0 && material.embeddedTextureHeight > 0) {
+                    embedded->createFromRGBA(
+                        material.embeddedTextureWidth,
+                        material.embeddedTextureHeight,
+                        material.embeddedTextureData.data(),
+                        false);
+                    loaded = embedded->valid();
+                }
+                if (loaded) {
+                    runtimeMaterial.texture = std::move(embedded);
+                }
+            }
+            else {
+                runtimeMaterial.texture = textureFor(material.diffuseTexturePath);
+            }
             runtimeMaterials.push_back(std::move(runtimeMaterial));
         }
         return runtimeMaterials;
@@ -689,9 +728,9 @@ struct Mapa1::Impl {
     bool loadVanModel() {
         vanModelLoadAttempted = true;
         vanModel = {};
-        vanModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/devil_may_cry_5_van/scene.gltf"));
+        vanModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/cabina_telefonica (1).glb"));
         if (vanModel.model.meshes.empty()) {
-            std::cerr << "Mapa 1 van model could not be loaded." << std::endl;
+            std::cerr << "Mapa 1 phone booth model could not be loaded." << std::endl;
             vanModelLoaded = false;
             return false;
         }
@@ -709,6 +748,20 @@ struct Mapa1::Impl {
             return false;
         }
         return loadVanModel();
+    }
+
+    bool loadGemModel() {
+        gemModel = {};
+        gemModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/Untitled.glb"));
+        if (gemModel.model.meshes.empty()) {
+            std::cerr << "Mapa 1 red gem model could not be loaded." << std::endl;
+            gemModelLoaded = false;
+            return false;
+        }
+
+        gemModel.materials = runtimeMaterialsFor(gemModel.model.materials);
+        gemModelLoaded = true;
+        return true;
     }
 
     std::string meshName(const WorldModel& model, const LoadedMesh& mesh) const {
@@ -769,7 +822,7 @@ struct Mapa1::Impl {
         std::cout << "Mapa 1 terrain bounds: X[" << terrainMin.x << ", " << terrainMax.x
             << "] Z[" << terrainMin.z << ", " << terrainMax.z << "]" << std::endl;
         std::cout << "Mapa 1 parkour platforms: " << extraPlatforms.size() - 1 << std::endl;
-        std::cout << "Mapa 1 controls: A/D and W jump in 2D, WASD and Space jump in 3D, mouse aims and shoots in 2D, hold mouse to charge, F parries, E interacts with the van, Q uses purchased Paso Espectral near blue anchors, Tab switches view, Esc returns to menu." << std::endl;
+        std::cout << "Mapa 1 controls: A/D and W jump in 2D, WASD and Space jump in 3D, mouse aims and shoots in 2D, hold mouse to charge, F parries, E interacts with the phone booth, B opens the remote shop, Q uses purchased Salto Espectral near blue anchors, Tab switches view, Esc returns to menu." << std::endl;
     }
 
     glm::vec3 platformTopCenter(size_t index) const {
@@ -1188,11 +1241,14 @@ struct Mapa1::Impl {
     void resetSpectralProgress() {
         spectralGems = 0;
         spectralStepUnlocked = false;
+        damageParryPurchased = false;
         spectralKeyPressed = false;
         interactPressed = false;
+        shopTogglePressed = false;
         vanShopOpen = false;
         vanPromptUntil = 0.0f;
         vanShopUntil = 0.0f;
+        droppedGems.clear();
         spectralCooldown = 0.0f;
         spectralLockedHintUntil = 0.0f;
         spectralReadyHintUntil = 0.0f;
@@ -1210,22 +1266,61 @@ struct Mapa1::Impl {
         spectralStepUnlocked = true;
         spectralUnlockHintUntil = now + 5.2f;
         spectralLockedHintUntil = 0.0f;
-        vanShopOpen = true;
-        vanShopUntil = now + 8.0f;
         showStatus("PASO ESPECTRAL COMPRADO - usa Q junto a un ancla azul");
     }
 
-    void registerEnemyDefeat(float now) {
-        if (!spectralStepUnlocked) {
-            spectralGems = std::min(SpectralGemRequirement, spectralGems + 1);
-            if (spectralGems >= SpectralGemRequirement) {
-                showStatus("GEMAS LISTAS - vuelve a la camioneta y pulsa E");
-                return;
+    void registerEnemyDefeat(const glm::vec3& position, float now) {
+        droppedGems.push_back({
+            position + glm::vec3(0.0f, 0.42f, 0.0f),
+            now * 1.73f + static_cast<float>(droppedGems.size()) * 0.91f,
+            true
+            });
+        showStatus("GEMA ROJA LIBERADA - acercate para recogerla");
+    }
+
+    void updateDroppedGems() {
+        for (size_t index = 0; index < droppedGems.size();) {
+            const DroppedGem& gem = droppedGems[index];
+            if (!touchesCollectible(gem.position, GemPickupRadius, GemPickupVerticalRange, gem.projectIn2D)) {
+                ++index;
+                continue;
             }
+
+            spectralGems = std::min(MaximumStoredGems, spectralGems + 1);
+            droppedGems.erase(droppedGems.begin() + static_cast<std::ptrdiff_t>(index));
+            showStatus("GEMA ROJA OBTENIDA - saldo: " + std::to_string(spectralGems));
+        }
+    }
+
+    bool purchaseSpectralStep() {
+        if (spectralStepUnlocked) {
+            showStatus("SALTO ESPECTRAL YA ADQUIRIDO");
+            return false;
+        }
+        if (spectralGems < SpectralGemRequirement) {
+            showStatus("NO HAY SUFICIENTES GEMAS ROJAS");
+            return false;
         }
 
-        showStatus("GEMA OBTENIDA - " + std::to_string(spectralGems) + "/" +
-            std::to_string(SpectralGemRequirement));
+        spectralGems -= SpectralGemRequirement;
+        unlockSpectralStep(static_cast<float>(glfwGetTime()));
+        return true;
+    }
+
+    bool purchaseDamageParry() {
+        if (damageParryPurchased) {
+            showStatus("RETORNO REAL YA ADQUIRIDO");
+            return false;
+        }
+        if (spectralGems < DamageParryGemRequirement) {
+            showStatus("NO HAY SUFICIENTES GEMAS ROJAS");
+            return false;
+        }
+
+        spectralGems -= DamageParryGemRequirement;
+        damageParryPurchased = true;
+        showStatus("RETORNO REAL COMPRADO - el parry devuelve dano");
+        return true;
     }
 
     bool nearVanShop() const {
@@ -1239,32 +1334,25 @@ struct Mapa1::Impl {
 
     void handleVanShop(GLFWwindow* window, float now) {
         const bool interactDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
+        const bool toggleDown = glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS;
         const bool nearby = nearVanShop();
         if (nearby) {
             vanPromptUntil = std::max(vanPromptUntil, now + 0.20f);
         }
-        else {
-            vanShopOpen = false;
+
+        if (toggleDown && !shopTogglePressed) {
+            vanShopOpen = !vanShopOpen;
+            stopChargingPlayerAttack();
+            showStatus(vanShopOpen ? "TIENDA REMOTA ABIERTA" : "TIENDA CERRADA");
         }
 
         if (interactDown && !interactPressed && nearby) {
             vanShopOpen = true;
-            vanShopUntil = now + 9.5f;
-            if (!spectralStepUnlocked && spectralGems >= SpectralGemRequirement) {
-                unlockSpectralStep(now);
-            }
-            else if (!spectralStepUnlocked) {
-                showStatus("NECESITAS 10 GEMAS - derrota demonios y vuelve a la camioneta");
-            }
-            else {
-                showStatus("PASO ESPECTRAL YA ESTA LISTO");
-            }
-        }
-
-        if (vanShopOpen && now > vanShopUntil) {
-            vanShopOpen = false;
+            stopChargingPlayerAttack();
+            showStatus("CONEXION CON LA CABINA ESTABLECIDA");
         }
         interactPressed = interactDown;
+        shopTogglePressed = toggleDown;
     }
 
     int nearestSpectralAnchorIndex() const {
@@ -1316,7 +1404,7 @@ struct Mapa1::Impl {
         if (spectralDown && !spectralKeyPressed && anchorIndex >= 0) {
             if (!spectralStepUnlocked) {
                 spectralLockedHintUntil = std::max(spectralLockedHintUntil, now + SpectralHintTime);
-                showStatus("COMPRA PASO ESPECTRAL EN LA CAMIONETA CON 10 GEMAS");
+                showStatus("COMPRA SALTO ESPECTRAL EN LA TIENDA CON 5 GEMAS");
             }
             else if (spectralCooldown <= 0.0f) {
                 performSpectralStep(spectralAnchors[static_cast<size_t>(anchorIndex)], now);
@@ -1600,7 +1688,7 @@ struct Mapa1::Impl {
             }));
     }
 
-    bool parryEnemyProjectile(float now) {
+    bool parryEnemyProjectile(Projectile& projectile, float now) {
         if (parryUntil <= 0.0f || now > parryUntil) {
             return false;
         }
@@ -1611,7 +1699,41 @@ struct Mapa1::Impl {
         if (parrySoundOpen) {
             parrySound.playOnce();
         }
-        showStatus("ROYAL GUARD - PARRY PERFECTO");
+
+        if (damageParryPurchased) {
+            glm::vec3 targetDirection(playerAngle == 180.0f ? -1.0f : 1.0f, 0.0f, 0.0f);
+            float nearestDistance = std::numeric_limits<float>::max();
+            const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
+            for (const DemonEnemy& enemy : enemies) {
+                if (!enemy.alive) {
+                    continue;
+                }
+                const glm::vec3 enemyCenter = enemy.position + glm::vec3(0.0f, 0.48f, 0.0f);
+                const float distance = gameplayDistance(playerCenter, enemyCenter);
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    targetDirection = enemyCenter - playerCenter;
+                    if (!mode3D) {
+                        targetDirection.z = 0.0f;
+                    }
+                }
+            }
+            if (glm::length(targetDirection) < 0.001f) {
+                targetDirection = { playerAngle == 180.0f ? -1.0f : 1.0f, 0.0f, 0.0f };
+            }
+
+            targetDirection = glm::normalize(targetDirection);
+            projectile.fromPlayer = true;
+            projectile.damage = EnemyMaximumHealth;
+            projectile.charged = true;
+            projectile.velocity = targetDirection * ChargedPlayerShotSpeed;
+            projectile.position = playerCenter + targetDirection * 0.48f;
+            projectile.lifetime = 2.8f;
+            showStatus("RETORNO REAL - DANO DEVUELTO");
+        }
+        else {
+            showStatus("ROYAL GUARD - PARRY PERFECTO");
+        }
         return true;
     }
 
@@ -1641,7 +1763,7 @@ struct Mapa1::Impl {
                         if (enemy.health <= 0) {
                             enemy.alive = false;
                             enemy.state = EnemyState::Dying;
-                            registerEnemyDefeat(now);
+                            registerEnemyDefeat(enemy.position, now);
                         }
                         else {
                             enemy.state = EnemyState::Hurt;
@@ -1656,10 +1778,11 @@ struct Mapa1::Impl {
             else if (!remove) {
                 const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
                 if (touchesGameplayTarget(projectile.position, playerCenter, 0.34f, 0.58f)) {
-                    if (!parryEnemyProjectile(now)) {
+                    const bool parried = parryEnemyProjectile(projectile, now);
+                    if (!parried) {
                         damagePlayer(now);
                     }
-                    remove = true;
+                    remove = !parried || !projectile.fromPlayer;
                 }
             }
 
@@ -1864,6 +1987,60 @@ struct Mapa1::Impl {
             return !projectile.fromPlayer;
                 });
 
+        mode3D = false;
+        const size_t droppedBeforePickup = droppedGems.size();
+        const int gemsBeforePickup = spectralGems;
+        if (!droppedGems.empty()) {
+            posX = droppedGems.front().position.x;
+            posY = droppedGems.front().position.y - 0.42f;
+            posZ = droppedGems.front().position.z;
+            updateDroppedGems();
+        }
+        const bool defeatedEnemyDropsCollectibleGem =
+            droppedBeforePickup > 0 &&
+            droppedGems.size() < droppedBeforePickup &&
+            spectralGems > gemsBeforePickup;
+
+        spectralGems = SpectralGemRequirement + DamageParryGemRequirement;
+        spectralStepUnlocked = false;
+        damageParryPurchased = false;
+        const bool spectralPurchaseWorks = purchaseSpectralStep() &&
+            spectralStepUnlocked &&
+            spectralGems == DamageParryGemRequirement;
+        const bool parryPurchaseWorks = purchaseDamageParry() &&
+            damageParryPurchased &&
+            spectralGems == 0;
+
+        enemies[0].position = nearbyPosition;
+        enemies[0].alive = true;
+        enemies[0].health = EnemyMaximumHealth;
+        projectiles.clear();
+        placePlayerForCombatTest();
+        parryUntil = 9.5f;
+        projectiles.push_back({
+            {posX, posY + 0.58f, posZ},
+            {},
+            ProjectileLifetime,
+            false,
+            1,
+            false
+            });
+        updateProjectiles(0.0f, 9.0f);
+        const bool projectileReflected =
+            projectiles.size() == 1 &&
+            projectiles.front().fromPlayer &&
+            projectiles.front().damage == EnemyMaximumHealth;
+        if (projectileReflected) {
+            projectiles.front().position = enemies[0].position + glm::vec3(0.0f, 0.48f, 0.0f);
+            updateProjectiles(0.0f, 9.1f);
+        }
+        const bool reflectedParryDealsDamage = projectileReflected && !enemies[0].alive;
+
+        vanShopOpen = false;
+        vanShopOpen = true;
+        const bool remoteShopOpens = vanShopOpen;
+        vanShopOpen = false;
+
         const bool passed =
             enemyAttacksIn2D &&
             firstHitLeavesTwoHealth &&
@@ -1876,7 +2053,12 @@ struct Mapa1::Impl {
             thirdNormalHitDefeatsEnemy &&
             chargedShotDefeatsEnemy &&
             playerAttackBlockedIn3D &&
-            enemyStillAttacksIn3D;
+            enemyStillAttacksIn3D &&
+            defeatedEnemyDropsCollectibleGem &&
+            spectralPurchaseWorks &&
+            parryPurchaseWorks &&
+            reflectedParryDealsDamage &&
+            remoteShopOpens;
         std::cout << "Mapa 1 combat smoke test: " << (passed ? "PASS" : "FAIL")
             << " | enemy attacks 2D: " << enemyAttacksIn2D
             << " | player health: " << (firstHitLeavesTwoHealth && secondHitLeavesOneHealth && thirdHitStartsDeathAnimation && thirdHitCostsOneLife)
@@ -1891,7 +2073,11 @@ struct Mapa1::Impl {
             << " | normal damage: " << (enemySurvivesFirstNormalHit && enemySurvivesSecondNormalHit && thirdNormalHitDefeatsEnemy)
             << " | charged shot: " << chargedShotDefeatsEnemy
             << " | player blocked 3D: " << playerAttackBlockedIn3D
-            << " | enemy attacks 3D: " << enemyStillAttacksIn3D << std::endl;
+            << " | enemy attacks 3D: " << enemyStillAttacksIn3D
+            << " | gem pickup: " << defeatedEnemyDropsCollectibleGem
+            << " | shop purchases: " << (spectralPurchaseWorks && parryPurchaseWorks)
+            << " | reflected damage: " << reflectedParryDealsDamage
+            << " | remote shop: " << remoteShopOpens << std::endl;
         return passed;
     }
 
@@ -1922,9 +2108,11 @@ struct Mapa1::Impl {
             << " | Vidas:" << lives
             << " | Salud:" << playerHealth << "/" << PlayerMaximumHealth
             << " | Monedas:" << collectedCoins << "/" << TotalCoins
-            << " | Paso:" << (spectralStepUnlocked
+            << " | Gemas:" << spectralGems
+            << " | Salto:" << (spectralStepUnlocked
                 ? std::string("LISTO")
-                : std::string("gemas ") + std::to_string(spectralGems) + "/" + std::to_string(SpectralGemRequirement))
+                : std::string("NO"))
+            << " | Retorno:" << (damageParryPurchased ? "LISTO" : "NO")
             << " | X:" << posX
             << " Y:" << posY;
         if (mode3D) {
@@ -1962,6 +2150,12 @@ struct Mapa1::Impl {
             }
         }
         updateTitle(window, dt);
+        handleVanShop(window, now);
+        if (vanShopOpen) {
+            stopChargingPlayerAttack();
+            wasMoving = false;
+            return;
+        }
         if (playerDeathPlaying) {
             playerDeathTime += dt;
             if (playerDeathTime >= animationDuration(playerDeathMeshes, PlayerDeathFramesPerSecond)) {
@@ -1997,7 +2191,6 @@ struct Mapa1::Impl {
         tabPressed = tabDown;
         handlePlayerAttack(window, dt, now);
         handleParry(window, now);
-        handleVanShop(window, now);
         handleSpectralStep(window, now);
 
         const bool movingNow = isMoving(window);
@@ -2075,6 +2268,7 @@ struct Mapa1::Impl {
 
         updateEnemies(dt, now);
         updateProjectiles(dt, now);
+        updateDroppedGems();
         if (resetEnemiesRequested) {
             resetEnemies();
             resetEnemiesRequested = false;
@@ -2259,6 +2453,38 @@ struct Mapa1::Impl {
         }
     }
 
+    void drawDroppedGems(float now) {
+        for (const DroppedGem& gem : droppedGems) {
+            const float bob = std::sin(now * 3.8f + gem.phase) * 0.09f;
+            const float pulse = 1.0f + std::sin(now * 6.4f + gem.phase) * 0.06f;
+            const float renderZ = renderedDepth(gem.position.z, gem.projectIn2D) - posZ + (!mode3D ? 0.34f : 0.0f);
+            const glm::vec3 renderPosition(gem.position.x - posX, gem.position.y + bob, renderZ);
+
+            if (gemModelLoaded) {
+                const glm::vec3 extents = gemModel.model.maxBounds - gemModel.model.minBounds;
+                const float maximumExtent = std::max({ extents.x, extents.y, extents.z, 0.001f });
+                const float scale = (GemModelDisplaySize / maximumExtent) * pulse;
+                const glm::vec3 center = (gemModel.model.minBounds + gemModel.model.maxBounds) * 0.5f;
+                glm::mat4 model = glm::translate(glm::mat4(1.0f), renderPosition);
+                model = glm::rotate(model, now * 2.6f + gem.phase, { 0.0f, 1.0f, 0.0f });
+                model = glm::rotate(model, glm::radians(12.0f), { 0.0f, 0.0f, 1.0f });
+                model = glm::scale(model, glm::vec3(scale));
+                model = glm::translate(model, -center);
+                drawRuntimeModel(gemModel, model, { 0.95f, 0.03f, 0.06f, 1.0f });
+            }
+            else {
+                glm::mat4 model = glm::translate(glm::mat4(1.0f), renderPosition);
+                model = glm::rotate(model, now * 2.8f + gem.phase, { 0.0f, 1.0f, 0.0f });
+                model = glm::scale(model, glm::vec3(0.34f * pulse));
+                drawColoredMesh(starMesh, model, { 0.95f, 0.03f, 0.06f, 1.0f });
+            }
+
+            glm::mat4 glow = glm::translate(glm::mat4(1.0f), renderPosition);
+            glow = glm::scale(glow, glm::vec3(0.48f * pulse));
+            drawColoredMesh(parryRingMesh, glow, { 1.0f, 0.08f, 0.12f, 0.55f });
+        }
+    }
+
     void drawProjectiles() {
         for (const Projectile& projectile : projectiles) {
             const float renderZ = renderedDepth(projectile.position.z, true) - posZ + (!mode3D ? 0.28f : 0.0f);
@@ -2398,9 +2624,9 @@ struct Mapa1::Impl {
             drawRuntimeModel(vanModel, model, { 0.72f, 0.78f, 0.86f, 1.0f });
         }
         else {
-            glm::mat4 body = glm::translate(glm::mat4(1.0f), renderPosition + glm::vec3(0.0f, 0.35f, 0.0f));
-            body = glm::scale(body, { 1.65f, 0.70f, 0.82f });
-            drawColoredMesh(platformMesh, body, { 0.72f, 0.78f, 0.86f, 1.0f });
+            glm::mat4 body = glm::translate(glm::mat4(1.0f), renderPosition + glm::vec3(0.0f, 0.95f, 0.0f));
+            body = glm::scale(body, { 0.72f, 1.90f, 0.72f });
+            drawColoredMesh(platformMesh, body, { 0.74f, 0.04f, 0.05f, 1.0f });
         }
 
         const float pulse = 1.0f + std::sin(now * 4.0f) * 0.06f;
@@ -2590,6 +2816,7 @@ struct Mapa1::Impl {
         };
         deferredWorldLoadDelay = 0.45f;
         vanModelLoadAttempted = false;
+        loadGemModel();
 
         skyboxMesh = createSkyboxMesh();
         pipeBodyMesh = Mesh::cylinder(8);
@@ -2723,6 +2950,7 @@ struct Mapa1::Impl {
         drawMissionItems(static_cast<float>(glfwGetTime()));
         drawSpectralAnchors(static_cast<float>(glfwGetTime()));
         drawEnemies();
+        drawDroppedGems(static_cast<float>(glfwGetTime()));
         drawProjectiles();
         drawCombatEffects(static_cast<float>(glfwGetTime()));
         drawPlayer();
@@ -2736,6 +2964,8 @@ struct Mapa1::Impl {
         vanModel = {};
         vanModelLoaded = false;
         vanModelLoadAttempted = false;
+        gemModel = {};
+        gemModelLoaded = false;
         deferredWorldLoadDelay = 0.0f;
         textureCache.clear();
         playerAtlasTexture = Texture2D{};
@@ -2770,6 +3000,7 @@ struct Mapa1::Impl {
         star = {};
         enemies.clear();
         projectiles.clear();
+        droppedGems.clear();
         shader = Shader{};
         initialized = false;
     }
@@ -2849,12 +3080,42 @@ bool Mapa1::spectralUnlocked() const {
     return m_impl->spectralStepUnlocked;
 }
 
+bool Mapa1::damageParryUnlocked() const {
+    return m_impl->damageParryPurchased;
+}
+
+int Mapa1::damageParryCost() const {
+    return DamageParryGemRequirement;
+}
+
+bool Mapa1::shopOpen() const {
+    return m_impl->vanShopOpen;
+}
+
+void Mapa1::openShop() {
+    m_impl->vanShopOpen = true;
+    m_impl->stopChargingPlayerAttack();
+}
+
+void Mapa1::closeShop() {
+    m_impl->vanShopOpen = false;
+}
+
+bool Mapa1::purchaseSpectralStep() {
+    return m_impl->purchaseSpectralStep();
+}
+
+bool Mapa1::purchaseDamageParry() {
+    return m_impl->purchaseDamageParry();
+}
+
 bool Mapa1::showVanPrompt(float timeSeconds) const {
     return timeSeconds <= m_impl->vanPromptUntil;
 }
 
 bool Mapa1::showVanShopCards(float timeSeconds) const {
-    return m_impl->vanShopOpen && timeSeconds <= m_impl->vanShopUntil;
+    (void)timeSeconds;
+    return m_impl->vanShopOpen;
 }
 
 int Mapa1::currentHealth() const {
@@ -2878,5 +3139,15 @@ bool Mapa1::parryActive(float timeSeconds) const {
 }
 
 const Texture2D& Mapa1::coinIconTexture() const {
+    return m_impl->coinIconTexture;
+}
+
+const Texture2D& Mapa1::gemIconTexture() const {
+    if (!m_impl->gemModel.materials.empty()) {
+        const MapMaterial& material = m_impl->gemModel.materials.front();
+        if (material.texture && material.texture->valid()) {
+            return *material.texture;
+        }
+    }
     return m_impl->coinIconTexture;
 }
