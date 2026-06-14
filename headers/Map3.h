@@ -92,6 +92,8 @@ struct Map3Runtime {
     int nextEnemyWaveSize{2};
     std::vector<Map3Projectile> projectiles;
     std::vector<Bounds> collisionBounds;
+    std::vector<Bounds> playerCollisionScratch;
+    std::vector<Bounds> invisibleWallBounds;
     bool gameOver{false};
 };
 
