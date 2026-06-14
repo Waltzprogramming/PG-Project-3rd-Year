@@ -12,12 +12,12 @@
 #include <initializer_list>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 extern float deltaTime;
 extern PlayMode currentMode;
 extern bool lastToggleKey;
 extern bool lastJumpKey;
-extern bool lastTeleportKey;
 extern bool lastShieldKey;
 extern float cameraYawDegrees;
 extern float cameraPitchDegrees;
@@ -25,8 +25,10 @@ extern float locked2DDepth;
 extern glm::vec3 gameplayCameraPosition;
 extern glm::vec3 gameplayCameraTarget;
 extern bool cameraInitialized;
+extern double modeSwitchUnavailableUntil;
 
 bool environmentUsable(const Environment& environment);
+void appendDimensionRestrictionColliders(std::vector<Bounds>& colliders, const Environment& environment, float lockedDepth);
 std::string resolveAssetPath(const std::string& path);
 std::string resolveFirstExistingAsset(const std::initializer_list<std::string>& paths);
 std::shared_ptr<Texture2D> loadTextureFromMaterial(const LoadedMaterial& material, const std::filesystem::path& modelPath, std::vector<std::shared_ptr<Texture2D>>& cache);

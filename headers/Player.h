@@ -26,6 +26,7 @@ struct PlayerInput {
 class Player {
 public:
     bool load(const std::string& modelPath);
+    void configureCharacterMetrics(float desiredHeight, const glm::vec3& collisionHalf, float visualYOffset, float maxSpeed3D, float maxSpeed2D);
     void spawnAt(const glm::vec3& feetPosition);
     void teleportTo(const glm::vec3& feetPosition);
     void update(const PlayerInput& input, const std::vector<Bounds>& colliders, const glm::vec3& worldMin, const glm::vec3& worldMax, float deltaTime);
@@ -61,8 +62,11 @@ private:
     glm::vec3 m_modelCenter{0.0f};
     glm::vec3 m_collisionHalf{0.34f, 0.82f, 0.28f};
     float m_modelScale{1.0f};
+    float m_visualYOffset{0.0f};
     float m_facingYaw{0.0f};
     float m_modelYawOffset{0.0f};
+    float m_maxSpeed3D{4.25f};
+    float m_maxSpeed2D{4.65f};
     bool m_marioMapVariant{false};
     bool m_deadpoolVariant{false};
     bool m_grounded{false};

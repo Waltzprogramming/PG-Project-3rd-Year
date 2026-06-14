@@ -14,6 +14,7 @@
 
 struct GLFWwindow;
 
+// representa un disparo del jugador o de un enemigo mientras está vivo en escena
 struct Mapa4Projectile {
     glm::vec3 position{0.0f};
     glm::vec3 velocity{0.0f};
@@ -22,6 +23,7 @@ struct Mapa4Projectile {
     bool fromEnemy{false};
 };
 
+// guarda la posición y el tiempo de respawn de cada sol del mapa
 struct SunPickup {
     glm::vec3 position{0.0f};
     bool available{true};
@@ -29,15 +31,16 @@ struct SunPickup {
     float respawnAt{0.0f};
 };
 
+// maneja los soles, la recarga de luz y el pequeño render de esos pickups
 class Map4LightManager {
 public:
     bool initialize();
     void reset(const Environment& environment, const glm::vec3& playerSpawn);
     void update(Player& player, float timeSeconds, float deltaTime, float& energySeconds);
     void render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const;
-    std::vector<glm::vec3> activeLightPositions(const glm::vec3& cameraPosition, size_t maxCount) const;
 
 private:
+    // estas texturas y piezas quedan cacheadas para no recargar el modelo del sol cada vez
     std::shared_ptr<Texture2D> loadSunTexture(const std::string& path);
     std::shared_ptr<Texture2D> loadSunTexture(const LoadedMaterial& material);
     bool loadSunModel();
@@ -56,6 +59,7 @@ private:
     bool m_initialized{false};
 };
 
+// controla enemigos simples con patrulla corta y disparo a distancia
 class SimpleEnemyManager {
 public:
     bool initialize();
@@ -66,6 +70,7 @@ public:
     int aliveCount() const;
 
 private:
+    // datos compartidos del modelo que usa cada tipo de enemigo
     struct EnemyModel {
         std::vector<MissionRenderablePart> parts;
         glm::vec3 modelMin{0.0f};
@@ -75,6 +80,7 @@ private:
         glm::vec3 color{1.0f};
     };
 
+    // estado vivo de cada enemigo ya colocado dentro del mapa
     struct Enemy {
         glm::vec3 position{0.0f};
         glm::vec3 patrolCenter{0.0f};
@@ -107,6 +113,7 @@ private:
     bool m_initialized{false};
 };
 
+// junta todo el estado vivo de mapa 4 para poder entrar, salir y reanudar la sesión
 struct Mapa4Runtime {
     Environment environment;
     Player player;
@@ -124,9 +131,6 @@ struct Mapa4Runtime {
     bool coinSoundOpen{false};
     int lastCollectedCount{0};
     float coinCollectDelay{0.0f};
-    float pipeTeleportCooldown{0.0f};
-    glm::vec3 pipeTopEntry{0.0f};
-    glm::vec3 pipeBottomEntry{0.0f};
     int health{3};
     int maxHealth{3};
     float damageCooldown{0.0f};

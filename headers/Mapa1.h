@@ -30,6 +30,13 @@ public:
     int spectralGemCount() const;
     int spectralGemRequirement() const;
     bool spectralUnlocked() const;
+    bool damageParryUnlocked() const;
+    int damageParryCost() const;
+    bool shopOpen() const;
+    void openShop();
+    void closeShop();
+    bool purchaseSpectralStep();
+    bool purchaseDamageParry();
     bool showVanPrompt(float timeSeconds) const;
     bool showVanShopCards(float timeSeconds) const;
     int currentHealth() const;
@@ -38,6 +45,7 @@ public:
     bool chargingAttack() const;
     bool parryActive(float timeSeconds) const;
     const Texture2D& coinIconTexture() const;
+    const Texture2D& gemIconTexture() const;
 
 private:
     struct Impl;
