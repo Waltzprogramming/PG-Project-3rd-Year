@@ -831,11 +831,17 @@
       "type": "VEC2"
     },
     {
-      "bufferView": 0,
-      "byteOffset": 703596,
+      "bufferView": 6,
+      "byteOffset": 0,
       "componentType": 5125,
-      "count": 927,
-      "type": "SCALAR"
+      "count": 837,
+      "type": "SCALAR",
+      "min": [
+        0
+      ],
+      "max": [
+        237
+      ]
     },
     {
       "bufferView": 2,
@@ -1038,11 +1044,17 @@
       "byteOffset": 2558320,
       "byteStride": 16,
       "name": "floatBufferViews"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2577536,
+      "byteLength": 3348,
+      "target": 34963
     }
   ],
   "buffers": [
     {
-      "byteLength": 2577536,
+      "byteLength": 2580884,
       "uri": "scene.bin"
     }
   ],
