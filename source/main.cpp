@@ -42,6 +42,8 @@ constexpr float DefaultCamera2DDistance = 6.2f;
 constexpr float Map4Camera2DDistance = 3.35f;
 constexpr float DefaultCamera2DTargetHeight = 0.56f;
 constexpr float DefaultCamera2DHeight = 0.88f;
+constexpr int RaylibPauseResume = 10;
+constexpr int RaylibPauseExit = 11;
 
 enum class EstadoJuego {
     MENU_PRINCIPAL,
@@ -160,6 +162,98 @@ std::string resolveAssetPath(const std::string& path) {
         }
     }
     return path;
+}
+
+EstadoJuego estadoDesdeSeleccionRaylib(int selectedWorld) {
+    switch (selectedWorld) {
+    case 1:
+        return EstadoJuego::MUNDO_1;
+    case 2:
+        return EstadoJuego::MUNDO_2;
+    case 3:
+        return EstadoJuego::MUNDO_3;
+    case 4:
+        return EstadoJuego::MUNDO_4;
+    default:
+        return EstadoJuego::MENU_PRINCIPAL;
+    }
+}
+
+bool seleccionRaylibEsMundo(int selectedWorld) {
+    return selectedWorld >= 1 && selectedWorld <= 4;
+}
+
+int runRaylibMenuProcess(const std::wstring& arguments = L"") {
+    wchar_t modulePath[MAX_PATH] = {};
+    const DWORD moduleLength = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+    const std::filesystem::path executableDirectory =
+        moduleLength > 0 ? std::filesystem::path(modulePath).parent_path() : std::filesystem::current_path();
+
+    const std::filesystem::path candidates[] = {
+        std::filesystem::current_path() / "Menu" / "RaylibMenu" / "bin" / "PaperPinixRaylibMenu.exe",
+        executableDirectory / "Menu" / "RaylibMenu" / "bin" / "PaperPinixRaylibMenu.exe",
+        executableDirectory / ".." / "Menu" / "RaylibMenu" / "bin" / "PaperPinixRaylibMenu.exe",
+        executableDirectory / ".." / ".." / "Menu" / "RaylibMenu" / "bin" / "PaperPinixRaylibMenu.exe",
+        executableDirectory / ".." / ".." / ".." / "Menu" / "RaylibMenu" / "bin" / "PaperPinixRaylibMenu.exe"
+    };
+
+    for (const std::filesystem::path& candidate : candidates) {
+        std::error_code error;
+        if (!std::filesystem::exists(candidate, error)) {
+            continue;
+        }
+
+        const std::filesystem::path menuPath = std::filesystem::weakly_canonical(candidate, error);
+        if (error || !std::filesystem::exists(menuPath)) {
+            continue;
+        }
+
+        const std::filesystem::path projectRoot = menuPath.parent_path().parent_path().parent_path().parent_path();
+        std::wstring command = L"\"" + menuPath.wstring() + L"\"";
+        if (!arguments.empty()) {
+            command += L" " + arguments;
+        }
+
+        std::vector<wchar_t> commandBuffer(command.begin(), command.end());
+        commandBuffer.push_back(L'\0');
+
+        STARTUPINFOW startupInfo{};
+        startupInfo.cb = sizeof(startupInfo);
+        PROCESS_INFORMATION processInfo{};
+        const BOOL started = CreateProcessW(
+            nullptr,
+            commandBuffer.data(),
+            nullptr,
+            nullptr,
+            FALSE,
+            0,
+            nullptr,
+            projectRoot.wstring().c_str(),
+            &startupInfo,
+            &processInfo);
+        if (!started) {
+            continue;
+        }
+
+        WaitForSingleObject(processInfo.hProcess, INFINITE);
+        DWORD exitCode = 0;
+        GetExitCodeProcess(processInfo.hProcess, &exitCode);
+        CloseHandle(processInfo.hThread);
+        CloseHandle(processInfo.hProcess);
+
+        return static_cast<int>(exitCode);
+    }
+
+    std::cerr << "Raylib menu was not found. Run Menu/RaylibMenu/build_menu.ps1." << std::endl;
+    return -1;
+}
+
+int runRaylibWorldMenu() {
+    return runRaylibMenuProcess();
+}
+
+int runRaylibPauseMenu() {
+    return runRaylibMenuProcess(L"--pause");
 }
 
 std::string resolveFirstExistingAsset(const std::initializer_list<std::string>& paths) {
@@ -2257,6 +2351,61 @@ void updateCursorMode(GLFWwindow* window) {
     lastCursorState = appState;
 }
 
+int runRaylibPauseMenuForWindow(GLFWwindow* window) {
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    glfwHideWindow(window);
+    glfwMakeContextCurrent(nullptr);
+    const int pauseAction = runRaylibPauseMenu();
+    glfwMakeContextCurrent(window);
+    glfwShowWindow(window);
+    glfwFocusWindow(window);
+    lastFrame = static_cast<float>(glfwGetTime());
+    deltaTime = 0.0f;
+    return pauseAction;
+}
+
+void cerrarMundoActual(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
+    switch (currentState) {
+    case EstadoJuego::MUNDO_1:
+        mapa1.shutdown();
+        glfwSetWindowTitle(window, "Paper Pinix");
+        break;
+    case EstadoJuego::MUNDO_2:
+        volverAlMenu(mundo2);
+        break;
+    case EstadoJuego::MUNDO_3:
+        volverAlMenu(map3);
+        break;
+    case EstadoJuego::MUNDO_4:
+        volverAlMenu(mapa4);
+        break;
+    default:
+        break;
+    }
+}
+
+void aplicarAccionPausaRaylib(
+    GLFWwindow* window,
+    EstadoJuego pausedState,
+    int pauseAction,
+    Mapa1& mapa1,
+    Mundo2Runtime& mundo2,
+    Map3Runtime& map3,
+    Mapa4Runtime& mapa4) {
+    if (seleccionRaylibEsMundo(pauseAction)) {
+        cerrarMundoActual(window, pausedState, mapa1, mundo2, map3, mapa4);
+        solicitarCargaMundo(estadoDesdeSeleccionRaylib(pauseAction));
+    } else if (pauseAction == RaylibPauseExit) {
+        cerrarMundoActual(window, pausedState, mapa1, mundo2, map3, mapa4);
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    } else {
+        appState = pausedState;
+    }
+
+    lastCursorState = EstadoJuego::MENU_PRINCIPAL;
+    updateCursorMode(window);
+}
+
 void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
     // Agrupa los atajos globales del juego para no duplicar control por mapa.
     const bool escapeDown = glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
@@ -2278,22 +2427,40 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
                 mapa1.closeShop();
             }
             else {
-                mapa1.shutdown();
-                glfwSetWindowTitle(window, "Paper Pinix");
-                appState = EstadoJuego::MENU_PRINCIPAL;
+                const EstadoJuego pausedState = appState;
+                const int pauseAction = runRaylibPauseMenuForWindow(window);
+                aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
             }
             break;
         case EstadoJuego::MUNDO_2:
-            volverAlMenu(mundo2);
+        {
+            const EstadoJuego pausedState = appState;
+            const bool resumeMusic = mundo2.musicOpen && mundo2.musicPlaying;
+            if (resumeMusic) {
+                mundo2.music.stop();
+                mundo2.musicPlaying = false;
+            }
+            const int pauseAction = runRaylibPauseMenuForWindow(window);
+            aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
+            if (appState == EstadoJuego::MUNDO_2 && (pauseAction == RaylibPauseResume || pauseAction <= 0) && resumeMusic && mundo2.musicOpen) {
+                mundo2.musicPlaying = mundo2.music.playLoop();
+            }
             break;
+        }
         case EstadoJuego::MUNDO_3:
-            volverAlMenu(map3);
-            appState = EstadoJuego::MENU_PRINCIPAL;
+        {
+            const EstadoJuego pausedState = appState;
+            const int pauseAction = runRaylibPauseMenuForWindow(window);
+            aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
             break;
+        }
         case EstadoJuego::MUNDO_4:
-            volverAlMenu(mapa4);
-            appState = EstadoJuego::MENU_PRINCIPAL;
+        {
+            const EstadoJuego pausedState = appState;
+            const int pauseAction = runRaylibPauseMenuForWindow(window);
+            aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
             break;
+        }
         }
     }
     lastEscapeKey = escapeDown;
@@ -2644,6 +2811,16 @@ bool cargarMundoPendiente(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo
 int main(int argc, char** argv) {
     const bool mapa1SmokeTest = argc > 1 && std::string(argv[1]) == "--smoke-mapa1";
     const bool mapa1CombatSmokeTest = argc > 1 && std::string(argv[1]) == "--smoke-mapa1-combat";
+
+    if (!mapa1SmokeTest && !mapa1CombatSmokeTest) {
+        const int selectedWorld = runRaylibWorldMenu();
+        if (selectedWorld == 0) {
+            return 0;
+        }
+        if (seleccionRaylibEsMundo(selectedWorld)) {
+            solicitarCargaMundo(estadoDesdeSeleccionRaylib(selectedWorld));
+        }
+    }
 
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW." << std::endl;

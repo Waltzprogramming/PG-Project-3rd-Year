@@ -1,0 +1,10 @@
+__pycache__/
+bin/
+generated/
+menu_preview.png
+menu_preview_cpp.png
+menu_diagnostic.txt
+pause_preview_cpp.png
+menu_preview_y.png
+world3_preview.png
+world4_preview.png
