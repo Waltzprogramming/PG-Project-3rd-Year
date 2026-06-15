@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cmath>
 #include <filesystem>
 #include <iomanip>
@@ -33,6 +34,7 @@ namespace {
     constexpr float MinimumWalkableNormal = 0.35f;
     constexpr float MinimumWalkableHeight = -1.08f;
     constexpr float TriangleMargin = 0.012f;
+    constexpr float TerrainCellSize = 1.50f;
     constexpr float LandingMargin = 0.09f;
     constexpr float StepHeightWithoutJump = 0.12f;
     constexpr int StartingLives = 3;
@@ -78,7 +80,7 @@ namespace {
     constexpr float VanPromptVerticalRange = 4.80f;
     constexpr float VanRenderRangeX = 30.0f;
     constexpr float VanRenderRangeZ = 30.0f;
-    constexpr float VanModelDisplaySize = 4.20f;
+    constexpr float VanModelDisplaySize = 7.80f;
     constexpr float GemModelDisplaySize = 0.62f;
     constexpr float PlayerSpawnDistanceFromVan = 2.25f;
     constexpr float SpectralStepCooldown = 0.75f;
@@ -444,6 +446,15 @@ namespace {
         return true;
     }
 
+    int terrainCellCoordinate(float value) {
+        return static_cast<int>(std::floor(value / TerrainCellSize));
+    }
+
+    std::uint64_t terrainCellKey(int x, int z) {
+        return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32u) |
+            static_cast<std::uint32_t>(z);
+    }
+
     bool pointInPlatform(const ExtraPlatform& platform, float x, float z, bool projectDepth) {
         if (platform.shape == PlatformShape::Rectangle) {
             return x >= platform.minX && x <= platform.maxX &&
@@ -520,6 +531,7 @@ struct Mapa1::Impl {
     std::vector<Mesh> enemyHurtMeshes;
     std::vector<Mesh> enemyDeathMeshes;
     std::vector<TerrainTriangle> terrainTriangles;
+    std::unordered_map<std::uint64_t, std::vector<std::uint32_t>> terrainCells;
     std::vector<ExtraPlatform> extraPlatforms = {
         {PlatformShape::Ellipse, 0.60f, 1.40f, -0.40f, 0.40f, 0.18f, 0.24f, {0.36f, 0.72f, 0.32f, 1.0f}, "tuberia", false, false},
         {PlatformShape::Rectangle, -10.50f, -9.15f, 4.00f, 5.35f, -0.18f, 0.24f, {0.30f, 0.72f, 0.42f, 1.0f}, "oeste_01", true, false},
@@ -775,6 +787,7 @@ struct Mapa1::Impl {
 
     void buildTerrainCollisions() {
         terrainTriangles.clear();
+        terrainCells.clear();
         terrainTriangles.reserve(50000);
         glm::vec3 terrainMin(100000.0f);
         glm::vec3 terrainMax(-100000.0f);
@@ -818,11 +831,44 @@ struct Mapa1::Impl {
             }
         }
 
+        std::size_t maximumCellTriangles = 0;
+        std::size_t totalCellReferences = 0;
+        for (std::uint32_t index = 0; index < terrainTriangles.size(); ++index) {
+            const TerrainTriangle& triangle = terrainTriangles[index];
+            const int minCellX = terrainCellCoordinate(triangle.minX - TriangleMargin);
+            const int maxCellX = terrainCellCoordinate(triangle.maxX + TriangleMargin);
+            const int minCellZ = terrainCellCoordinate(triangle.minZ - TriangleMargin);
+            const int maxCellZ = terrainCellCoordinate(triangle.maxZ + TriangleMargin);
+
+            for (int cellX = minCellX; cellX <= maxCellX; ++cellX) {
+                for (int cellZ = minCellZ; cellZ <= maxCellZ; ++cellZ) {
+                    std::vector<std::uint32_t>& cell = terrainCells[terrainCellKey(cellX, cellZ)];
+                    cell.push_back(index);
+                    maximumCellTriangles = std::max(maximumCellTriangles, cell.size());
+                    ++totalCellReferences;
+                }
+            }
+        }
+
+        const float averageCellTriangles = terrainCells.empty()
+            ? 0.0f
+            : static_cast<float>(totalCellReferences) / static_cast<float>(terrainCells.size());
         std::cout << "Mapa 1 ready. Walkable terrain triangles: " << terrainTriangles.size() << std::endl;
+        std::cout << "Mapa 1 terrain grid: " << terrainCells.size()
+            << " cells | average candidates: " << averageCellTriangles
+            << " | maximum candidates: " << maximumCellTriangles << std::endl;
         std::cout << "Mapa 1 terrain bounds: X[" << terrainMin.x << ", " << terrainMax.x
             << "] Z[" << terrainMin.z << ", " << terrainMax.z << "]" << std::endl;
         std::cout << "Mapa 1 parkour platforms: " << extraPlatforms.size() - 1 << std::endl;
         std::cout << "Mapa 1 controls: A/D and W jump in 2D, WASD and Space jump in 3D, mouse aims and shoots in 2D, hold mouse to charge, F parries, E interacts with the phone booth, B opens the remote shop, Q uses purchased Salto Espectral near blue anchors, Tab switches view, Esc returns to menu." << std::endl;
+    }
+
+    const std::vector<std::uint32_t>& terrainCandidates(float x, float z) const {
+        static const std::vector<std::uint32_t> noCandidates;
+        const auto found = terrainCells.find(terrainCellKey(
+            terrainCellCoordinate(x),
+            terrainCellCoordinate(z)));
+        return found != terrainCells.end() ? found->second : noCandidates;
     }
 
     glm::vec3 platformTopCenter(size_t index) const {
@@ -890,7 +936,8 @@ struct Mapa1::Impl {
     bool terrainHeight(float x, float z, float& height) const {
         bool found = false;
         height = -100.0f;
-        for (const TerrainTriangle& triangle : terrainTriangles) {
+        for (const std::uint32_t index : terrainCandidates(x, z)) {
+            const TerrainTriangle& triangle = terrainTriangles[index];
             float triangleHeight = 0.0f;
             if (heightInTriangle(triangle, x, z, triangleHeight) && triangleHeight >= height) {
                 found = true;
@@ -1164,7 +1211,8 @@ struct Mapa1::Impl {
         bool found = false;
         height = -100.0f;
 
-        for (const TerrainTriangle& triangle : terrainTriangles) {
+        for (const std::uint32_t index : terrainCandidates(x, z)) {
+            const TerrainTriangle& triangle = terrainTriangles[index];
             float triangleHeight = 0.0f;
             if (heightInTriangle(triangle, x, z, triangleHeight) && triangleHeight >= height) {
                 found = true;
@@ -1195,7 +1243,8 @@ struct Mapa1::Impl {
         bool found = false;
         height = -100.0f;
 
-        for (const TerrainTriangle& triangle : terrainTriangles) {
+        for (const std::uint32_t index : terrainCandidates(x, z)) {
+            const TerrainTriangle& triangle = terrainTriangles[index];
             float triangleHeight = 0.0f;
             if (heightInTriangle(triangle, x, z, triangleHeight) &&
                 triangleHeight <= maximumHeight &&
@@ -1218,7 +1267,8 @@ struct Mapa1::Impl {
 
     bool movementAllowed(float currentX, float currentZ, float nextX, float nextZ) const {
         float destinationHeight = -100.0f;
-        if (!groundHeight(nextX, nextZ, destinationHeight)) {
+        const float reachableHeight = posY + StepHeightWithoutJump + LandingMargin;
+        if (!landingHeight(nextX, nextZ, reachableHeight, destinationHeight)) {
             return true;
         }
 
@@ -1858,6 +1908,20 @@ struct Mapa1::Impl {
             return false;
         }
 
+        const bool previousMode3D = mode3D;
+        const float previousPosY = posY;
+        const ExtraPlatform& overheadPlatform = extraPlatforms[FirstSpectralIslandIndex];
+        const float overheadTestZ = (overheadPlatform.minZ + overheadPlatform.maxZ) * 0.5f;
+        mode3D = false;
+        posY = overheadPlatform.height - PlayerSpriteHeight - 0.35f;
+        const bool overheadPlatformAllowsPassage = movementAllowed(
+            overheadPlatform.minX - 0.04f,
+            overheadTestZ,
+            overheadPlatform.minX + 0.04f,
+            overheadTestZ);
+        mode3D = previousMode3D;
+        posY = previousPosY;
+
         glm::vec3 nearbyPosition;
         if (!findTerrainEnemyPosition({ 2.0f, 0.0f }, nearbyPosition)) {
             std::cerr << "Mapa 1 combat smoke test could not find nearby terrain." << std::endl;
@@ -2042,6 +2106,7 @@ struct Mapa1::Impl {
         vanShopOpen = false;
 
         const bool passed =
+            overheadPlatformAllowsPassage &&
             enemyAttacksIn2D &&
             firstHitLeavesTwoHealth &&
             secondHitLeavesOneHealth &&
@@ -2061,6 +2126,7 @@ struct Mapa1::Impl {
             remoteShopOpens;
         std::cout << "Mapa 1 combat smoke test: " << (passed ? "PASS" : "FAIL")
             << " | enemy attacks 2D: " << enemyAttacksIn2D
+            << " | overhead passage: " << overheadPlatformAllowsPassage
             << " | player health: " << (firstHitLeavesTwoHealth && secondHitLeavesOneHealth && thirdHitStartsDeathAnimation && thirdHitCostsOneLife)
             << " (" << firstHitLeavesTwoHealth
             << "=" << healthAfterFirstHit << "/" << livesAfterFirstHit
@@ -2252,7 +2318,9 @@ struct Mapa1::Impl {
         posY += velocityY * dt;
 
         float floorHeight = -1.0f;
-        const bool hasFloor = landingHeight(posX, posZ, posY + LandingMargin, floorHeight);
+        const float floorSearchHeight = posY + LandingMargin +
+            (grounded && velocityY <= 0.0f ? StepHeightWithoutJump : 0.0f);
+        const bool hasFloor = landingHeight(posX, posZ, floorSearchHeight, floorHeight);
         if (hasFloor && velocityY <= 0.0f && posY <= floorHeight + LandingMargin) {
             posY = floorHeight;
             velocityY = 0.0f;
@@ -2959,6 +3027,7 @@ struct Mapa1::Impl {
     void shutdown() {
         shutdownAudio();
         terrainTriangles.clear();
+        terrainCells.clear();
         worldModels.clear();
         deferredWorldModelPaths.clear();
         vanModel = {};
