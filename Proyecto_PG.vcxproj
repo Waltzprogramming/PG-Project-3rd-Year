@@ -131,4 +131,7 @@ copy /Y "$(ProjectDir)External\GLFW\lib-vc2022\glfw3.dll" "$(OutDir)"</Command>
     </PropertyGroup>
     <Error Condition="!Exists('$(LocalVcpkgRoot)include\assimp\Importer.hpp')" Text="$(ErrorText)" />
   </Target>
+  <Target Name="BuildRaylibMenu" BeforeTargets="PrepareForBuild" Inputs="$(ProjectDir)Menu\RaylibMenu\build_menu.ps1;$(ProjectDir)Menu\RaylibMenu\menu_raylib.cpp" Outputs="$(ProjectDir)Menu\RaylibMenu\bin\PaperPinixRaylibMenu.exe">
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Menu\RaylibMenu\build_menu.ps1&quot;" />
+  </Target>
 </Project>
