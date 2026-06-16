@@ -303,9 +303,9 @@ void drawMusicStatus(float timeSeconds, int width, int height, bool musicLoaded)
     DrawLineEx(recordCenter, marker, 3.0f, PaperGreen);
     DrawCircleV(marker, 3.0f, Paper);
 
-    DrawTextEx(GetFontDefault(), musicLoaded ? "AHORA SUENA" : "AUDIO NO DISPONIBLE", {x + 112.0f, y + 13.0f}, 17.0f, 1.0f, PaperGreen);
+    DrawTextEx(GetFontDefault(), musicLoaded ? "NOW PLAYING" : "AUDIO UNAVAILABLE", {x + 112.0f, y + 13.0f}, 17.0f, 1.0f, PaperGreen);
     DrawTextEx(GetFontDefault(), "BREAKING THE LIMITS", {x + 112.0f, y + 36.0f}, 24.0f, 1.0f, Paper);
-    DrawTextEx(GetFontDefault(), "MENU PRINCIPAL", {x + 112.0f, y + 62.0f}, 13.0f, 1.0f, withAlpha(Paper, 0.72f));
+    DrawTextEx(GetFontDefault(), "MAIN MENU", {x + 112.0f, y + 62.0f}, 13.0f, 1.0f, withAlpha(Paper, 0.72f));
 }
 
 void drawCreditsPanel(float entry, float timeSeconds, int width, int height) {
@@ -335,7 +335,7 @@ void drawCreditsPanel(float entry, float timeSeconds, int width, int height) {
         Ink);
 
     drawPaperStrip({x + 36.0f, y + 28.0f, panelWidth - 72.0f, 65.0f}, 20.0f, SignalRed, Paper);
-    DrawTextEx(GetFontDefault(), "CREDITOS", {x + 70.0f, y + 40.0f}, 42.0f, 2.0f, Paper);
+    DrawTextEx(GetFontDefault(), "CREDITS", {x + 70.0f, y + 40.0f}, 42.0f, 2.0f, Paper);
 
     const std::array<const char*, 4> names{{
         "Chamorro Mayen Holman Lennin",
@@ -351,7 +351,7 @@ void drawCreditsPanel(float entry, float timeSeconds, int width, int height) {
     }
 
     drawPaperBurst({x + panelWidth - 101.0f, y + panelHeight - 76.0f}, 61.0f, timeSeconds*0.12f, PaperGreen);
-    DrawTextEx(GetFontDefault(), "EQUIPO", {x + panelWidth - 155.0f, y + panelHeight - 96.0f}, 23.0f, 1.0f, Paper);
+    DrawTextEx(GetFontDefault(), "TEAM", {x + panelWidth - 155.0f, y + panelHeight - 96.0f}, 23.0f, 1.0f, Paper);
     DrawTextEx(GetFontDefault(), "PINIX", {x + panelWidth - 164.0f, y + panelHeight - 68.0f}, 37.0f, 1.0f, Paper);
 }
 
@@ -634,7 +634,7 @@ void drawPreviewPanel(RenderTexture2D preview, const WorldEntry& world, float en
     DrawTextEx(GetFontDefault(), world.subtitle, {x + 20.0f, labelY + 9.0f}, 23.0f, 1.0f, Paper);
     DrawTextEx(
         GetFontDefault(),
-        world.available ? "CLICK PARA ENTRAR" : "EN DESARROLLO",
+        world.available ? "CLICK TO ENTER" : "IN DEVELOPMENT",
         {x + panelWidth - 226.0f, labelY + 10.0f},
         21.0f,
         1.0f,
@@ -662,10 +662,10 @@ const char* argumentValue(int argc, char** argv, const char* argument) {
 
 int main(int argc, char** argv) {
     const std::array<WorldEntry, WorldCount> worlds{{
-        {"MUNDO 1", "ISLAS DEL PRIMER RECORRIDO", "Menu/RaylibMenu/generated/world1_preview.preview", PaperGreen, true, {0.0f, 0.02f, 0.0f}, 1.65f},
-        {"MUNDO 2", "FREEZEEZY PEAK", "Menu/RaylibMenu/generated/world2_preview.preview", PaperBlue, true, {0.0f, 0.02f, 0.0f}, 1.12f},
-        {"MUNDO 3", "AVENTURA DEL TERCER MUNDO", "Menu/RaylibMenu/generated/world3_preview.preview", SignalRed, true, {0.0f, 0.02f, 0.0f}, 1.20f},
-        {"MUNDO 4", "DESAFIO FINAL", "Menu/RaylibMenu/generated/world4_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.20f}
+        {"WORLD 1", "ISLANDS OF THE FIRST JOURNEY", "Menu/RaylibMenu/generated/world1_preview.preview", PaperGreen, true, {0.0f, 0.02f, 0.0f}, 1.65f},
+        {"WORLD 2", "FREEZEEZY PEAK", "Menu/RaylibMenu/generated/world2_preview.preview", PaperBlue, true, {0.0f, 0.02f, 0.0f}, 1.12f},
+        {"WORLD 3", "THIRD WORLD ADVENTURE", "Menu/RaylibMenu/generated/world3_preview.preview", SignalRed, true, {0.0f, 0.02f, 0.0f}, 1.20f},
+        {"WORLD 4", "FINAL CHALLENGE", "Menu/RaylibMenu/generated/world4_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.20f}
     }};
 
     const bool pauseMode = hasArgument(argc, argv, "--pause");
@@ -791,15 +791,15 @@ int main(int argc, char** argv) {
         BeginDrawing();
         drawDynamicBackground(now, width, height);
         const char* eyebrow = screen == MenuScreen::Pause
-            ? "PAUSA // PAPER PINIX"
-            : (screen == MenuScreen::Credits ? "CREDITOS // EQUIPO PINIX" : "WORLD SELECT // RAYLIB C++");
+            ? "PAUSE // PAPER PINIX"
+            : (screen == MenuScreen::Credits ? "CREDITS // TEAM PINIX" : "WORLD SELECT // RAYLIB C++");
         drawBrand(now, clamp01(now/0.62f), width, eyebrow);
 
         if (screen == MenuScreen::Home) {
             const float buttonX = 82.0f + easeOutBack(entry)*70.0f;
             AnimatedButton start = drawSkewButton(
                 {buttonX, height - 292.0f, 390.0f, 70.0f},
-                "INICIAR",
+                "START",
                 ">>",
                 homeHover[0],
                 true,
@@ -809,7 +809,7 @@ int main(int argc, char** argv) {
 
             AnimatedButton credits = drawSkewButton(
                 {buttonX + 18.0f, height - 208.0f, 354.0f, 62.0f},
-                "CREDITOS",
+                "CREDITS",
                 "+",
                 homeHover[1],
                 true,
@@ -818,8 +818,8 @@ int main(int argc, char** argv) {
             homeHover[1] = credits.hover;
 
             drawPaperStrip({75.0f, height - 126.0f, 425.0f, 38.0f}, 13.0f, DeepGreen, Paper);
-            DrawTextEx(GetFontDefault(), "SELECCIONA TU PROXIMO DESTINO", {93.0f, height - 118.0f}, 23.0f, 1.0f, Paper);
-            DrawTextEx(GetFontDefault(), "ESC  SALIR", {46.0f, height - 42.0f}, 18.0f, 1.0f, Ink);
+            DrawTextEx(GetFontDefault(), "CHOOSE YOUR NEXT DESTINATION", {93.0f, height - 118.0f}, 23.0f, 1.0f, Paper);
+            DrawTextEx(GetFontDefault(), "ESC  EXIT", {46.0f, height - 42.0f}, 18.0f, 1.0f, Ink);
             drawMusicStatus(now, width, height, musicLoaded || screenshotPath != nullptr);
 
             if (start.hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -838,7 +838,7 @@ int main(int argc, char** argv) {
             drawCreditsPanel(entry, now, width, height);
             AnimatedButton back = drawSkewButton(
                 {56.0f, height - 94.0f, 252.0f, 56.0f},
-                "VOLVER",
+                "BACK",
                 "<",
                 creditsHover,
                 true,
@@ -853,9 +853,9 @@ int main(int argc, char** argv) {
         } else if (screen == MenuScreen::Pause) {
             const float staggeredEntry = easeOutBack(entry);
             drawPaperStrip({52.0f, 252.0f, 340.0f, 55.0f}, 18.0f, DeepGreen, Paper);
-            DrawTextEx(GetFontDefault(), "JUEGO EN PAUSA", {70.0f, 264.0f}, 34.0f, 1.0f, Paper);
+            DrawTextEx(GetFontDefault(), "GAME PAUSED", {70.0f, 264.0f}, 34.0f, 1.0f, Paper);
 
-            const std::array<const char*, 3> labels{"CONTINUAR", "CAMBIAR MUNDO", "SALIR"};
+            const std::array<const char*, 3> labels{"RESUME", "CHANGE WORLD", "EXIT"};
             const std::array<const char*, 3> tags{">>", "[]", "X"};
             for (int index = 0; index < 3; ++index) {
                 const float stagger = clamp01(entry*1.55f - index*0.12f);
@@ -906,9 +906,9 @@ int main(int argc, char** argv) {
                 Paper);
             drawPaperBurst({width - 260.0f, 395.0f}, 116.0f, now*0.16f, SignalRed);
             drawPaperBurst({width - 260.0f, 395.0f}, 83.0f, -now*0.12f, DeepGreen);
-            DrawTextEx(GetFontDefault(), "MUNDO", {width - 346.0f, 330.0f}, 38.0f, 1.0f, Paper);
+            DrawTextEx(GetFontDefault(), "WORLD", {width - 346.0f, 330.0f}, 38.0f, 1.0f, Paper);
             DrawTextEx(GetFontDefault(), "02", {width - 342.0f, 370.0f}, 112.0f, 2.0f, Paper);
-            DrawTextEx(GetFontDefault(), "ESC  CONTINUAR", {46.0f, height - 42.0f}, 18.0f, 1.0f, withAlpha(Paper, 0.72f));
+            DrawTextEx(GetFontDefault(), "ESC  RESUME", {46.0f, height - 42.0f}, 18.0f, 1.0f, withAlpha(Paper, 0.72f));
 
             if (IsKeyPressed(KEY_ESCAPE)) {
                 resultCode = PauseResume;
@@ -917,7 +917,7 @@ int main(int argc, char** argv) {
         } else {
             const float menuEntry = easeOutBack(entry);
             drawPaperStrip({32.0f, 228.0f, 250.0f, 46.0f}, 16.0f, SignalRed, Paper);
-            DrawTextEx(GetFontDefault(), "ELIGE MUNDO", {46.0f, 237.0f}, 27.0f, 1.0f, Paper);
+            DrawTextEx(GetFontDefault(), "CHOOSE WORLD", {46.0f, 237.0f}, 27.0f, 1.0f, Paper);
 
             for (int index = 0; index < WorldCount; ++index) {
                 const float stagger = clamp01(entry*1.45f - index*0.10f);
@@ -948,12 +948,12 @@ int main(int argc, char** argv) {
             }
 
             drawPreviewPanel(preview, worlds[activeWorld], menuEntry, width, height);
-            DrawTextEx(GetFontDefault(), pauseMode ? "ESC  CONTINUAR" : "ESC  VOLVER", {47.0f, height - 42.0f}, 18.0f, 1.0f, withAlpha(Paper, 0.70f));
+            DrawTextEx(GetFontDefault(), pauseMode ? "ESC  RESUME" : "ESC  BACK", {47.0f, height - 42.0f}, 18.0f, 1.0f, withAlpha(Paper, 0.70f));
 
             if (now < unavailableUntil) {
                 const float pulse = 0.75f + std::sin(now*15.0f)*0.15f;
                 drawPaperStrip({38.0f, height - 112.0f, 390.0f, 48.0f}, 13.0f, withAlpha(SignalRed, pulse), Paper);
-                DrawTextEx(GetFontDefault(), "ESTE MUNDO AUN NO ESTA DISPONIBLE", {54.0f, height - 99.0f}, 18.0f, 1.0f, Paper);
+                DrawTextEx(GetFontDefault(), "THIS WORLD IS NOT AVAILABLE YET", {54.0f, height - 99.0f}, 18.0f, 1.0f, Paper);
             }
 
             if (IsKeyPressed(KEY_ESCAPE)) {

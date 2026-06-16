@@ -2633,16 +2633,16 @@ bool initializeMenu(MenuContext& menu) {
 
     const glm::vec3 white(1.0f);
     const glm::vec3 titleColor(1.0f, 0.92f, 0.35f);
-    menu.jugar = createTextSprite(L"Jugar", 34, white, 280, false, true);
-    menu.comoJugar = createTextSprite(L"C\u00f3mo jugar", 31, white, 310, false, true);
-    menu.creditos = createTextSprite(L"Cr\u00e9ditos", 32, white, 280, false, true);
-    menu.salir = createTextSprite(L"Salir", 34, white, 260, false, true);
-    menu.mundo1 = createTextSprite(L"Mundo 1", 32, white, 280, false, true);
-    menu.mundo2 = createTextSprite(L"Mundo 2", 32, white, 280, false, true);
-    menu.mundo3 = createTextSprite(L"Mundo 3", 32, white, 280, false, true);
-    menu.mundo4 = createTextSprite(L"Mundo 4", 32, white, 280, false, true);
-    menu.volver = createTextSprite(L"Volver", 31, white, 250, false, true);
-    menu.tituloComoJugar = createTextSprite(L"C\u00f3mo jugar", 44, titleColor, 560, false, true);
+    menu.jugar = createTextSprite(L"Play", 34, white, 280, false, true);
+    menu.comoJugar = createTextSprite(L"How to Play", 31, white, 310, false, true);
+    menu.creditos = createTextSprite(L"Credits", 32, white, 280, false, true);
+    menu.salir = createTextSprite(L"Exit", 34, white, 260, false, true);
+    menu.mundo1 = createTextSprite(L"World 1", 32, white, 280, false, true);
+    menu.mundo2 = createTextSprite(L"World 2", 32, white, 280, false, true);
+    menu.mundo3 = createTextSprite(L"World 3", 32, white, 280, false, true);
+    menu.mundo4 = createTextSprite(L"World 4", 32, white, 280, false, true);
+    menu.volver = createTextSprite(L"Back", 31, white, 250, false, true);
+    menu.tituloComoJugar = createTextSprite(L"How to Play", 44, titleColor, 560, false, true);
     menu.textoComoJugar = createTextSprite(
         L"- Usa las teclas de movimiento para controlar al personaje.\n"
         L"- Evita obst\u00e1culos y enemigos.\n"
@@ -2651,7 +2651,7 @@ bool initializeMenu(MenuContext& menu) {
         L"- Completa el nivel para ganar.\n"
         L"- Presiona ESC o el bot\u00f3n Volver para regresar al men\u00fa.",
         23, white, 700, true, false);
-    menu.tituloCreditos = createTextSprite(L"Cr\u00e9ditos", 44, titleColor, 520, false, true);
+    menu.tituloCreditos = createTextSprite(L"Credits", 44, titleColor, 520, false, true);
     menu.textoCreditos = createTextSprite(
         L"Paper Pinix\n"
         L"Proyecto avanzado\n"
@@ -2672,7 +2672,15 @@ bool initializeMenu(MenuContext& menu) {
     menu.combateSolo2D = createTextSprite(L"\u00a1Peligro! Cambia a 2D con TAB para detener a los enemigos.", 27, white, 720, false, true);
     menu.vidaJugador = createTextSprite(L"VIDA", 25, white, 120, false, false);
     menu.luzJugador = createTextSprite(L"LUZ", 25, white, 120, false, false);
-    menu.mapa4Hint = createTextSprite(L"Follow the light and find the golden coins", 20, white, 520, false, true);
+    menu.mapa4Instructions = createTextSprite(
+        L"Use TAB to switch between 3D and 2D mode. Press E to use the shield. "
+        L"You can only attack enemies while you are in 2D mode. To beat the level, "
+        L"you must collect all 10 coins.",
+        19,
+        white,
+        470,
+        true,
+        true);
     menu.cargandoAtaque = createTextSprite(L"CARGANDO TIRO", 21, white, 250, false, false);
     menu.parryActivo = createTextSprite(L"PARRY", 23, white, 150, false, true);
     menu.tiendaBoton = createTextSprite(L"TIENDA  [B]", 23, white, 190, false, true);

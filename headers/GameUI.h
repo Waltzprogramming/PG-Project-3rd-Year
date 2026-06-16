@@ -73,7 +73,7 @@ struct MenuContext {
     TextSprite vidaJugador;
     TextSprite luzJugador;
     TextSprite map3PlayerX;
-    TextSprite mapa4Hint;
+    TextSprite mapa4Instructions;
     TextSprite cargandoAtaque;
     TextSprite parryActivo;
     TextSprite tiendaBoton;

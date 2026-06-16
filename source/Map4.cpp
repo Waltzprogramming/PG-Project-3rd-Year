@@ -1024,6 +1024,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
             mapa4.skipFirstUpdateFrame = true;
             mapa4.projectiles.clear();
             mapa4.projectileCooldown = 0.0f;
+            mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
             currentMode = PlayMode::Mode2D;
             locked2DDepth = spawnPoint.z;
             cameraInitialized = false;
@@ -1080,6 +1081,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     mapa4.skipFirstUpdateFrame = true;
     mapa4.projectiles.clear();
     mapa4.projectileCooldown = 0.0f;
+    mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
     currentMode = PlayMode::Mode2D;
     locked2DDepth = spawnPoint.z;
     cameraInitialized = false;
@@ -1107,6 +1109,7 @@ void volverAlMenu(Mapa4Runtime& mapa4) {
     mapa4.lightEnergy = Map4LightEnergyMaximum;
     mapa4.startSequencePending = false;
     mapa4.skipFirstUpdateFrame = false;
+    mapa4.instructionBoxAvailableAt = 0.0;
     mapa4.sessionActive = false;
 }
 //funcion render map 4 
@@ -1240,7 +1243,7 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
 }
 
 void renderMapa4Hud(MenuContext& menu, const Mapa4Runtime& mapa4, int width, int height, float now) {
-    // hud propio del mapa con barra de luz y mensaje fijo para orientar al jugador
+    // hud propio del mapa con barra de luz e instrucciones temporales
     const Rect lightPanel{22.0f, 106.0f, 282.0f, 72.0f};
     drawRect(menu, {lightPanel.x + 6.0f, lightPanel.y + 7.0f, lightPanel.width, lightPanel.height}, {0.01f, 0.02f, 0.05f, 0.48f});
     drawRect(menu, lightPanel, {0.06f, 0.12f, 0.24f, 0.94f});
@@ -1249,14 +1252,25 @@ void renderMapa4Hud(MenuContext& menu, const Mapa4Runtime& mapa4, int width, int
     drawRect(menu, {lightPanel.x + 14.0f, lightPanel.y + 44.0f, 224.0f, 16.0f}, {0.14f, 0.17f, 0.22f, 0.95f});
     drawRect(menu, {lightPanel.x + 14.0f, lightPanel.y + 44.0f, 224.0f * ratio, 16.0f}, {0.99f, 0.82f, 0.22f, 1.0f});
 
-    const Rect hintPanel{
-        22.0f,
-        static_cast<float>(height) - 78.0f,
-        std::min(470.0f, static_cast<float>(width) - 44.0f),
-        44.0f
-    };
-    drawRect(menu, {hintPanel.x + 5.0f, hintPanel.y + 6.0f, hintPanel.width, hintPanel.height}, {0.01f, 0.02f, 0.05f, 0.34f});
-    drawRect(menu, hintPanel, {0.09f, 0.16f, 0.28f, 0.78f});
-    drawText(menu, menu.mapa4Hint, hintPanel.x + 14.0f, hintPanel.y + (hintPanel.height - menu.mapa4Hint.size.y) * 0.5f, glm::vec4(1.0f, 0.93f, 0.78f, 0.96f));
-
+    if (now >= mapa4.instructionBoxAvailableAt && !mapa4.gameOver && !mapa4.mission.levelComplete()) {
+        const float panelWidth = std::min(520.0f, static_cast<float>(width) - 44.0f);
+        const float panelHeight = std::max(132.0f, menu.mapa4Instructions.size.y + 30.0f);
+        const Rect instructionPanel{
+            static_cast<float>(width) - panelWidth - 22.0f,
+            static_cast<float>(height) - panelHeight - 28.0f,
+            panelWidth,
+            panelHeight
+        };
+        drawRect(
+            menu,
+            {instructionPanel.x + 6.0f, instructionPanel.y + 7.0f, instructionPanel.width, instructionPanel.height},
+            {0.01f, 0.02f, 0.05f, 0.38f});
+        drawRect(menu, instructionPanel, {0.08f, 0.14f, 0.26f, 0.88f});
+        drawText(
+            menu,
+            menu.mapa4Instructions,
+            instructionPanel.x + 16.0f,
+            instructionPanel.y + (instructionPanel.height - menu.mapa4Instructions.size.y) * 0.5f,
+            glm::vec4(1.0f, 0.95f, 0.84f, 0.98f));
+    }
 }

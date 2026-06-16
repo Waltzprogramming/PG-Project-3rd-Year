@@ -141,6 +141,7 @@ struct Mapa4Runtime {
     bool gameOver{false};
     std::vector<Mapa4Projectile> projectiles;
     float projectileCooldown{0.0f};
+    double instructionBoxAvailableAt{0.0};
 };
 
 bool isMarioMapa4Environment(const Environment& environment);
