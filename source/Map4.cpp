@@ -1025,6 +1025,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
             mapa4.projectiles.clear();
             mapa4.projectileCooldown = 0.0f;
             mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
+            mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
             currentMode = PlayMode::Mode2D;
             locked2DDepth = spawnPoint.z;
             cameraInitialized = false;
@@ -1082,6 +1083,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     mapa4.projectiles.clear();
     mapa4.projectileCooldown = 0.0f;
     mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
+    mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
     currentMode = PlayMode::Mode2D;
     locked2DDepth = spawnPoint.z;
     cameraInitialized = false;
@@ -1110,6 +1112,7 @@ void volverAlMenu(Mapa4Runtime& mapa4) {
     mapa4.startSequencePending = false;
     mapa4.skipFirstUpdateFrame = false;
     mapa4.instructionBoxAvailableAt = 0.0;
+    mapa4.instructionBoxHideAt = 0.0;
     mapa4.sessionActive = false;
 }
 //funcion render map 4 
@@ -1252,7 +1255,10 @@ void renderMapa4Hud(MenuContext& menu, const Mapa4Runtime& mapa4, int width, int
     drawRect(menu, {lightPanel.x + 14.0f, lightPanel.y + 44.0f, 224.0f, 16.0f}, {0.14f, 0.17f, 0.22f, 0.95f});
     drawRect(menu, {lightPanel.x + 14.0f, lightPanel.y + 44.0f, 224.0f * ratio, 16.0f}, {0.99f, 0.82f, 0.22f, 1.0f});
 
-    if (now >= mapa4.instructionBoxAvailableAt && !mapa4.gameOver && !mapa4.mission.levelComplete()) {
+    if (now >= mapa4.instructionBoxAvailableAt
+        && now <= mapa4.instructionBoxHideAt
+        && !mapa4.gameOver
+        && !mapa4.mission.levelComplete()) {
         const float panelWidth = std::min(520.0f, static_cast<float>(width) - 44.0f);
         const float panelHeight = std::max(132.0f, menu.mapa4Instructions.size.y + 30.0f);
         const Rect instructionPanel{
