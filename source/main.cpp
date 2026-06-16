@@ -2100,9 +2100,19 @@ void drawGameOverHud(MenuContext& menu, int width, int height) {
 void drawLevelCompleteHud(MenuContext& menu, int width, int height) {
     beginUiFrame(menu, width, height);
     drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.01f, 0.02f, 0.06f, 0.58f});
-    const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 72.0f, 560.0f, 144.0f);
+    const float timeSeconds = static_cast<float>(glfwGetTime());
+    const float pulse = 0.94f + std::sin(timeSeconds * 4.8f) * 0.06f;
+    const Rect glow = centeredRect(width * 0.5f, height * 0.5f - 116.0f, 690.0f * pulse, 230.0f * pulse);
+    drawRect(menu, glow, {0.95f, 0.73f, 0.12f, 0.10f});
+    const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 108.0f, 660.0f, 216.0f);
+    drawRect(menu, {panel.x + 10.0f, panel.y + 12.0f, panel.width, panel.height}, {0.0f, 0.0f, 0.0f, 0.44f});
+    drawRect(menu, {panel.x - 5.0f, panel.y - 5.0f, panel.width + 10.0f, panel.height + 10.0f}, {0.99f, 0.82f, 0.20f, 0.96f});
     drawPanel(menu, panel);
-    drawText(menu, menu.nivelCompletado, panel.x + (panel.width - menu.nivelCompletado.size.x) * 0.5f, panel.y + (panel.height - menu.nivelCompletado.size.y) * 0.5f);
+    const Rect ribbon = centeredRect(width * 0.5f, panel.y + 22.0f, 320.0f, 40.0f);
+    drawRect(menu, ribbon, {0.92f, 0.18f, 0.16f, 0.96f});
+    drawText(menu, menu.estrellaLista, ribbon.x + (ribbon.width - menu.estrellaLista.size.x) * 0.5f, ribbon.y + (ribbon.height - menu.estrellaLista.size.y) * 0.5f, {1.0f, 0.92f, 0.24f, 1.0f});
+    drawText(menu, menu.nivelCompletado, panel.x + (panel.width - menu.nivelCompletado.size.x) * 0.5f, panel.y + 78.0f);
+    drawText(menu, menu.nivelCompletadoDetalle, panel.x + (panel.width - menu.nivelCompletadoDetalle.size.x) * 0.5f, panel.y + 146.0f, {0.94f, 0.96f, 1.0f, 0.98f});
 }
 
 void drawToadHud(MenuContext& menu, const ToadNpc& toad, int width, int height) {
@@ -2666,8 +2676,9 @@ bool initializeMenu(MenuContext& menu) {
         menu.coinCounters[i] = createTextSprite(formatCoinProgress(i), 28, white, 132, false, true);
         menu.coinMessages[i] = createTextSprite(formatCoinProgress(i), 31, white, 132, false, true);
     }
-    menu.estrellaLista = createTextSprite(L"\u00a1La estrella apareci\u00f3!", 29, titleColor, 400, false, true);
-    menu.nivelCompletado = createTextSprite(L"\u00a1Nivel completado! \u00a1Ganaste!", 48, titleColor, 660, false, true);
+    menu.estrellaLista = createTextSprite(L"STAR UNLOCKED!", 29, titleColor, 400, false, true);
+    menu.nivelCompletado = createTextSprite(L"LEVEL COMPLETE!", 54, titleColor, 660, false, true);
+    menu.nivelCompletadoDetalle = createTextSprite(L"All 10 coins collected", 27, white, 420, false, true);
     menu.juegoTerminado = createTextSprite(L"Juego terminado", 52, titleColor, 520, false, true);
     menu.combateSolo2D = createTextSprite(L"\u00a1Peligro! Cambia a 2D con TAB para detener a los enemigos.", 27, white, 720, false, true);
     menu.vidaJugador = createTextSprite(L"VIDA", 25, white, 120, false, false);

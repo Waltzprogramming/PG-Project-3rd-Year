@@ -54,6 +54,7 @@ struct MenuContext {
     std::array<TextSprite, MissionCoinTotal + 1> coinMessages;
     TextSprite estrellaLista;
     TextSprite nivelCompletado;
+    TextSprite nivelCompletadoDetalle;
     TextSprite juegoTerminado;
     TextSprite combateSolo2D;
     TextSprite pasoEspectralBloqueado;
