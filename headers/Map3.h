@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioPlayer.h"
 #include "Environment.h"
 #include "GameSystems.h"
 #include "Player.h"
@@ -77,9 +78,12 @@ struct Map3Runtime {
     Player player;
     MissionManager mission;
     Map3EnemyManager enemies;
+    AudioPlayer music;
     bool initialized{false};
     bool sessionActive{false};
     bool skipFirstUpdateFrame{false};
+    bool musicOpen{false};
+    bool musicPlaying{false};
     int health{3};
     int maxHealth{3};
     float damageCooldown{0.0f};
@@ -99,6 +103,8 @@ struct Map3Runtime {
 
 bool iniciarMap3(Map3Runtime& map3);
 void volverAlMenu(Map3Runtime& map3);
+bool pausarMusicaMap3(Map3Runtime& map3);
+void reanudarMusicaMap3(Map3Runtime& map3, bool shouldResume);
 void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader, const Shader& lavaShader, float now);
 void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, int height);
 bool map3DefensiveActionActive(const Map3Runtime& map3, float timeSeconds);

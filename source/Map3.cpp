@@ -88,6 +88,37 @@ constexpr float Map3JumpBlockedMaxX = -1.7f;
 glm::vec3 map3CameraLead{0.0f};
 glm::vec3 map3PreviousCameraPlayerPosition{0.0f};
 
+bool startMap3Music(Map3Runtime& map3) {
+    if (!map3.musicOpen) {
+        const std::string musicPath = resolveFirstExistingAsset({
+            "assets/audio/Audiomapa3.mp3",
+            "assets/audio/audio mapa3.mp3",
+            "assets/audio/sonido mapa3.mp3"
+        });
+        if (!musicPath.empty() && std::filesystem::exists(musicPath)) {
+            map3.musicOpen = map3.music.open(musicPath);
+            if (map3.musicOpen) {
+                map3.music.setVolume(820);
+            }
+        }
+        if (!map3.musicOpen) {
+            std::cerr << "Map3 music could not be started." << std::endl;
+        }
+    }
+
+    if (map3.musicOpen && !map3.musicPlaying) {
+        map3.musicPlaying = map3.music.playLoop();
+    }
+    return map3.musicPlaying;
+}
+
+void stopMap3Music(Map3Runtime& map3) {
+    if (map3.musicOpen && map3.musicPlaying) {
+        map3.music.stop();
+        map3.musicPlaying = false;
+    }
+}
+
 struct Map3ModeRestrictionRange {
     float minX{0.0f};
     float maxX{0.0f};
@@ -1580,6 +1611,7 @@ bool iniciarMap3(Map3Runtime& map3) {
             resetMap3ViewForEnvironment(map3.environment, map3.player);
             map3.sessionActive = true;
         }
+        startMap3Music(map3);
         return true;
     }
 
@@ -1624,10 +1656,12 @@ bool iniciarMap3(Map3Runtime& map3) {
 
     map3.initialized = true;
     map3.sessionActive = true;
+    startMap3Music(map3);
     return true;
 }
 
 void volverAlMenu(Map3Runtime& map3) {
+    stopMap3Music(map3);
     map3.sessionActive = false;
     map3.skipFirstUpdateFrame = false;
     map3.damageCooldown = 0.0f;
@@ -1637,6 +1671,21 @@ void volverAlMenu(Map3Runtime& map3) {
     map3.startHintUntil = 0.0f;
     map3.invisibleWallNoticeUntil = 0.0f;
     resetMap3RuntimeBuffers(map3);
+}
+
+bool pausarMusicaMap3(Map3Runtime& map3) {
+    const bool shouldResume = map3.musicOpen && map3.musicPlaying;
+    if (shouldResume) {
+        map3.music.stop();
+        map3.musicPlaying = false;
+    }
+    return shouldResume;
+}
+
+void reanudarMusicaMap3(Map3Runtime& map3, bool shouldResume) {
+    if (shouldResume) {
+        startMap3Music(map3);
+    }
 }
 
 void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader, const Shader& lavaShader, float now) {
@@ -1695,11 +1744,13 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
             map3.damageCooldown = Map3EnemyHitCooldown;
             if (map3.health <= 0) {
                 map3.gameOver = true;
+                stopMap3Music(map3);
             }
         }
 
         if (map3.player.position().x >= Map3FinishX) {
             map3.mission.forceComplete(now);
+            stopMap3Music(map3);
         }
     }
 
