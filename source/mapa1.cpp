@@ -3073,6 +3073,19 @@ struct Mapa1::Impl {
         shader = Shader{};
         initialized = false;
     }
+
+    void pauseBackgroundMusic() {
+        if (backgroundMusicOpen && backgroundMusicPlaying) {
+            backgroundMusic.stop();
+            backgroundMusicPlaying = false;
+        }
+    }
+
+    void resumeBackgroundMusic() {
+        if (backgroundMusicOpen && !backgroundMusicPlaying) {
+            backgroundMusicPlaying = backgroundMusic.playLoop();
+        }
+    }
 };
 
 Mapa1::Mapa1()
@@ -3095,6 +3108,14 @@ void Mapa1::render(GLFWwindow* window, float deltaTime) {
 
 void Mapa1::shutdown() {
     m_impl->shutdown();
+}
+
+void Mapa1::pauseBackgroundMusic() {
+    m_impl->pauseBackgroundMusic();
+}
+
+void Mapa1::resumeBackgroundMusic() {
+    m_impl->resumeBackgroundMusic();
 }
 
 int Mapa1::collectedCount() const {

@@ -16,6 +16,8 @@ public:
     bool runCombatSmokeTest();
     void render(GLFWwindow* window, float deltaTime);
     void shutdown();
+    void pauseBackgroundMusic();
+    void resumeBackgroundMusic();
 
     int collectedCount() const;
     int messageCount() const;

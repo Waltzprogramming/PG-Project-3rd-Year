@@ -1122,6 +1122,8 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
         // la música entra hasta que el mapa ya terminó de armarse
         if (!mapa4.musicOpen) {
             const std::string musicPath = resolveFirstExistingAsset({
+                "assets/audio/audio mapa 4.mp3",
+                "assets/mapa 4/audio 4.mp3",
                 "assets/audio/map4.mp3",
                 "assets/audio/Map4.mp3"
             });
