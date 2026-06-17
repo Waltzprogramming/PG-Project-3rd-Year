@@ -21,6 +21,7 @@ struct Mapa4Projectile {
     float lifetime{4.20f};
     int damage{1};
     bool fromEnemy{false};
+    float traveledDistance{0.0f};
 };
 
 // guarda la posición y el tiempo de respawn de cada sol del mapa

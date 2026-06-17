@@ -19,8 +19,9 @@ namespace {
 // valores base del combate y de la mecánica de luz para que todo el mapa use el mismo ritmo
 constexpr float Map4ProjectileLifetime = 4.20f;
 constexpr float Map4ProjectileSpeed = 5.40f;
-constexpr float Map4ProjectileCooldown = 0.18f;
-constexpr float Map4ProjectileLength = 0.72f;
+constexpr float Map4ProjectileCooldown = 0.34f;
+constexpr float Map4ProjectileLength = 0.86f;
+constexpr float Map4ProjectileMaxDistance = 8.40f;
 constexpr float Map4EnemyProjectileSpeed = 2.05f;
 constexpr float Map4EnemyProjectileCooldown = 2.10f;
 constexpr float Map4EnemyDetectionRange = 4.6f;
@@ -124,8 +125,14 @@ void updateMapa4Projectiles(Mapa4Runtime& mapa4, float dt) {
     // mueve todos los proyectiles y decide cuándo pegan o cuándo se deben borrar
     for (size_t i = 0; i < mapa4.projectiles.size();) {
         Mapa4Projectile& projectile = mapa4.projectiles[i];
-        projectile.position += projectile.velocity * dt;
+        const glm::vec3 frameStep = projectile.velocity * dt;
+        projectile.position += frameStep;
+        projectile.traveledDistance += glm::length(frameStep);
         projectile.lifetime -= dt;
+
+        if (!projectile.fromEnemy) {
+            projectile.velocity *= std::max(0.0f, 1.0f - dt * 0.22f);
+        }
 
         const glm::vec3 worldMin = mapa4.environment.worldMin();
         const glm::vec3 worldMax = mapa4.environment.worldMax();
@@ -137,7 +144,7 @@ void updateMapa4Projectiles(Mapa4Runtime& mapa4, float dt) {
             projectile.position.z < worldMin.z - 2.0f ||
             projectile.position.z > worldMax.z + 2.0f;
 
-        bool remove = projectile.lifetime <= 0.0f || outsideWorld;
+        bool remove = projectile.lifetime <= 0.0f || outsideWorld || projectile.traveledDistance >= Map4ProjectileMaxDistance;
         if (!remove) {
             if (projectile.fromEnemy) {
                 // los tiros enemigos no quitan vida de golpe sino que suman impactos
@@ -179,21 +186,33 @@ void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Project
     static Mesh swordBladeMesh = Mesh::cube();
     static Mesh swordGuardMesh = Mesh::cube();
     static Mesh swordPommelMesh = Mesh::cube();
+    static Mesh swordAuraMesh = Mesh::cylinder(28, 1.0f, 0.14f);
     Material playerBladeMaterial;
-    playerBladeMaterial.baseColor = {0.26f, 0.72f, 1.00f};
-    playerBladeMaterial.emissive = {0.08f, 0.18f, 0.34f};
-    playerBladeMaterial.roughness = 0.18f;
-    playerBladeMaterial.fogAmount = 0.06f;
+    playerBladeMaterial.baseColor = {0.24f, 0.80f, 1.00f};
+    playerBladeMaterial.emissive = {0.12f, 0.36f, 0.58f};
+    playerBladeMaterial.roughness = 0.10f;
+    playerBladeMaterial.fogAmount = 0.04f;
     Material playerCoreMaterial;
-    playerCoreMaterial.baseColor = {0.82f, 0.95f, 1.00f};
-    playerCoreMaterial.emissive = {0.16f, 0.28f, 0.42f};
-    playerCoreMaterial.roughness = 0.08f;
-    playerCoreMaterial.fogAmount = 0.03f;
+    playerCoreMaterial.baseColor = {0.98f, 1.00f, 1.00f};
+    playerCoreMaterial.emissive = {0.34f, 0.46f, 0.68f};
+    playerCoreMaterial.roughness = 0.03f;
+    playerCoreMaterial.fogAmount = 0.02f;
     Material playerGuardMaterial;
-    playerGuardMaterial.baseColor = {0.10f, 0.20f, 0.34f};
-    playerGuardMaterial.emissive = {0.02f, 0.04f, 0.09f};
-    playerGuardMaterial.roughness = 0.46f;
+    playerGuardMaterial.baseColor = {0.18f, 0.16f, 0.42f};
+    playerGuardMaterial.emissive = {0.08f, 0.05f, 0.18f};
+    playerGuardMaterial.roughness = 0.26f;
     playerGuardMaterial.fogAmount = 0.08f;
+    Material playerAuraMaterial;
+    playerAuraMaterial.baseColor = {0.56f, 0.36f, 1.00f};
+    playerAuraMaterial.emissive = {0.16f, 0.22f, 0.60f};
+    playerAuraMaterial.roughness = 0.02f;
+    playerAuraMaterial.fogAmount = 0.02f;
+    playerAuraMaterial.opacity = 0.26f;
+    Material playerEdgeMaterial;
+    playerEdgeMaterial.baseColor = {0.72f, 0.94f, 1.00f};
+    playerEdgeMaterial.emissive = {0.24f, 0.44f, 0.70f};
+    playerEdgeMaterial.roughness = 0.04f;
+    playerEdgeMaterial.fogAmount = 0.02f;
     Material enemyArrowMaterial;
     enemyArrowMaterial.baseColor = {0.78f, 0.22f, 0.18f};
     enemyArrowMaterial.emissive = {0.20f, 0.05f, 0.04f};
@@ -226,30 +245,53 @@ void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Project
             continue;
         }
 
-        const glm::mat4 bladeModel = model
+        const float shimmer = 0.92f + std::sin(timeSeconds * 15.0f + projectile.position.x * 2.5f) * 0.08f;
+        const float travelRatio = std::clamp(projectile.traveledDistance / Map4ProjectileMaxDistance, 0.0f, 1.0f);
+        const float sizeFade = 1.0f - travelRatio * 0.18f;
+        const float spin = std::sin(timeSeconds * 18.0f + projectile.traveledDistance * 1.2f) * 0.16f;
+        glm::mat4 spinningModel = model;
+        spinningModel = glm::rotate(spinningModel, spin, glm::vec3(0.0f, 1.0f, 0.0f));
+
+        const glm::mat4 auraModel = spinningModel
+            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.16f, 0.0f))
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.14f, Map4ProjectileLength * 1.04f, 0.12f) * sizeFade);
+        shader.setMat4("uModel", auraModel);
+        bindSceneMaterial(shader, playerAuraMaterial);
+        swordAuraMesh.draw();
+
+        Material shimmeringBlade = playerBladeMaterial;
+        shimmeringBlade.emissive *= shimmer;
+        const glm::mat4 bladeModel = spinningModel
             * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.18f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.09f, Map4ProjectileLength * 0.84f, 0.04f));
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.08f, Map4ProjectileLength * 0.88f, 0.038f) * sizeFade);
         shader.setMat4("uModel", bladeModel);
-        bindSceneMaterial(shader, playerBladeMaterial);
+        bindSceneMaterial(shader, shimmeringBlade);
         swordBladeMesh.draw();
 
-        const glm::mat4 coreModel = model
+        const glm::mat4 coreModel = spinningModel
             * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.20f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.04f, Map4ProjectileLength * 0.76f, 0.02f));
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.026f, Map4ProjectileLength * 0.82f, 0.016f) * sizeFade);
         shader.setMat4("uModel", coreModel);
         bindSceneMaterial(shader, playerCoreMaterial);
         swordBladeMesh.draw();
 
-        const glm::mat4 guardModel = model
+        const glm::mat4 edgeModel = spinningModel
+            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.34f, 0.0f))
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.034f, Map4ProjectileLength * 0.18f, 0.020f) * sizeFade);
+        shader.setMat4("uModel", edgeModel);
+        bindSceneMaterial(shader, playerEdgeMaterial);
+        swordPommelMesh.draw();
+
+        const glm::mat4 guardModel = spinningModel
             * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -Map4ProjectileLength * 0.18f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.22f, 0.03f, 0.06f));
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.28f, 0.028f, 0.07f) * sizeFade);
         shader.setMat4("uModel", guardModel);
         bindSceneMaterial(shader, playerGuardMaterial);
         swordGuardMesh.draw();
 
-        const glm::mat4 pommelModel = model
-            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -Map4ProjectileLength * 0.28f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.05f, 0.08f, 0.05f));
+        const glm::mat4 pommelModel = spinningModel
+            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -Map4ProjectileLength * 0.30f, 0.0f))
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.048f, 0.10f, 0.048f) * sizeFade);
         shader.setMat4("uModel", pommelModel);
         bindSceneMaterial(shader, playerCoreMaterial);
         swordPommelMesh.draw();
