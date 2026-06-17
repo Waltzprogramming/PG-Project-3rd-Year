@@ -1,0 +1,11 @@
+Model Information:
+* title:	Choclo
+* source:	https://sketchfab.com/3d-models/choclo-dc1557cbc05541979dff6355d61c11d8
+* author:	JhonnMere (https://sketchfab.com/JhonnMere)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Choclo" (https://sketchfab.com/3d-models/choclo-dc1557cbc05541979dff6355d61c11d8) by JhonnMere (https://sketchfab.com/JhonnMere) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

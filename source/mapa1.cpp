@@ -1136,7 +1136,7 @@ struct Mapa1::Impl {
     float deferredWorldLoadDelay{ 0.0f };
 
     void initializeAudio() {
-        backgroundMusicOpen = backgroundMusic.open(resolveAssetPath("assets/audio/devil-never-cry-compatible.mp3"));
+        backgroundMusicOpen = backgroundMusic.open(resolveAssetPath("assets/audio/Blade_of_the_Hidden_Cove.mp3"));
         if (backgroundMusicOpen) {
             backgroundMusicPlaying = backgroundMusic.playLoop();
         }
