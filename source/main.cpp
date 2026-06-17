@@ -353,7 +353,7 @@ glm::mat4 localPartMatrix(const MissionRenderablePart& part) {
     return model;
 }
 
-TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::vec3& color, int maxWidth, bool multiline, bool bold) {
+TextSprite createTextSpriteWithFontList(const std::wstring& text, int fontSize, const glm::vec3& color, int maxWidth, bool multiline, bool bold, const std::initializer_list<const wchar_t*>& fontNames) {
     // Rasteriza texto con GDI a una textura OpenGL reutilizable para HUD y menús.
     TextSprite sprite;
     HDC screenDc = GetDC(nullptr);
@@ -368,12 +368,14 @@ TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::v
         return sprite;
     }
 
-    const int fontWeight = bold ? FW_HEAVY : FW_SEMIBOLD;
-    HFONT font = CreateFontW(-fontSize, 0, 0, 0, fontWeight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Arial Rounded MT Bold");
-    if (font == nullptr) {
+    const int fontWeight = bold ? FW_BOLD : FW_SEMIBOLD;
+    HFONT font = nullptr;
+    for (const wchar_t* fontName : fontNames) {
         font = CreateFontW(-fontSize, 0, 0, 0, fontWeight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Arial");
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_NATURAL_QUALITY, DEFAULT_PITCH | FF_SWISS, fontName);
+        if (font != nullptr) {
+            break;
+        }
     }
     if (font == nullptr) {
         DeleteDC(memoryDc);
@@ -445,6 +447,28 @@ TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::v
     sprite.texture->createFromRGBA(width, height, rgba.data(), false);
     sprite.size = {static_cast<float>(width), static_cast<float>(height)};
     return sprite;
+}
+
+TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::vec3& color, int maxWidth, bool multiline, bool bold) {
+    return createTextSpriteWithFontList(
+        text,
+        fontSize,
+        color,
+        maxWidth,
+        multiline,
+        bold,
+        {L"Segoe UI Semibold", L"Segoe UI", L"Arial"});
+}
+
+TextSprite createDisplayTitleSprite(const std::wstring& text, int fontSize, const glm::vec3& color, int maxWidth) {
+    return createTextSpriteWithFontList(
+        text,
+        fontSize,
+        color,
+        maxWidth,
+        false,
+        true,
+        {L"Impact", L"Haettenschweiler", L"Arial Black", L"Segoe UI Semibold", L"Arial"});
 }
 
 Rect centeredRect(float centerX, float y, float width, float height) {
@@ -1933,6 +1957,28 @@ void drawGameOverHud(MenuContext& menu, int width, int height) {
         {0.94f, 0.96f, 1.0f, 0.96f});
 }
 
+void drawMapa4EndHud(MenuContext& menu, bool levelCompleted, int width, int height) {
+    beginUiFrame(menu, width, height);
+    drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.01f, 0.02f, 0.06f, 0.68f});
+    const float timeSeconds = static_cast<float>(glfwGetTime());
+    const float pulse = 0.97f + std::sin(timeSeconds * 3.6f) * 0.03f;
+    const Rect glow = centeredRect(width * 0.5f, height * 0.5f - 160.0f, 760.0f * pulse, 304.0f * pulse);
+    drawRect(menu, glow, levelCompleted ? glm::vec4(0.22f, 0.64f, 1.0f, 0.14f) : glm::vec4(0.98f, 0.28f, 0.18f, 0.12f));
+
+    const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 154.0f, 700.0f, 292.0f);
+    drawRect(menu, {panel.x + 10.0f, panel.y + 12.0f, panel.width, panel.height}, {0.0f, 0.0f, 0.0f, 0.42f});
+    drawRect(menu, {panel.x - 5.0f, panel.y - 5.0f, panel.width + 10.0f, panel.height + 10.0f},
+        levelCompleted ? glm::vec4(0.25f, 0.72f, 1.0f, 0.98f) : glm::vec4(1.0f, 0.44f, 0.22f, 0.98f));
+    drawPanel(menu, panel);
+
+    const TextSprite& title = levelCompleted ? menu.nivelCompletado : menu.juegoTerminado;
+    const TextSprite& detail = levelCompleted ? menu.mapa4FinalDetalleVictoria : menu.mapa4FinalDetalleDerrota;
+    drawText(menu, title, panel.x + (panel.width - title.size.x) * 0.5f, panel.y + 42.0f, {0.08f, 0.10f, 0.18f, 0.42f});
+    drawText(menu, title, panel.x + (panel.width - title.size.x) * 0.5f, panel.y + 34.0f);
+    drawText(menu, detail, panel.x + (panel.width - detail.size.x) * 0.5f, panel.y + 148.0f, {0.94f, 0.96f, 1.0f, 0.98f});
+    drawText(menu, menu.mapa4FinalContinuar, panel.x + (panel.width - menu.mapa4FinalContinuar.size.x) * 0.5f, panel.y + 228.0f, {0.88f, 0.93f, 1.0f, 0.96f});
+}
+
 void drawLevelCompleteHud(MenuContext& menu, int width, int height) {
     beginUiFrame(menu, width, height);
     drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.01f, 0.02f, 0.06f, 0.58f});
@@ -2154,6 +2200,21 @@ int runRaylibWorldMenuForWindow(GLFWwindow* window) {
     return selectedWorld;
 }
 
+int runRaylibMainMenuForWindow(GLFWwindow* window) {
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    glfwHideWindow(window);
+    glfwMakeContextCurrent(nullptr);
+    const int selectedWorld = runRaylibWorldMenu();
+    glfwMakeContextCurrent(window);
+    glfwShowWindow(window);
+    glfwFocusWindow(window);
+    lastFrame = static_cast<float>(glfwGetTime());
+    deltaTime = 0.0f;
+    lastEscapeKey = false;
+    lastGameOverContinueKey = false;
+    return selectedWorld;
+}
+
 void cerrarMundoActual(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
     switch (currentState) {
     case EstadoJuego::MUNDO_1:
@@ -2185,6 +2246,25 @@ void volverASeleccionDeMundos(GLFWwindow* window, EstadoJuego currentState, Mapa
         solicitarCargaMundo(estadoDesdeSeleccionRaylib(selectedWorld));
     } else {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
+    }
+
+    lastCursorState = EstadoJuego::MENU_PRINCIPAL;
+    updateCursorMode(window);
+}
+
+void volverAlMenuPrincipalDesdeMundo(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
+    cerrarMundoActual(window, currentState, mapa1, mundo2, map3, mapa4);
+    loadingTarget = EstadoJuego::MENU_PRINCIPAL;
+    loadingScreenPresented = false;
+    modeSwitchUnavailableUntil = 0.0;
+
+    const int selectedWorld = runRaylibMainMenuForWindow(window);
+    if (selectedWorld == 0) {
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    } else if (seleccionRaylibEsMundo(selectedWorld)) {
+        solicitarCargaMundo(estadoDesdeSeleccionRaylib(selectedWorld));
+    } else {
+        appState = EstadoJuego::MENU_PRINCIPAL;
     }
 
     lastCursorState = EstadoJuego::MENU_PRINCIPAL;
@@ -2268,6 +2348,7 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
         case EstadoJuego::MUNDO_4:
         {
             if (mapa4.gameOver || mapa4.mission.levelComplete()) {
+                volverAlMenuPrincipalDesdeMundo(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
                 break;
             }
             const EstadoJuego pausedState = appState;
@@ -2489,10 +2570,13 @@ bool initializeMenu(MenuContext& menu) {
         menu.coinMessages[i] = createTextSprite(formatCoinProgress(i), 31, white, 132, false, true);
     }
     menu.estrellaLista = createTextSprite(L"STAR UNLOCKED!", 29, titleColor, 400, false, true);
-    menu.nivelCompletado = createTextSprite(L"LEVEL COMPLETE!", 54, titleColor, 660, false, true);
+    menu.nivelCompletado = createTextSprite(L"CONGRATULATIONS!", 42, titleColor, 540, true, true);
     menu.nivelCompletadoDetalle = createTextSprite(L"All 10 coins collected", 27, white, 420, false, true);
-    menu.juegoTerminado = createTextSprite(L"Juego terminado", 52, titleColor, 520, false, true);
-    menu.juegoTerminadoContinuar = createTextSprite(L"Presiona ENTER para continuar", 27, white, 520, false, true);
+    menu.juegoTerminado = createTextSprite(L"GAME OVER", 42, titleColor, 420, true, true);
+    menu.juegoTerminadoContinuar = createTextSprite(L"Press ENTER to continue", 27, white, 520, false, true);
+    menu.mapa4FinalDetalleVictoria = createTextSprite(L"All 10 coins were collected successfully.", 22, white, 500, true, true);
+    menu.mapa4FinalDetalleDerrota = createTextSprite(L"The player was defeated before collecting every coin.", 21, white, 500, true, true);
+    menu.mapa4FinalContinuar = createTextSprite(L"Press ENTER or ESC to return to the new main menu.", 20, white, 500, true, true);
     menu.combateSolo2D = createTextSprite(L"\u00a1Peligro! Cambia a 2D con TAB para detener a los enemigos.", 27, white, 720, false, true);
     menu.vidaJugador = createTextSprite(L"VIDA", 25, white, 120, false, false);
     menu.luzJugador = createTextSprite(L"LUZ", 25, white, 120, false, false);
@@ -2761,18 +2845,16 @@ int main(int argc, char** argv) {
                 menu.notificationUntil = glfwGetTime() + 2.3;
             } else {
                 renderMapa4(window, mapa4, sceneShader, lavaShader, now);
-                drawMissionHud(menu, mapa4.mission, width, height, now);
-                drawSimpleHealthHud(menu, mapa4.health, mapa4.maxHealth, width, height);
-                renderMapa4Hud(menu, mapa4, width, height, now);
-                drawShieldHud(menu, width, height, mapa4.shieldActive);
-                if (mapa4.mission.levelComplete()) {
-                    volverASeleccionDeMundos(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
-                } else if (mapa4.gameOver) {
-                    drawGameOverHud(menu, width, height);
+                if (mapa4.mission.levelComplete() || mapa4.gameOver) {
+                    drawMapa4EndHud(menu, mapa4.mission.levelComplete(), width, height);
                     if (gameOverContinuePressed(window)) {
-                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
+                        volverAlMenuPrincipalDesdeMundo(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
                     }
                 } else {
+                    drawMissionHud(menu, mapa4.mission, width, height, now);
+                    drawSimpleHealthHud(menu, mapa4.health, mapa4.maxHealth, width, height);
+                    renderMapa4Hud(menu, mapa4, width, height, now);
+                    drawShieldHud(menu, width, height, mapa4.shieldActive);
                     drawModeSwitchUnavailableMessage(menu, width, height, now);
                 }
             }

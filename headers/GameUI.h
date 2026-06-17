@@ -57,6 +57,9 @@ struct MenuContext {
     TextSprite nivelCompletadoDetalle;
     TextSprite juegoTerminado;
     TextSprite juegoTerminadoContinuar;
+    TextSprite mapa4FinalDetalleVictoria;
+    TextSprite mapa4FinalDetalleDerrota;
+    TextSprite mapa4FinalContinuar;
     TextSprite combateSolo2D;
     TextSprite pasoEspectralBloqueado;
     TextSprite pasoEspectralListo;

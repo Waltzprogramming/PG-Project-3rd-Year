@@ -176,11 +176,24 @@ void updateMapa4Projectiles(Mapa4Runtime& mapa4, float dt) {
 void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Projectile>& projectiles, const glm::vec3& cameraPosition, float timeSeconds) {
     // dibuja los disparos usando la misma malla base pero con materiales distintos
     static Mesh arrowMesh = Mesh::cylinder(18, 1.0f, 0.08f);
-    Material playerArrowMaterial;
-    playerArrowMaterial.baseColor = {0.86f, 0.82f, 0.72f};
-    playerArrowMaterial.emissive = {0.10f, 0.08f, 0.04f};
-    playerArrowMaterial.roughness = 0.42f;
-    playerArrowMaterial.fogAmount = 0.12f;
+    static Mesh swordBladeMesh = Mesh::cube();
+    static Mesh swordGuardMesh = Mesh::cube();
+    static Mesh swordPommelMesh = Mesh::cube();
+    Material playerBladeMaterial;
+    playerBladeMaterial.baseColor = {0.26f, 0.72f, 1.00f};
+    playerBladeMaterial.emissive = {0.08f, 0.18f, 0.34f};
+    playerBladeMaterial.roughness = 0.18f;
+    playerBladeMaterial.fogAmount = 0.06f;
+    Material playerCoreMaterial;
+    playerCoreMaterial.baseColor = {0.82f, 0.95f, 1.00f};
+    playerCoreMaterial.emissive = {0.16f, 0.28f, 0.42f};
+    playerCoreMaterial.roughness = 0.08f;
+    playerCoreMaterial.fogAmount = 0.03f;
+    Material playerGuardMaterial;
+    playerGuardMaterial.baseColor = {0.10f, 0.20f, 0.34f};
+    playerGuardMaterial.emissive = {0.02f, 0.04f, 0.09f};
+    playerGuardMaterial.roughness = 0.46f;
+    playerGuardMaterial.fogAmount = 0.08f;
     Material enemyArrowMaterial;
     enemyArrowMaterial.baseColor = {0.78f, 0.22f, 0.18f};
     enemyArrowMaterial.emissive = {0.20f, 0.05f, 0.04f};
@@ -203,12 +216,43 @@ void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Project
         model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, pitch, glm::vec3(1.0f, 0.0f, 0.0f));
         model = glm::rotate(model, glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::scale(model, glm::vec3(projectile.fromEnemy ? 0.12f : 0.10f, Map4ProjectileLength, projectile.fromEnemy ? 0.12f : 0.10f));
         shader.use();
-        shader.setMat4("uModel", model);
         shader.setFloat("uTime", timeSeconds);
-        bindSceneMaterial(shader, projectile.fromEnemy ? enemyArrowMaterial : playerArrowMaterial);
-        arrowMesh.draw();
+        if (projectile.fromEnemy) {
+            const glm::mat4 arrowModel = glm::scale(model, glm::vec3(0.12f, Map4ProjectileLength, 0.12f));
+            shader.setMat4("uModel", arrowModel);
+            bindSceneMaterial(shader, enemyArrowMaterial);
+            arrowMesh.draw();
+            continue;
+        }
+
+        const glm::mat4 bladeModel = model
+            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.18f, 0.0f))
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.09f, Map4ProjectileLength * 0.84f, 0.04f));
+        shader.setMat4("uModel", bladeModel);
+        bindSceneMaterial(shader, playerBladeMaterial);
+        swordBladeMesh.draw();
+
+        const glm::mat4 coreModel = model
+            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.20f, 0.0f))
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.04f, Map4ProjectileLength * 0.76f, 0.02f));
+        shader.setMat4("uModel", coreModel);
+        bindSceneMaterial(shader, playerCoreMaterial);
+        swordBladeMesh.draw();
+
+        const glm::mat4 guardModel = model
+            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -Map4ProjectileLength * 0.18f, 0.0f))
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.22f, 0.03f, 0.06f));
+        shader.setMat4("uModel", guardModel);
+        bindSceneMaterial(shader, playerGuardMaterial);
+        swordGuardMesh.draw();
+
+        const glm::mat4 pommelModel = model
+            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -Map4ProjectileLength * 0.28f, 0.0f))
+            * glm::scale(glm::mat4(1.0f), glm::vec3(0.05f, 0.08f, 0.05f));
+        shader.setMat4("uModel", pommelModel);
+        bindSceneMaterial(shader, playerCoreMaterial);
+        swordPommelMesh.draw();
     }
 }
 
@@ -1024,6 +1068,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
             mapa4.skipFirstUpdateFrame = true;
             mapa4.projectiles.clear();
             mapa4.projectileCooldown = 0.0f;
+            mapa4.secretCompleteKeyHeld = false;
             mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
             mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
             currentMode = PlayMode::Mode2D;
@@ -1082,6 +1127,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     mapa4.skipFirstUpdateFrame = true;
     mapa4.projectiles.clear();
     mapa4.projectileCooldown = 0.0f;
+    mapa4.secretCompleteKeyHeld = false;
     mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
     mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
     currentMode = PlayMode::Mode2D;
@@ -1111,6 +1157,7 @@ void volverAlMenu(Mapa4Runtime& mapa4) {
     mapa4.lightEnergy = Map4LightEnergyMaximum;
     mapa4.startSequencePending = false;
     mapa4.skipFirstUpdateFrame = false;
+    mapa4.secretCompleteKeyHeld = false;
     mapa4.instructionBoxAvailableAt = 0.0;
     mapa4.instructionBoxHideAt = 0.0;
     mapa4.sessionActive = false;
@@ -1142,6 +1189,13 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
     mapa4.skipFirstUpdateFrame = false;
 
     if (!mapa4.gameOver && !mapa4.mission.levelComplete()) {
+        const bool secretCompleteDown = glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS;
+        const bool secretCompletePressed = secretCompleteDown && !mapa4.secretCompleteKeyHeld;
+        mapa4.secretCompleteKeyHeld = secretCompleteDown;
+        if (secretCompletePressed) {
+            mapa4.mission.forceComplete(now);
+        }
+
         const PlayerInput playerInput = buildPlayerInput(window, mapa4.player);
         const bool shieldDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
         const bool shieldPressed = shieldDown && !lastShieldKey;

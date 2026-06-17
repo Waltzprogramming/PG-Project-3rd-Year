@@ -143,6 +143,7 @@ struct Mapa4Runtime {
     float projectileCooldown{0.0f};
     double instructionBoxAvailableAt{0.0};
     double instructionBoxHideAt{0.0};
+    bool secretCompleteKeyHeld{false};
 };
 
 bool isMarioMapa4Environment(const Environment& environment);
