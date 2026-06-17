@@ -70,6 +70,9 @@ namespace {
     constexpr float PlayerSpriteHeight = 1.15f;
     constexpr float CameraPlayerCenterOffset = PlayerSpriteHeight * 0.5f;
     constexpr float PlayerRunFramesPerSecond = 12.0f;
+    constexpr float PlayerJumpFramesPerSecond = 12.0f;
+    constexpr float PlayerAttackFramesPerSecond = 14.0f;
+    constexpr float PlayerBlockFramesPerSecond = 14.0f;
     constexpr float PlayerEntranceFramesPerSecond = 11.0f;
     constexpr float PlayerDeathFramesPerSecond = 7.0f;
     constexpr float PlayerTransitionFramesPerSecond = 16.0f;
@@ -733,6 +736,38 @@ namespace {
         return &frames[frameIndex];
     }
 
+    size_t animationFrameIndex(size_t frameCount, float time, float framesPerSecond, bool loop) {
+        if (frameCount == 0 || framesPerSecond <= 0.0f) {
+            return 0;
+        }
+
+        size_t frameIndex = static_cast<size_t>(std::max(0.0f, time) * framesPerSecond);
+        return loop
+            ? frameIndex % frameCount
+            : std::min(frameIndex, frameCount - 1);
+    }
+
+    int trailingNumber(const std::filesystem::path& path) {
+        const std::string text = path.stem().string();
+        int value = 0;
+        int multiplier = 1;
+        bool foundDigit = false;
+
+        for (auto it = text.rbegin(); it != text.rend(); ++it) {
+            if (!std::isdigit(static_cast<unsigned char>(*it))) {
+                if (foundDigit) {
+                    break;
+                }
+                continue;
+            }
+            foundDigit = true;
+            value += (*it - '0') * multiplier;
+            multiplier *= 10;
+        }
+
+        return foundDigit ? value : std::numeric_limits<int>::max();
+    }
+
     Mesh createSkyboxMesh() {
         constexpr float margin = 0.001f;
         constexpr float u0 = 0.00f + margin;
@@ -985,9 +1020,16 @@ struct Mapa1::Impl {
     Mesh parryRingMesh;
     std::vector<Mesh> playerJumpMeshes;
     std::vector<Mesh> playerRunMeshes;
+    std::vector<Mesh> playerAttackMeshes;
+    std::vector<Mesh> playerBlockMeshes;
     std::vector<Mesh> playerEntranceMeshes;
     std::vector<Mesh> playerDeathMeshes;
     std::vector<Mesh> playerTransitionMeshes;
+    std::vector<Texture2D> playerJumpTextures;
+    std::vector<Texture2D> playerRunTextures;
+    std::vector<Texture2D> playerAttackTextures;
+    std::vector<Texture2D> playerBlockTextures;
+    std::vector<Texture2D> playerDeathTextures;
     std::vector<Mesh> enemyIdleMeshes;
     std::vector<Mesh> enemyRunMeshes;
     std::vector<Mesh> enemyAttackMeshes;
@@ -1053,11 +1095,15 @@ struct Mapa1::Impl {
     float titleTime{ 0.0f };
     int currentFrame{ 0 };
     float animationTime{ 0.0f };
+    float playerJumpTime{ 0.0f };
+    float playerAttackTime{ 0.0f };
+    float playerGuardStartTime{ 0.0f };
     float playerEntranceTime{ 0.0f };
     float playerTransitionTime{ 0.0f };
     float playerDeathTime{ 0.0f };
     float playerGuardUntil{ 0.0f };
     bool wasMoving{ false };
+    bool playerAttackPlaying{ false };
     bool playerEntrancePlaying{ false };
     bool playerTransitionPlaying{ false };
     bool playerDeathPlaying{ false };
@@ -1185,7 +1231,7 @@ struct Mapa1::Impl {
     }
 
     bool loadBangbooPlayerModel() {
-        const std::string path = resolveAssetPath("assets/mapa1/player/bangboo/source/BangBoo1.fbx");
+        const std::string path = resolveAssetPath("assets/mapa1/player/bangboo/source/BangBoo.fbx");
         LoadedModel materialSource = ModelLoader::loadModel(path);
         if (materialSource.meshes.empty()) {
             std::cerr << "Mapa 1 BangBoo player model could not be loaded." << std::endl;
@@ -1199,6 +1245,71 @@ struct Mapa1::Impl {
         }
 
         return true;
+    }
+
+    bool loadPlayerSpriteSequence(const std::string& folder, std::vector<Mesh>& meshes, std::vector<Texture2D>& textures) {
+        meshes.clear();
+        textures.clear();
+
+        const std::filesystem::path directory(resolveAssetPath("assets/mapa1/player/" + folder));
+        if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
+            std::cerr << "Mapa 1 player animation folder missing: " << directory.string() << std::endl;
+            return false;
+        }
+
+        std::vector<std::filesystem::path> framePaths;
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(directory)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+
+            if (lowercase(entry.path().extension().string()) == ".png") {
+                framePaths.push_back(entry.path());
+            }
+        }
+
+        std::sort(framePaths.begin(), framePaths.end(), [](const std::filesystem::path& left, const std::filesystem::path& right) {
+            const int leftNumber = trailingNumber(left);
+            const int rightNumber = trailingNumber(right);
+            if (leftNumber != rightNumber) {
+                return leftNumber < rightNumber;
+            }
+            return left.filename().string() < right.filename().string();
+            });
+
+        meshes.reserve(framePaths.size());
+        textures.reserve(framePaths.size());
+        for (const std::filesystem::path& framePath : framePaths) {
+            Texture2D texture;
+            if (!texture.loadFromFile(framePath.string())) {
+                std::cerr << "Mapa 1 player animation frame could not be loaded: " << framePath.string() << std::endl;
+                return false;
+            }
+
+            texture.bind();
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            meshes.push_back(createPlayerSpriteMesh({ 0, 0, texture.width(), texture.height() }, texture.width(), texture.height()));
+            textures.push_back(std::move(texture));
+        }
+
+        if (meshes.empty()) {
+            std::cerr << "Mapa 1 player animation folder has no PNG frames: " << directory.string() << std::endl;
+            return false;
+        }
+        return true;
+    }
+
+    bool loadPlayerSprites() {
+        return loadPlayerSpriteSequence("caminar", playerRunMeshes, playerRunTextures) &&
+            loadPlayerSpriteSequence("ataque", playerAttackMeshes, playerAttackTextures) &&
+            loadPlayerSpriteSequence("saltar", playerJumpMeshes, playerJumpTextures) &&
+            loadPlayerSpriteSequence("bloquear", playerBlockMeshes, playerBlockTextures) &&
+            loadPlayerSpriteSequence("morir", playerDeathMeshes, playerDeathTextures);
     }
 
     void streamDeferredWorldModels(float dt) {
@@ -1952,6 +2063,8 @@ struct Mapa1::Impl {
         playerDeathPlaying = false;
         playerDeathTime = 0.0f;
         playerGuardUntil = 0.0f;
+        playerAttackPlaying = false;
+        playerAttackTime = 0.0f;
         animationTime = 0.0f;
     }
 
@@ -1960,6 +2073,8 @@ struct Mapa1::Impl {
         playerTransitionTime = 0.0f;
         playerEntrancePlaying = false;
         playerGuardUntil = 0.0f;
+        playerAttackPlaying = false;
+        playerAttackTime = 0.0f;
     }
 
     void beginPlayerDeath(float now) {
@@ -1972,6 +2087,8 @@ struct Mapa1::Impl {
         playerEntrancePlaying = false;
         playerTransitionPlaying = false;
         playerGuardUntil = 0.0f;
+        playerAttackPlaying = false;
+        playerAttackTime = 0.0f;
         stopChargingPlayerAttack();
         clearProjectilesRequested = true;
         playerInvulnerability = std::max(playerInvulnerability, animationDuration(playerDeathMeshes, PlayerDeathFramesPerSecond));
@@ -2003,7 +2120,10 @@ struct Mapa1::Impl {
         posY = groundHeight(posX, posZ, initialHeight) ? initialHeight : spawn.y;
         grounded = true;
         animationTime = 0.0f;
+        playerJumpTime = 0.0f;
+        playerAttackTime = 0.0f;
         wasMoving = false;
+        playerAttackPlaying = false;
         playerTransitionPlaying = false;
         playerTransitionTime = 0.0f;
         playerDeathPlaying = false;
@@ -2225,7 +2345,12 @@ struct Mapa1::Impl {
 
         parryUntil = 0.0f;
         parryEffectUntil = now + ParryEffectTime;
-        playerGuardUntil = now + std::max(ParryEffectTime, 0.42f);
+        playerGuardStartTime = now;
+        playerGuardUntil = now + std::max({
+            ParryEffectTime,
+            0.42f,
+            animationDuration(playerBlockMeshes, PlayerBlockFramesPerSecond)
+            });
         if (parrySoundOpen) {
             parrySound.playOnce();
         }
@@ -2325,12 +2450,18 @@ struct Mapa1::Impl {
         }
     }
 
+    void startPlayerAttackAnimation() {
+        playerAttackPlaying = true;
+        playerAttackTime = 0.0f;
+    }
+
     void tryPlayerAttack(const glm::vec3& direction, bool charged, float now) {
         playerAttackCooldown = PlayerAttackCooldown;
         if (mode3D) {
             showCombatRestriction(now);
         }
         else {
+            startPlayerAttackAnimation();
             spawnPlayerProjectile(direction, charged);
         }
     }
@@ -2681,6 +2812,13 @@ struct Mapa1::Impl {
         playerAttackCooldown = std::max(0.0f, playerAttackCooldown - dt);
         playerInvulnerability = std::max(0.0f, playerInvulnerability - dt);
         spectralCooldown = std::max(0.0f, spectralCooldown - dt);
+        if (playerAttackPlaying) {
+            playerAttackTime += dt;
+            if (playerAttackTime >= animationDuration(playerAttackMeshes, PlayerAttackFramesPerSecond)) {
+                playerAttackPlaying = false;
+                playerAttackTime = 0.0f;
+            }
+        }
         if (playerEntrancePlaying) {
             playerEntranceTime += dt;
             if (playerEntranceTime >= animationDuration(playerEntranceMeshes, PlayerEntranceFramesPerSecond)) {
@@ -2747,6 +2885,12 @@ struct Mapa1::Impl {
             currentFrame = 0;
             animationTime = 0.0f;
         }
+        if (!grounded) {
+            playerJumpTime += dt;
+        }
+        else {
+            playerJumpTime = 0.0f;
+        }
         wasMoving = movingNow && grounded;
 
         float nextX = posX;
@@ -2792,6 +2936,7 @@ struct Mapa1::Impl {
         if (jumpDown && grounded) {
             velocityY = JumpSpeed;
             grounded = false;
+            playerJumpTime = 0.0f;
         }
 
         velocityY -= Gravity * dt;
@@ -2805,6 +2950,7 @@ struct Mapa1::Impl {
             posY = floorHeight;
             velocityY = 0.0f;
             grounded = true;
+            playerJumpTime = 0.0f;
         }
         else {
             grounded = false;
@@ -3213,7 +3359,8 @@ struct Mapa1::Impl {
         const float now = static_cast<float>(glfwGetTime());
         const bool airborne = !grounded;
         const bool guardActive = playerGuardUntil > 0.0f && now <= playerGuardUntil;
-        const bool lockedAction = playerDeathPlaying || playerEntrancePlaying || playerTransitionPlaying || guardActive;
+        const bool attackActive = playerAttackPlaying && !playerAttackMeshes.empty();
+        const bool lockedAction = playerDeathPlaying || playerEntrancePlaying || playerTransitionPlaying || guardActive || attackActive;
         const float step = wasMoving && !lockedAction ? std::sin(now * 14.0f) : 0.0f;
         const float bounce = wasMoving && !lockedAction ? std::fabs(step) * 0.035f : 0.0f;
         const float jumpStrength = airborne ? std::clamp(std::abs(velocityY) / JumpSpeed, 0.0f, 1.0f) : 0.0f;
@@ -3224,42 +3371,44 @@ struct Mapa1::Impl {
             ? glm::vec3(1.0f - jumpStrength * 0.06f, 1.0f + jumpStrength * 0.10f, 1.0f)
             : glm::vec3(1.0f);
 
-        if (bangbooPlayer.valid()) {
-            drawBangbooPlayer(bounce, lockedAction);
-            return;
-        }
+        const Mesh* selectedMesh = playerRunMeshes.empty() ? nullptr : &playerRunMeshes.front();
+        const Texture2D* selectedTexture = playerRunTextures.empty() ? nullptr : &playerRunTextures.front();
+        auto selectPlayerFrame = [&](const std::vector<Mesh>& meshes, const std::vector<Texture2D>& textures, float time, float framesPerSecond, bool loop) {
+            const size_t frameCount = std::min(meshes.size(), textures.size());
+            if (frameCount == 0) {
+                return false;
+            }
 
-        const Mesh* selectedMesh = &playerIdleMesh;
+            const size_t frameIndex = animationFrameIndex(frameCount, time, framesPerSecond, loop);
+            selectedMesh = &meshes[frameIndex];
+            selectedTexture = &textures[frameIndex];
+            return true;
+            };
+
         if (playerDeathPlaying) {
-            selectedMesh = animationFrame(playerDeathMeshes, playerDeathTime, PlayerDeathFramesPerSecond, false);
-        }
-        else if (playerEntrancePlaying) {
-            selectedMesh = animationFrame(playerEntranceMeshes, playerEntranceTime, PlayerEntranceFramesPerSecond, false);
-        }
-        else if (playerTransitionPlaying) {
-            selectedMesh = animationFrame(playerTransitionMeshes, playerTransitionTime, PlayerTransitionFramesPerSecond, false);
+            selectPlayerFrame(playerDeathMeshes, playerDeathTextures, playerDeathTime, PlayerDeathFramesPerSecond, false);
         }
         else if (guardActive) {
-            selectedMesh = airborne ? &playerGuardAirMesh : &playerGuardGroundMesh;
+            selectPlayerFrame(playerBlockMeshes, playerBlockTextures, now - playerGuardStartTime, PlayerBlockFramesPerSecond, false);
         }
-        else if (airborne && !playerJumpMeshes.empty()) {
-            const size_t jumpIndex = velocityY > JumpSpeed * 0.22f
-                ? 0
-                : (velocityY > -JumpSpeed * 0.35f ? std::min<size_t>(1, playerJumpMeshes.size() - 1) : playerJumpMeshes.size() - 1);
-            selectedMesh = &playerJumpMeshes[jumpIndex];
+        else if (attackActive) {
+            selectPlayerFrame(playerAttackMeshes, playerAttackTextures, playerAttackTime, PlayerAttackFramesPerSecond, false);
+        }
+        else if (airborne) {
+            selectPlayerFrame(playerJumpMeshes, playerJumpTextures, playerJumpTime, PlayerJumpFramesPerSecond, false);
         }
         else if (wasMoving) {
-            selectedMesh = animationFrame(playerRunMeshes, animationTime, PlayerRunFramesPerSecond, true);
+            selectPlayerFrame(playerRunMeshes, playerRunTextures, animationTime, PlayerRunFramesPerSecond, true);
         }
-        if (selectedMesh == nullptr) {
-            selectedMesh = &playerIdleMesh;
+        if (selectedMesh == nullptr || selectedTexture == nullptr) {
+            return;
         }
 
         glm::mat4 model = glm::translate(glm::mat4(1.0f), { 0.0f, posY + bounce, 0.22f });
         model = glm::rotate(model, glm::radians(playerAngle), { 0.0f, 1.0f, 0.0f });
         model = glm::rotate(model, glm::radians(walkTilt + jumpTilt), { 0.0f, 0.0f, 1.0f });
         model = glm::scale(model, jumpScale);
-        drawTexturedMesh(*selectedMesh, model, playerAtlasTexture, { 1.0f, 1.0f, 1.0f, 1.0f });
+        drawTexturedMesh(*selectedMesh, model, *selectedTexture, { 1.0f, 1.0f, 1.0f, 1.0f });
     }
 
     bool initialize(bool enableAudio) {
@@ -3275,82 +3424,9 @@ struct Mapa1::Impl {
             return false;
         }
 
-        if (!playerAtlasTexture.loadFromFile(resolveAssetPath("assets/mapa1/player/vergil_dmc5_spritesheet.png"))) {
-            std::cerr << "Mapa 1 player sprite atlas could not be loaded." << std::endl;
+        if (!loadPlayerSprites()) {
             return false;
         }
-        playerAtlasTexture.bind();
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        const int playerAtlasWidth = playerAtlasTexture.width();
-        const int playerAtlasHeight = playerAtlasTexture.height();
-        auto buildPlayerMeshes = [&](const std::vector<AtlasFrame>& frames, std::vector<Mesh>& meshes) {
-            meshes.clear();
-            meshes.reserve(frames.size());
-            for (const AtlasFrame& frame : frames) {
-                meshes.push_back(createPlayerSpriteMesh(frame, playerAtlasWidth, playerAtlasHeight));
-            }
-            };
-
-        playerIdleMesh = createPlayerSpriteMesh({ 641, 547, 42, 62 }, playerAtlasWidth, playerAtlasHeight);
-        playerGuardGroundMesh = createPlayerSpriteMesh({ 2, 380, 35, 55 }, playerAtlasWidth, playerAtlasHeight);
-        playerGuardAirMesh = createPlayerSpriteMesh({ 58, 380, 37, 49 }, playerAtlasWidth, playerAtlasHeight);
-        buildPlayerMeshes({
-            {2, 199, 48, 62},
-            {62, 202, 54, 54},
-            {133, 198, 48, 63}
-            }, playerJumpMeshes);
-        buildPlayerMeshes({
-            {2, 296, 43, 52},
-            {55, 296, 46, 52},
-            {116, 296, 48, 52},
-            {174, 296, 42, 52},
-            {226, 296, 54, 52},
-            {286, 296, 51, 52},
-            {346, 296, 45, 52},
-            {407, 296, 50, 52}
-            }, playerRunMeshes);
-        buildPlayerMeshes({
-            {0, 547, 55, 62},
-            {55, 547, 62, 62},
-            {117, 547, 65, 62},
-            {183, 547, 60, 62},
-            {243, 547, 67, 62},
-            {310, 547, 67, 62},
-            {377, 547, 50, 62},
-            {419, 547, 38, 62},
-            {462, 547, 38, 62},
-            {506, 547, 39, 62},
-            {551, 547, 39, 62},
-            {596, 547, 42, 62},
-            {641, 547, 42, 62}
-            }, playerEntranceMeshes);
-        buildPlayerMeshes({
-            {0, 725, 60, 58},
-            {66, 725, 58, 58},
-            {132, 725, 70, 58},
-            {203, 725, 50, 58},
-            {253, 725, 70, 58}
-            }, playerDeathMeshes);
-        buildPlayerMeshes({
-            {0, 2030, 72, 58},
-            {94, 2030, 44, 58},
-            {151, 2030, 47, 58},
-            {221, 2030, 35, 58},
-            {279, 2030, 38, 58},
-            {340, 2030, 38, 58},
-            {390, 2030, 43, 58},
-            {446, 2030, 38, 58},
-            {493, 2030, 38, 58},
-            {545, 2030, 38, 58},
-            {595, 2030, 36, 58},
-            {642, 2030, 38, 58},
-            {688, 2030, 42, 58}
-            }, playerTransitionMeshes);
 
         projectileSwordModel = ModelLoader::loadModel(resolveAssetPath("assets/items/vergil_summoned_sword/scene.gltf"));
         if (projectileSwordModel.meshes.empty()) {
@@ -3456,11 +3532,15 @@ struct Mapa1::Impl {
         titleTime = 0.0f;
         currentFrame = 0;
         animationTime = 0.0f;
+        playerJumpTime = 0.0f;
+        playerAttackTime = 0.0f;
+        playerGuardStartTime = 0.0f;
         playerEntranceTime = 0.0f;
         playerTransitionTime = 0.0f;
         playerDeathTime = 0.0f;
         playerGuardUntil = 0.0f;
         wasMoving = false;
+        playerAttackPlaying = false;
         playerEntrancePlaying = false;
         playerTransitionPlaying = false;
         playerDeathPlaying = false;
@@ -3571,9 +3651,16 @@ struct Mapa1::Impl {
         parryRingMesh = Mesh{};
         playerJumpMeshes.clear();
         playerRunMeshes.clear();
+        playerAttackMeshes.clear();
+        playerBlockMeshes.clear();
         playerEntranceMeshes.clear();
         playerDeathMeshes.clear();
         playerTransitionMeshes.clear();
+        playerJumpTextures.clear();
+        playerRunTextures.clear();
+        playerAttackTextures.clear();
+        playerBlockTextures.clear();
+        playerDeathTextures.clear();
         enemyIdleMeshes.clear();
         enemyRunMeshes.clear();
         enemyAttackMeshes.clear();
