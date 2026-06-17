@@ -35,8 +35,10 @@ std::shared_ptr<Texture2D> loadTextureFromMaterial(const LoadedMaterial& materia
 void bindSceneMaterial(const Shader& shader, const Material& material);
 glm::mat4 localPartMatrix(const MissionRenderablePart& part);
 PlayerInput buildPlayerInput(GLFWwindow* window, const Player& player);
+void resetGameplayView(const Player& player);
 void updateGameplayCamera(const Player& player, const Environment& environment, const MissionManager& mission, float timeSeconds, float dt);
 void uploadCommonSceneUniforms(const Shader& shader, const Environment& environment, const glm::vec3& cameraPosition, const glm::mat4& view, const glm::mat4& projection, float timeSeconds, const glm::vec3* playerLightPosition, float playerLightRatio, const std::vector<glm::vec3>* extraGlowLights);
+void drawMissionManagerHud(MenuContext& menu, const MissionManager& mission, int width, int height, float timeSeconds);
 void drawSimpleHealthHud(MenuContext& menu, int currentHealth, int maximumHealth, int width, int height);
 void drawGameOverHud(MenuContext& menu, int width, int height);
 void drawShieldHud(MenuContext& menu, int width, int height, bool active);

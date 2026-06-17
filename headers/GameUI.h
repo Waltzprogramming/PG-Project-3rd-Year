@@ -107,9 +107,6 @@ struct MenuContext {
     TextSprite cabinaPrompt;
     TextSprite tiendaAyudaScroll;
     TextSprite enemigosRestantes;
-    TextSprite promptHablarToad;
-    TextSprite nombreToad;
-    TextSprite dialogoToad;
 };
 
 TextSprite createTextSprite(const std::wstring& text, int fontSize, const glm::vec3& color, int maxWidth, bool multiline, bool bold);
