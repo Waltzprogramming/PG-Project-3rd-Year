@@ -70,6 +70,7 @@ bool loadingScreenPresented = false;
 bool lastToggleKey = false;
 bool lastJumpKey = false;
 bool lastEscapeKey = false;
+bool lastGameOverContinueKey = false;
 bool lastMouseButton = false;
 bool lastShieldKey = false;
 double pendingScrollY = 0.0;
@@ -142,6 +143,15 @@ bool seleccionRaylibEsMundo(int selectedWorld) {
     return selectedWorld >= 1 && selectedWorld <= 4;
 }
 
+bool gameOverContinuePressed(GLFWwindow* window) {
+    const bool continueDown =
+        glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS ||
+        glfwGetKey(window, GLFW_KEY_KP_ENTER) == GLFW_PRESS;
+    const bool pressed = continueDown && !lastGameOverContinueKey;
+    lastGameOverContinueKey = continueDown;
+    return pressed;
+}
+
 int runRaylibMenuProcess(const std::wstring& arguments = L"") {
     wchar_t modulePath[MAX_PATH] = {};
     const DWORD moduleLength = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
@@ -209,6 +219,10 @@ int runRaylibMenuProcess(const std::wstring& arguments = L"") {
 
 int runRaylibWorldMenu() {
     return runRaylibMenuProcess();
+}
+
+int runRaylibWorldSelectorMenu() {
+    return runRaylibMenuProcess(L"--worlds");
 }
 
 int runRaylibPauseMenu() {
@@ -1908,9 +1922,15 @@ void drawGameOverHud(MenuContext& menu, int width, int height) {
     // Overlay simple para estados de derrota sin reconfigurar el resto del HUD.
     beginUiFrame(menu, width, height);
     drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.01f, 0.02f, 0.06f, 0.58f});
-    const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 72.0f, 560.0f, 144.0f);
+    const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 82.0f, 620.0f, 190.0f);
     drawPanel(menu, panel);
-    drawText(menu, menu.juegoTerminado, panel.x + (panel.width - menu.juegoTerminado.size.x) * 0.5f, panel.y + (panel.height - menu.juegoTerminado.size.y) * 0.5f);
+    drawText(menu, menu.juegoTerminado, panel.x + (panel.width - menu.juegoTerminado.size.x) * 0.5f, panel.y + 48.0f);
+    drawText(
+        menu,
+        menu.juegoTerminadoContinuar,
+        panel.x + (panel.width - menu.juegoTerminadoContinuar.size.x) * 0.5f,
+        panel.y + 122.0f,
+        {0.94f, 0.96f, 1.0f, 0.96f});
 }
 
 void drawLevelCompleteHud(MenuContext& menu, int width, int height) {
@@ -2121,6 +2141,19 @@ int runRaylibPauseMenuForWindow(GLFWwindow* window) {
     return pauseAction;
 }
 
+int runRaylibWorldMenuForWindow(GLFWwindow* window) {
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    glfwHideWindow(window);
+    glfwMakeContextCurrent(nullptr);
+    const int selectedWorld = runRaylibWorldSelectorMenu();
+    glfwMakeContextCurrent(window);
+    glfwShowWindow(window);
+    glfwFocusWindow(window);
+    lastFrame = static_cast<float>(glfwGetTime());
+    deltaTime = 0.0f;
+    return selectedWorld;
+}
+
 void cerrarMundoActual(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
     switch (currentState) {
     case EstadoJuego::MUNDO_1:
@@ -2139,6 +2172,23 @@ void cerrarMundoActual(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa
     default:
         break;
     }
+}
+
+void volverASeleccionDeMundos(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
+    cerrarMundoActual(window, currentState, mapa1, mundo2, map3, mapa4);
+    loadingTarget = EstadoJuego::MENU_PRINCIPAL;
+    loadingScreenPresented = false;
+    modeSwitchUnavailableUntil = 0.0;
+
+    const int selectedWorld = runRaylibWorldMenuForWindow(window);
+    if (seleccionRaylibEsMundo(selectedWorld)) {
+        solicitarCargaMundo(estadoDesdeSeleccionRaylib(selectedWorld));
+    } else {
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    }
+
+    lastCursorState = EstadoJuego::MENU_PRINCIPAL;
+    updateCursorMode(window);
 }
 
 void aplicarAccionPausaRaylib(
@@ -2207,6 +2257,9 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
         }
         case EstadoJuego::MUNDO_3:
         {
+            if (map3.gameOver || map3.mission.levelComplete()) {
+                break;
+            }
             const EstadoJuego pausedState = appState;
             const int pauseAction = runRaylibPauseMenuForWindow(window);
             aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
@@ -2214,6 +2267,9 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
         }
         case EstadoJuego::MUNDO_4:
         {
+            if (mapa4.gameOver || mapa4.mission.levelComplete()) {
+                break;
+            }
             const EstadoJuego pausedState = appState;
             const bool resumeMusic = mapa4.musicOpen && mapa4.musicPlaying;
             if (resumeMusic) {
@@ -2436,6 +2492,7 @@ bool initializeMenu(MenuContext& menu) {
     menu.nivelCompletado = createTextSprite(L"LEVEL COMPLETE!", 54, titleColor, 660, false, true);
     menu.nivelCompletadoDetalle = createTextSprite(L"All 10 coins collected", 27, white, 420, false, true);
     menu.juegoTerminado = createTextSprite(L"Juego terminado", 52, titleColor, 520, false, true);
+    menu.juegoTerminadoContinuar = createTextSprite(L"Presiona ENTER para continuar", 27, white, 520, false, true);
     menu.combateSolo2D = createTextSprite(L"\u00a1Peligro! Cambia a 2D con TAB para detener a los enemigos.", 27, white, 720, false, true);
     menu.vidaJugador = createTextSprite(L"VIDA", 25, white, 120, false, false);
     menu.luzJugador = createTextSprite(L"LUZ", 25, white, 120, false, false);
@@ -2664,6 +2721,9 @@ int main(int argc, char** argv) {
                     {static_cast<float>(cursorX), static_cast<float>(cursorY)},
                     clicked,
                     scrollY);
+                if (mapa1.levelComplete()) {
+                    volverASeleccionDeMundos(window, EstadoJuego::MUNDO_1, mapa1, mundo2, map3, mapa4);
+                }
             }
         } else if (appState == EstadoJuego::MUNDO_2) {
             if (!iniciarMundo2(mundo2)) {
@@ -2671,6 +2731,9 @@ int main(int argc, char** argv) {
             } else {
                 renderMundo2(window, mundo2, menu, sceneShader, lavaShader, now);
                 drawModeSwitchUnavailableMessage(menu, width, height, now);
+                if (mundo2.mission.levelComplete()) {
+                    volverASeleccionDeMundos(window, EstadoJuego::MUNDO_2, mapa1, mundo2, map3, mapa4);
+                }
             }
         } else if (appState == EstadoJuego::MUNDO_3) {
             if (!iniciarMap3(map3)) {
@@ -2682,10 +2745,15 @@ int main(int argc, char** argv) {
                 drawMap3PositionHud(menu, map3, width, height);
                 if (map3.mission.levelComplete()) {
                     drawLevelCompleteHud(menu, width, height);
+                    volverASeleccionDeMundos(window, EstadoJuego::MUNDO_3, mapa1, mundo2, map3, mapa4);
                 } else if (map3.gameOver) {
                     drawGameOverHud(menu, width, height);
+                    if (gameOverContinuePressed(window)) {
+                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_3, mapa1, mundo2, map3, mapa4);
+                    }
+                } else {
+                    drawModeSwitchUnavailableMessage(menu, width, height, now);
                 }
-                drawModeSwitchUnavailableMessage(menu, width, height, now);
             }
         } else if (appState == EstadoJuego::MUNDO_4) {
             if (!iniciarMapa4(mapa4)) {
@@ -2697,10 +2765,16 @@ int main(int argc, char** argv) {
                 drawSimpleHealthHud(menu, mapa4.health, mapa4.maxHealth, width, height);
                 renderMapa4Hud(menu, mapa4, width, height, now);
                 drawShieldHud(menu, width, height, mapa4.shieldActive);
-                if (mapa4.gameOver) {
+                if (mapa4.mission.levelComplete()) {
+                    volverASeleccionDeMundos(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
+                } else if (mapa4.gameOver) {
                     drawGameOverHud(menu, width, height);
+                    if (gameOverContinuePressed(window)) {
+                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
+                    }
+                } else {
+                    drawModeSwitchUnavailableMessage(menu, width, height, now);
                 }
-                drawModeSwitchUnavailableMessage(menu, width, height, now);
             }
         } else {
             glDisable(GL_DEPTH_TEST);

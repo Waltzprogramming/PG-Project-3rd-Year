@@ -669,6 +669,7 @@ int main(int argc, char** argv) {
     }};
 
     const bool pauseMode = hasArgument(argc, argv, "--pause");
+    const bool startWorlds = hasArgument(argc, argv, "--worlds") || hasArgument(argc, argv, "--world-select");
     const char* screenshotPath = argumentValue(argc, argv, "--screenshot");
     const char* screenshotScreen = argumentValue(argc, argv, "--screen");
     const char* previewWorldArgument = argumentValue(argc, argv, "--world");
@@ -746,6 +747,8 @@ int main(int argc, char** argv) {
     MenuScreen screen = MenuScreen::Home;
     if (pauseMode) {
         screen = MenuScreen::Pause;
+    } else if (startWorlds) {
+        screen = MenuScreen::Worlds;
     } else if (screenshotPath != nullptr && screenshotScreen != nullptr && std::strcmp(screenshotScreen, "credits") == 0) {
         screen = MenuScreen::Credits;
     } else if (screenshotPath != nullptr && (screenshotScreen == nullptr || std::strcmp(screenshotScreen, "worlds") == 0)) {
