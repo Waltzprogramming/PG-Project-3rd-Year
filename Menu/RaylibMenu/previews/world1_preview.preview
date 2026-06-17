@@ -1,0 +1,13 @@
+# obj|texture|red|green|blue
+world1_preview_parts/00_IslandMat01.obj|world1_preview_textures/W1Island01_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/01_LawnMat05.obj|world1_preview_textures/W1Lawn00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/02_GatePoleMat00.obj|world1_preview_textures/W1GatePole00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/03_WallBlockMat00.obj|world1_preview_textures/W1WallBlock_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/04_RockMat01.obj|world1_preview_textures/W1Rock00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/05_LawnMat06.obj|world1_preview_textures/W1Lawn00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/06_SandMat00.obj|world1_preview_textures/Sand02_z_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/07_RoadMat01.obj|world1_preview_textures/W1Road00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/08_CloudMat01.obj|world1_preview_textures/Cloud_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/09_LawnEdgeMat00.obj|world1_preview_textures/W1LawnEdge00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/10_SandSeaSideMat00.obj|world1_preview_textures/Sand01_z_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/11_ZShadowMat.obj|-|1.000000|1.000000|1.000000

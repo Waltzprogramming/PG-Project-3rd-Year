@@ -1,0 +1,2 @@
+C:/Users/sasuk/source/repos/PG/Menu/RaylibMenu/vcpkg_installed/vcpkg/blds/detect_compiler/x64-windows-rel/CMakeFiles/edit_cache.dir
+C:/Users/sasuk/source/repos/PG/Menu/RaylibMenu/vcpkg_installed/vcpkg/blds/detect_compiler/x64-windows-rel/CMakeFiles/rebuild_cache.dir
