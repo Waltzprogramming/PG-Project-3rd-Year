@@ -67,6 +67,7 @@ namespace {
     constexpr float ParryWindow = 0.50f;
     constexpr float ParryEffectTime = 0.34f;
     constexpr float ProjectileSwordLength = 0.72f;
+    constexpr float CornProjectileLength = 0.82f;
     constexpr float PlayerSpriteHeight = 1.15f;
     constexpr float CameraPlayerCenterOffset = PlayerSpriteHeight * 0.5f;
     constexpr float PlayerRunFramesPerSecond = 12.0f;
@@ -188,6 +189,7 @@ namespace {
         bool fromPlayer{ false };
         int damage{ 1 };
         bool charged{ false };
+        bool cornVisual{ false };
     };
 
     struct AtlasFrame {
@@ -1002,6 +1004,8 @@ struct Mapa1::Impl {
     std::unordered_map<std::string, std::shared_ptr<Texture2D>> textureCache;
     Texture2D playerAtlasTexture;
     LoadedModel projectileSwordModel;
+    WorldModel projectileCornModel;
+    bool projectileCornLoaded{ false };
     Texture2D skyboxTexture;
     Texture2D coinIconTexture;
     Texture2D platformSideTexture;
@@ -1364,6 +1368,20 @@ struct Mapa1::Impl {
 
         gemModel.materials = runtimeMaterialsFor(gemModel.model.materials);
         gemModelLoaded = true;
+        return true;
+    }
+
+    bool loadCornProjectileModel() {
+        projectileCornModel = {};
+        projectileCornModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/choclo/scene.gltf"));
+        if (projectileCornModel.model.meshes.empty()) {
+            std::cerr << "Map 1 corn projectile model could not be loaded." << std::endl;
+            projectileCornLoaded = false;
+            return false;
+        }
+
+        projectileCornModel.materials = runtimeMaterialsFor(projectileCornModel.model.materials);
+        projectileCornLoaded = true;
         return true;
     }
 
@@ -2254,7 +2272,8 @@ struct Mapa1::Impl {
             ProjectileLifetime,
             true,
             charged ? EnemyMaximumHealth : 1,
-            charged
+            charged,
+            true
             });
     }
 
@@ -3023,9 +3042,33 @@ struct Mapa1::Impl {
         return model;
     }
 
+    glm::mat4 normalizedCornMatrix(const glm::vec3& position, const glm::vec3& velocity, float length) const {
+        const glm::vec3 extents = projectileCornModel.model.maxBounds - projectileCornModel.model.minBounds;
+        const float maximumExtent = std::max({ extents.x, extents.y, extents.z, 0.001f });
+        const glm::vec3 center = (projectileCornModel.model.minBounds + projectileCornModel.model.maxBounds) * 0.5f;
+
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
+        if (glm::length(velocity) > 0.0001f) {
+            model *= glm::mat4_cast(rotationBetweenVectors(glm::vec3(1.0f, 0.0f, 0.0f), velocity));
+        }
+        model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(length / maximumExtent));
+        model = glm::translate(model, -center);
+        return model;
+    }
+
     void drawSwordModel(const glm::mat4& model, const glm::vec4& color) {
         for (const LoadedMesh& mesh : projectileSwordModel.meshes) {
             drawColoredMesh(mesh.mesh, model, color);
+        }
+    }
+
+    void drawCornProjectile(const glm::mat4& model) {
+        if (projectileCornLoaded) {
+            drawRuntimeModel(projectileCornModel, model, { 0.96f, 0.78f, 0.22f, 1.0f });
+        }
+        else {
+            drawSwordModel(model, { 0.18f, 0.66f, 1.00f, 1.0f });
         }
     }
 
@@ -3182,16 +3225,20 @@ struct Mapa1::Impl {
     void drawProjectiles() {
         for (const Projectile& projectile : projectiles) {
             const float renderZ = renderedDepth(projectile.position.z, true) - posZ + (!mode3D ? 0.28f : 0.0f);
-            const float length = ProjectileSwordLength * (projectile.charged ? 1.55f : 1.0f);
-            const glm::mat4 model = normalizedSwordMatrix(
-                { projectile.position.x - posX, projectile.position.y, renderZ },
-                projectile.velocity,
-                length);
-            drawSwordModel(
-                model,
-                projectile.fromPlayer
-                ? glm::vec4(0.18f, 0.66f, 1.00f, 1.0f)
-                : glm::vec4(1.00f, 0.16f, 0.10f, 1.0f));
+            const glm::vec3 renderPosition{ projectile.position.x - posX, projectile.position.y, renderZ };
+            if (projectile.cornVisual && projectileCornLoaded) {
+                const float length = CornProjectileLength * (projectile.charged ? 1.45f : 1.0f);
+                drawCornProjectile(normalizedCornMatrix(renderPosition, projectile.velocity, length));
+            }
+            else {
+                const float length = ProjectileSwordLength * (projectile.charged ? 1.55f : 1.0f);
+                const glm::mat4 model = normalizedSwordMatrix(renderPosition, projectile.velocity, length);
+                drawSwordModel(
+                    model,
+                    projectile.fromPlayer
+                    ? glm::vec4(0.18f, 0.66f, 1.00f, 1.0f)
+                    : glm::vec4(1.00f, 0.16f, 0.10f, 1.0f));
+            }
         }
     }
 
@@ -3225,11 +3272,13 @@ struct Mapa1::Impl {
             const float ratio = std::clamp(playerChargeTime / PlayerChargeTime, 0.0f, 1.0f);
             const float previewLength = ProjectileSwordLength * (0.42f + ratio * 1.13f);
             const glm::vec3 offset = playerAimDirection * (0.42f + previewLength * 0.34f);
-            const glm::mat4 model = normalizedSwordMatrix(
-                { offset.x, posY + 0.62f + offset.y, 0.36f },
-                playerAimDirection,
-                previewLength);
-            drawSwordModel(model, { 0.18f, 0.66f, 1.00f, 1.0f });
+            const glm::vec3 previewPosition{ offset.x, posY + 0.62f + offset.y, 0.36f };
+            if (projectileCornLoaded) {
+                drawCornProjectile(normalizedCornMatrix(previewPosition, playerAimDirection, CornProjectileLength * (0.55f + ratio * 0.95f)));
+            }
+            else {
+                drawSwordModel(normalizedSwordMatrix(previewPosition, playerAimDirection, previewLength), { 0.18f, 0.66f, 1.00f, 1.0f });
+            }
         }
 
         if (now <= spectralEffectUntil) {
@@ -3433,6 +3482,7 @@ struct Mapa1::Impl {
             std::cerr << "Map 1 summoned sword projectile could not be loaded." << std::endl;
             return false;
         }
+        loadCornProjectileModel();
 
         if (!skyboxTexture.loadFromFile(resolveAssetPath("assets/mapa1/skybox/R.jpg"))) {
             std::cerr << "Map 1 skybox could not be loaded." << std::endl;
@@ -3628,6 +3678,8 @@ struct Mapa1::Impl {
         vanModelLoadAttempted = false;
         gemModel = {};
         gemModelLoaded = false;
+        projectileCornModel = {};
+        projectileCornLoaded = false;
         bangbooPlayer = {};
         deferredWorldLoadDelay = 0.0f;
         textureCache.clear();
