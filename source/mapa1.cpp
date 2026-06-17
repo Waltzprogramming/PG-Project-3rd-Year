@@ -6,6 +6,10 @@
 #include "Shader.h"
 #include "Texture2D.h"
 
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -16,6 +20,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <iomanip>
@@ -68,6 +73,11 @@ namespace {
     constexpr float PlayerEntranceFramesPerSecond = 11.0f;
     constexpr float PlayerDeathFramesPerSecond = 7.0f;
     constexpr float PlayerTransitionFramesPerSecond = 16.0f;
+    constexpr float BangbooPlayerHeight = 1.12f;
+    constexpr float BangbooWalkSampleRate = 18.0f;
+    constexpr int BangbooMinimumWalkFrames = 8;
+    constexpr int BangbooMaximumWalkFrames = 48;
+    constexpr float BangbooYawOffsetDegrees = 90.0f;
     constexpr int EnemySpawnCount = 11;
     constexpr int SpectralGemRequirement = 5;
     constexpr int DamageParryGemRequirement = 3;
@@ -194,6 +204,431 @@ namespace {
         std::vector<MapMaterial> materials;
     };
 
+    struct AnimatedRuntimeModel {
+        std::vector<WorldModel> frames;
+        glm::vec3 minBounds{ 0.0f };
+        glm::vec3 maxBounds{ 0.0f };
+        float framesPerSecond{ BangbooWalkSampleRate };
+
+        bool valid() const {
+            return !frames.empty() && !frames.front().model.meshes.empty();
+        }
+    };
+
+    glm::vec3 toGlmVector(const aiVector3D& value) {
+        return { value.x, value.y, value.z };
+    }
+
+    glm::vec4 toGlmColor(const aiColor4D& value) {
+        return { value.r, value.g, value.b, value.a };
+    }
+
+    std::string lowercase(std::string text) {
+        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char value) {
+            return static_cast<char>(std::tolower(value));
+            });
+        return text;
+    }
+
+    const aiAnimation* selectWalkAnimation(const aiScene* scene) {
+        if (scene == nullptr || scene->mNumAnimations == 0) {
+            return nullptr;
+        }
+
+        for (unsigned int i = 0; i < scene->mNumAnimations; ++i) {
+            const aiAnimation* animation = scene->mAnimations[i];
+            if (animation == nullptr) {
+                continue;
+            }
+
+            const std::string name = lowercase(animation->mName.C_Str());
+            if (name.find("walk") != std::string::npos ||
+                name.find("run") != std::string::npos ||
+                name.find("move") != std::string::npos) {
+                return animation;
+            }
+        }
+
+        return scene->mAnimations[0];
+    }
+
+    float interpolationFactor(double time, double current, double next) {
+        const double span = next - current;
+        if (span <= 0.000001) {
+            return 0.0f;
+        }
+        return static_cast<float>(std::clamp((time - current) / span, 0.0, 1.0));
+    }
+
+    unsigned int keyBefore(double time, const aiVectorKey* keys, unsigned int count) {
+        if (count <= 1) {
+            return 0;
+        }
+
+        for (unsigned int i = 0; i + 1 < count; ++i) {
+            if (time < keys[i + 1].mTime) {
+                return i;
+            }
+        }
+        return count - 2;
+    }
+
+    unsigned int keyBefore(double time, const aiQuatKey* keys, unsigned int count) {
+        if (count <= 1) {
+            return 0;
+        }
+
+        for (unsigned int i = 0; i + 1 < count; ++i) {
+            if (time < keys[i + 1].mTime) {
+                return i;
+            }
+        }
+        return count - 2;
+    }
+
+    aiVector3D sampleVectorKey(double time, const aiVectorKey* keys, unsigned int count, const aiVector3D& fallback) {
+        if (keys == nullptr || count == 0) {
+            return fallback;
+        }
+        if (count == 1) {
+            return keys[0].mValue;
+        }
+
+        const unsigned int index = keyBefore(time, keys, count);
+        const aiVectorKey& current = keys[index];
+        const aiVectorKey& next = keys[index + 1];
+        const float factor = interpolationFactor(time, current.mTime, next.mTime);
+        return current.mValue + (next.mValue - current.mValue) * factor;
+    }
+
+    aiQuaternion sampleRotationKey(double time, const aiQuatKey* keys, unsigned int count, const aiQuaternion& fallback) {
+        if (keys == nullptr || count == 0) {
+            return fallback;
+        }
+        if (count == 1) {
+            return keys[0].mValue;
+        }
+
+        const unsigned int index = keyBefore(time, keys, count);
+        const aiQuatKey& current = keys[index];
+        const aiQuatKey& next = keys[index + 1];
+        const float factor = interpolationFactor(time, current.mTime, next.mTime);
+        aiQuaternion result;
+        aiQuaternion::Interpolate(result, current.mValue, next.mValue, factor);
+        result.Normalize();
+        return result;
+    }
+
+    aiMatrix4x4 composeTransform(const aiVector3D& translation, const aiQuaternion& rotation, const aiVector3D& scale) {
+        aiMatrix4x4 translationMatrix;
+        aiMatrix4x4::Translation(translation, translationMatrix);
+        const aiMatrix4x4 rotationMatrix(rotation.GetMatrix());
+        aiMatrix4x4 scaleMatrix;
+        aiMatrix4x4::Scaling(scale, scaleMatrix);
+        return translationMatrix * rotationMatrix * scaleMatrix;
+    }
+
+    aiMatrix4x4 sampledNodeTransform(const aiNode* node, const aiNodeAnim* channel, double animationTick) {
+        if (node == nullptr || channel == nullptr) {
+            return node != nullptr ? node->mTransformation : aiMatrix4x4();
+        }
+
+        aiVector3D fallbackScale;
+        aiQuaternion fallbackRotation;
+        aiVector3D fallbackTranslation;
+        node->mTransformation.Decompose(fallbackScale, fallbackRotation, fallbackTranslation);
+
+        const aiVector3D translation = sampleVectorKey(
+            animationTick,
+            channel->mPositionKeys,
+            channel->mNumPositionKeys,
+            fallbackTranslation);
+        const aiQuaternion rotation = sampleRotationKey(
+            animationTick,
+            channel->mRotationKeys,
+            channel->mNumRotationKeys,
+            fallbackRotation);
+        const aiVector3D scale = sampleVectorKey(
+            animationTick,
+            channel->mScalingKeys,
+            channel->mNumScalingKeys,
+            fallbackScale);
+
+        return composeTransform(translation, rotation, scale);
+    }
+
+    void collectAnimationChannels(const aiAnimation* animation, std::unordered_map<std::string, const aiNodeAnim*>& channels) {
+        channels.clear();
+        if (animation == nullptr) {
+            return;
+        }
+
+        channels.reserve(animation->mNumChannels);
+        for (unsigned int i = 0; i < animation->mNumChannels; ++i) {
+            const aiNodeAnim* channel = animation->mChannels[i];
+            if (channel != nullptr) {
+                channels.emplace(channel->mNodeName.C_Str(), channel);
+            }
+        }
+    }
+
+    void collectNodeTransforms(
+        const aiNode* node,
+        const aiMatrix4x4& parentTransform,
+        double animationTick,
+        const std::unordered_map<std::string, const aiNodeAnim*>& channels,
+        std::unordered_map<std::string, aiMatrix4x4>& nodeTransforms) {
+        if (node == nullptr) {
+            return;
+        }
+
+        const std::string nodeName = node->mName.C_Str();
+        const auto channel = channels.find(nodeName);
+        const aiMatrix4x4 localTransform = sampledNodeTransform(
+            node,
+            channel != channels.end() ? channel->second : nullptr,
+            animationTick);
+        const aiMatrix4x4 globalTransform = parentTransform * localTransform;
+        nodeTransforms[nodeName] = globalTransform;
+
+        for (unsigned int i = 0; i < node->mNumChildren; ++i) {
+            collectNodeTransforms(node->mChildren[i], globalTransform, animationTick, channels, nodeTransforms);
+        }
+    }
+
+    aiVector3D transformNormal(const aiMatrix4x4& matrix, const aiVector3D& normal) {
+        aiMatrix3x3 normalMatrix(matrix);
+        normalMatrix.Inverse();
+        normalMatrix.Transpose();
+        aiVector3D transformed = normalMatrix * normal;
+        if (transformed.SquareLength() > 0.000001f) {
+            transformed.Normalize();
+        }
+        return transformed;
+    }
+
+    LoadedMesh buildSampledMesh(
+        const aiMesh* source,
+        const aiMatrix4x4& meshNodeTransform,
+        const aiMatrix4x4& rootInverseTransform,
+        const std::unordered_map<std::string, aiMatrix4x4>& nodeTransforms) {
+        LoadedMesh loaded;
+        if (source == nullptr) {
+            return loaded;
+        }
+
+        loaded.name = source->mName.C_Str();
+        loaded.materialIndex = source->mMaterialIndex;
+        loaded.minBounds = glm::vec3(std::numeric_limits<float>::max());
+        loaded.maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
+
+        std::vector<aiVector3D> positions(source->mNumVertices, aiVector3D(0.0f, 0.0f, 0.0f));
+        std::vector<aiVector3D> normals(source->mNumVertices, aiVector3D(0.0f, 0.0f, 0.0f));
+        std::vector<float> weights(source->mNumVertices, 0.0f);
+
+        if (source->HasBones()) {
+            for (unsigned int boneIndex = 0; boneIndex < source->mNumBones; ++boneIndex) {
+                const aiBone* bone = source->mBones[boneIndex];
+                if (bone == nullptr) {
+                    continue;
+                }
+
+                const auto nodeTransform = nodeTransforms.find(bone->mName.C_Str());
+                const aiMatrix4x4 boneGlobalTransform = nodeTransform != nodeTransforms.end()
+                    ? nodeTransform->second
+                    : aiMatrix4x4();
+                const aiMatrix4x4 finalTransform = rootInverseTransform * boneGlobalTransform * bone->mOffsetMatrix;
+
+                for (unsigned int weightIndex = 0; weightIndex < bone->mNumWeights; ++weightIndex) {
+                    const aiVertexWeight& weight = bone->mWeights[weightIndex];
+                    if (weight.mVertexId >= source->mNumVertices || weight.mWeight <= 0.0f) {
+                        continue;
+                    }
+
+                    positions[weight.mVertexId] += (finalTransform * source->mVertices[weight.mVertexId]) * weight.mWeight;
+                    const aiVector3D sourceNormal = source->HasNormals()
+                        ? source->mNormals[weight.mVertexId]
+                        : aiVector3D(0.0f, 1.0f, 0.0f);
+                    normals[weight.mVertexId] += transformNormal(finalTransform, sourceNormal) * weight.mWeight;
+                    weights[weight.mVertexId] += weight.mWeight;
+                }
+            }
+        }
+
+        std::vector<Vertex> vertices;
+        std::vector<unsigned int> indices;
+        vertices.reserve(source->mNumVertices);
+
+        for (unsigned int i = 0; i < source->mNumVertices; ++i) {
+            aiVector3D position;
+            aiVector3D normal;
+            if (weights[i] > 0.0001f) {
+                position = positions[i] / weights[i];
+                normal = normals[i];
+                if (normal.SquareLength() > 0.000001f) {
+                    normal.Normalize();
+                }
+                else {
+                    normal = aiVector3D(0.0f, 1.0f, 0.0f);
+                }
+            }
+            else {
+                position = meshNodeTransform * source->mVertices[i];
+                const aiVector3D sourceNormal = source->HasNormals()
+                    ? source->mNormals[i]
+                    : aiVector3D(0.0f, 1.0f, 0.0f);
+                normal = transformNormal(meshNodeTransform, sourceNormal);
+            }
+
+            Vertex vertex{};
+            vertex.position = toGlmVector(position);
+            vertex.normal = toGlmVector(normal);
+            vertex.uv = source->HasTextureCoords(0)
+                ? glm::vec2(source->mTextureCoords[0][i].x, source->mTextureCoords[0][i].y)
+                : glm::vec2(0.0f);
+            vertex.color = source->HasVertexColors(0)
+                ? toGlmColor(source->mColors[0][i])
+                : glm::vec4(1.0f);
+
+            loaded.minBounds = glm::min(loaded.minBounds, vertex.position);
+            loaded.maxBounds = glm::max(loaded.maxBounds, vertex.position);
+            vertices.push_back(vertex);
+        }
+
+        for (unsigned int faceIndex = 0; faceIndex < source->mNumFaces; ++faceIndex) {
+            const aiFace& face = source->mFaces[faceIndex];
+            if (face.mNumIndices != 3) {
+                continue;
+            }
+            indices.push_back(face.mIndices[0]);
+            indices.push_back(face.mIndices[1]);
+            indices.push_back(face.mIndices[2]);
+        }
+
+        if (vertices.empty()) {
+            loaded.minBounds = glm::vec3(0.0f);
+            loaded.maxBounds = glm::vec3(0.0f);
+        }
+        loaded.mesh.upload(vertices, indices);
+        return loaded;
+    }
+
+    void appendSampledNodeMeshes(
+        const aiScene* scene,
+        const aiNode* node,
+        const aiMatrix4x4& rootInverseTransform,
+        const std::unordered_map<std::string, aiMatrix4x4>& nodeTransforms,
+        LoadedModel& model) {
+        if (scene == nullptr || node == nullptr) {
+            return;
+        }
+
+        const auto nodeTransform = nodeTransforms.find(node->mName.C_Str());
+        const aiMatrix4x4 meshNodeTransform = nodeTransform != nodeTransforms.end()
+            ? nodeTransform->second
+            : aiMatrix4x4();
+        const aiMatrix4x4 meshModelTransform = rootInverseTransform * meshNodeTransform;
+
+        for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
+            const unsigned int meshIndex = node->mMeshes[i];
+            if (meshIndex >= scene->mNumMeshes) {
+                continue;
+            }
+
+            LoadedMesh mesh = buildSampledMesh(
+                scene->mMeshes[meshIndex],
+                meshModelTransform,
+                rootInverseTransform,
+                nodeTransforms);
+            model.minBounds = glm::min(model.minBounds, mesh.minBounds);
+            model.maxBounds = glm::max(model.maxBounds, mesh.maxBounds);
+            model.meshes.push_back(std::move(mesh));
+        }
+
+        for (unsigned int i = 0; i < node->mNumChildren; ++i) {
+            appendSampledNodeMeshes(scene, node->mChildren[i], rootInverseTransform, nodeTransforms, model);
+        }
+    }
+
+    AnimatedRuntimeModel bakeAnimatedRuntimeModel(const std::string& path, const std::vector<MapMaterial>& materials) {
+        AnimatedRuntimeModel result;
+        result.minBounds = glm::vec3(std::numeric_limits<float>::max());
+        result.maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
+
+        Assimp::Importer importer;
+        const aiScene* scene = importer.ReadFile(
+            path,
+            aiProcess_Triangulate |
+            aiProcess_GenNormals |
+            aiProcess_JoinIdenticalVertices |
+            aiProcess_ImproveCacheLocality |
+            aiProcess_RemoveRedundantMaterials |
+            aiProcess_FindInvalidData |
+            aiProcess_LimitBoneWeights);
+
+        if (scene == nullptr || scene->mRootNode == nullptr) {
+            std::cerr << "Mapa 1 BangBoo animation could not be loaded: " << path
+                << " - " << importer.GetErrorString() << std::endl;
+            return result;
+        }
+
+        const aiAnimation* animation = selectWalkAnimation(scene);
+        const double ticksPerSecond = animation != nullptr && animation->mTicksPerSecond > 0.0
+            ? animation->mTicksPerSecond
+            : 25.0;
+        const double durationTicks = animation != nullptr
+            ? std::max(animation->mDuration, 1.0)
+            : 0.0;
+        const double durationSeconds = durationTicks > 0.0 ? durationTicks / ticksPerSecond : 0.0;
+        const int frameCount = animation != nullptr
+            ? std::clamp(
+                static_cast<int>(std::ceil(durationSeconds * static_cast<double>(BangbooWalkSampleRate))),
+                BangbooMinimumWalkFrames,
+                BangbooMaximumWalkFrames)
+            : 1;
+        result.framesPerSecond = durationSeconds > 0.001
+            ? static_cast<float>(static_cast<double>(frameCount) / durationSeconds)
+            : BangbooWalkSampleRate;
+
+        std::unordered_map<std::string, const aiNodeAnim*> channels;
+        collectAnimationChannels(animation, channels);
+
+        aiMatrix4x4 rootInverseTransform = scene->mRootNode->mTransformation;
+        rootInverseTransform.Inverse();
+
+        result.frames.reserve(static_cast<size_t>(frameCount));
+        for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
+            const double animationTick = animation != nullptr && frameCount > 0
+                ? durationTicks * static_cast<double>(frameIndex) / static_cast<double>(frameCount)
+                : 0.0;
+
+            std::unordered_map<std::string, aiMatrix4x4> nodeTransforms;
+            nodeTransforms.reserve(128);
+            collectNodeTransforms(scene->mRootNode, aiMatrix4x4(), animationTick, channels, nodeTransforms);
+
+            WorldModel frame;
+            frame.materials = materials;
+            frame.model.sourcePath = path;
+            frame.model.minBounds = glm::vec3(std::numeric_limits<float>::max());
+            frame.model.maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
+            appendSampledNodeMeshes(scene, scene->mRootNode, rootInverseTransform, nodeTransforms, frame.model);
+
+            if (frame.model.meshes.empty()) {
+                continue;
+            }
+
+            result.minBounds = glm::min(result.minBounds, frame.model.minBounds);
+            result.maxBounds = glm::max(result.maxBounds, frame.model.maxBounds);
+            result.frames.push_back(std::move(frame));
+        }
+
+        if (result.frames.empty()) {
+            result.minBounds = glm::vec3(0.0f);
+            result.maxBounds = glm::vec3(0.0f);
+        }
+        return result;
+    }
+
     std::string resolveAssetPath(const std::string& path) {
         const std::filesystem::path requested(path);
         const std::filesystem::path candidates[] = {
@@ -207,6 +642,33 @@ namespace {
             }
         }
         return path;
+    }
+
+    std::string resolveTextureAssetPath(const std::string& path) {
+        const std::filesystem::path requested(path);
+        const std::filesystem::path fileName = requested.filename();
+        const std::filesystem::path bangbooTexturePath =
+            std::filesystem::path("assets") / "mapa1" / "player" / "bangboo" / "textures" / fileName;
+        const std::filesystem::path requestedSiblingTexturePath =
+            requested.has_parent_path()
+            ? requested.parent_path().parent_path() / "textures" / fileName
+            : std::filesystem::path();
+
+        const std::filesystem::path candidates[] = {
+            requested,
+            std::filesystem::path("..") / ".." / requested,
+            requestedSiblingTexturePath,
+            bangbooTexturePath,
+            std::filesystem::path("..") / ".." / bangbooTexturePath
+        };
+
+        for (const auto& candidate : candidates) {
+            if (!candidate.empty() && std::filesystem::exists(candidate)) {
+                return candidate.lexically_normal().string();
+            }
+        }
+
+        return resolveAssetPath(path);
     }
 
     Vertex makeVertex(const glm::vec3& position, const glm::vec2& uv) {
@@ -501,6 +963,7 @@ struct Mapa1::Impl {
     std::vector<std::string> deferredWorldModelPaths;
     WorldModel vanModel;
     WorldModel gemModel;
+    AnimatedRuntimeModel bangbooPlayer;
     std::unordered_map<std::string, std::shared_ptr<Texture2D>> textureCache;
     Texture2D playerAtlasTexture;
     LoadedModel projectileSwordModel;
@@ -658,7 +1121,7 @@ struct Mapa1::Impl {
             return {};
         }
 
-        const std::string resolved = resolveAssetPath(path);
+        const std::string resolved = resolveTextureAssetPath(path);
         auto found = textureCache.find(resolved);
         if (found != textureCache.end()) {
             return found->second;
@@ -718,6 +1181,23 @@ struct Mapa1::Impl {
         world.materials = runtimeMaterialsFor(world.model.materials);
 
         worldModels.push_back(std::move(world));
+        return true;
+    }
+
+    bool loadBangbooPlayerModel() {
+        const std::string path = resolveAssetPath("assets/mapa1/player/bangboo/source/BangBoo1.fbx");
+        LoadedModel materialSource = ModelLoader::loadModel(path);
+        if (materialSource.meshes.empty()) {
+            std::cerr << "Mapa 1 BangBoo player model could not be loaded." << std::endl;
+            return false;
+        }
+
+        bangbooPlayer = bakeAnimatedRuntimeModel(path, runtimeMaterialsFor(materialSource.materials));
+        if (!bangbooPlayer.valid()) {
+            std::cerr << "Mapa 1 BangBoo player animation could not be prepared." << std::endl;
+            return false;
+        }
+
         return true;
     }
 
@@ -2705,6 +3185,30 @@ struct Mapa1::Impl {
             : glm::vec4(0.18f, 0.72f, 1.0f, 1.0f));
     }
 
+    void drawBangbooPlayer(float bounce, bool lockedAction) {
+        if (!bangbooPlayer.valid()) {
+            return;
+        }
+
+        size_t frameIndex = 0;
+        if (wasMoving && !lockedAction && bangbooPlayer.frames.size() > 1) {
+            frameIndex = static_cast<size_t>(animationTime * bangbooPlayer.framesPerSecond) % bangbooPlayer.frames.size();
+        }
+
+        const glm::vec3 extents = bangbooPlayer.maxBounds - bangbooPlayer.minBounds;
+        const float modelHeight = std::max(extents.y, 0.001f);
+        const float modelScale = BangbooPlayerHeight / modelHeight;
+        const glm::vec3 modelCenter = (bangbooPlayer.minBounds + bangbooPlayer.maxBounds) * 0.5f;
+        const float renderZ = mode3D ? 0.0f : 0.22f;
+
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), { 0.0f, posY + bounce, renderZ });
+        const float yawOffset = mode3D ? 0.0f : BangbooYawOffsetDegrees;
+        model = glm::rotate(model, glm::radians(playerAngle + yawOffset), { 0.0f, 1.0f, 0.0f });
+        model = glm::scale(model, glm::vec3(modelScale));
+        model = glm::translate(model, { -modelCenter.x, -bangbooPlayer.minBounds.y, -modelCenter.z });
+        drawRuntimeModel(bangbooPlayer.frames[frameIndex], model, { 1.0f, 1.0f, 1.0f, 1.0f });
+    }
+
     void drawPlayer() {
         const float now = static_cast<float>(glfwGetTime());
         const bool airborne = !grounded;
@@ -2719,6 +3223,11 @@ struct Mapa1::Impl {
         const glm::vec3 jumpScale = jumpPoseActive
             ? glm::vec3(1.0f - jumpStrength * 0.06f, 1.0f + jumpStrength * 0.10f, 1.0f)
             : glm::vec3(1.0f);
+
+        if (bangbooPlayer.valid()) {
+            drawBangbooPlayer(bounce, lockedAction);
+            return;
+        }
 
         const Mesh* selectedMesh = &playerIdleMesh;
         if (playerDeathPlaying) {
@@ -2759,6 +3268,10 @@ struct Mapa1::Impl {
         }
 
         if (!shader.load(resolveAssetPath("shaders/mapa1.vert"), resolveAssetPath("shaders/mapa1.frag"))) {
+            return false;
+        }
+
+        if (!loadBangbooPlayerModel()) {
             return false;
         }
 
@@ -3035,6 +3548,7 @@ struct Mapa1::Impl {
         vanModelLoadAttempted = false;
         gemModel = {};
         gemModelLoaded = false;
+        bangbooPlayer = {};
         deferredWorldLoadDelay = 0.0f;
         textureCache.clear();
         playerAtlasTexture = Texture2D{};
