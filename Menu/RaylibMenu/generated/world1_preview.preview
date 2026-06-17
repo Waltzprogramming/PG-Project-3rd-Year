@@ -1,0 +1,13 @@
+# obj|texture|red|green|blue
+world1_preview_parts/00_00_CourseSelectW1_IslandMat01.obj|world1_preview_textures/00_W1Island01_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_01_CourseSelectW1_LawnMat05.obj|world1_preview_textures/01_W1Lawn00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_02_CourseSelectW1_GatePoleMat00.obj|world1_preview_textures/02_W1GatePole00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_03_CourseSelectW1_WallBlockMat00.obj|world1_preview_textures/03_W1WallBlock_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_04_CourseSelectW1_RockMat01.obj|world1_preview_textures/04_W1Rock00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_05_CourseSelectW1_LawnMat06.obj|world1_preview_textures/01_W1Lawn00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_06_CourseSelectW1_SandMat00.obj|world1_preview_textures/05_Sand02_z_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_07_CourseSelectW1_RoadMat01.obj|world1_preview_textures/06_W1Road00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_08_CourseSelectW1_CloudMat01.obj|world1_preview_textures/07_Cloud_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_09_CourseSelectW1_LawnEdgeMat00.obj|world1_preview_textures/08_W1LawnEdge00_DM_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_10_CourseSelectW1_SandSeaSideMat00.obj|world1_preview_textures/09_Sand01_z_alb.png|0.820000|0.820000|0.820000
+world1_preview_parts/00_11_CourseSelectW1_ZShadowMat.obj|-|1.000000|1.000000|1.000000

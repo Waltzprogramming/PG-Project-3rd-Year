@@ -19,6 +19,7 @@ build/
 *.recipe
 *.log
 *.exe
+!Menu/RaylibMenu/generated/**/*.obj
 
 .DS_Store
 Thumbs.db

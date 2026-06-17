@@ -318,109 +318,147 @@ def face_token(corner, position_remap, texcoord_remap, normal_remap):
     return str(position)
 
 
-def write_preview(source_path, output_path):
-    positions, normals, texcoords, batches, materials = load_model_data(source_path)
-    if not positions or not batches:
-        raise RuntimeError("No se encontro geometria util en el archivo DAE.")
+def write_preview(source_paths, output_path):
+    if isinstance(source_paths, Path):
+        source_paths = [source_paths]
 
-    minimum = [min(vertex[axis] for vertex in positions) for axis in range(3)]
-    maximum = [max(vertex[axis] for vertex in positions) for axis in range(3)]
+    loaded_sources = []
+    all_positions = []
+    for source_index, source_path in enumerate(source_paths):
+        positions, normals, texcoords, batches, materials = load_model_data(source_path)
+        if not positions or not batches:
+            continue
+        loaded_sources.append({
+            "index": source_index,
+            "path": source_path,
+            "positions": positions,
+            "normals": normals,
+            "texcoords": texcoords,
+            "batches": batches,
+            "materials": materials,
+        })
+        all_positions.extend(positions)
+
+    if not all_positions or not loaded_sources:
+        raise RuntimeError("No se encontro geometria util en los archivos DAE.")
+
+    minimum = [min(vertex[axis] for vertex in all_positions) for axis in range(3)]
+    maximum = [max(vertex[axis] for vertex in all_positions) for axis in range(3)]
     center = [(minimum[axis] + maximum[axis]) * 0.5 for axis in range(3)]
     extent = max(maximum[axis] - minimum[axis] for axis in range(3))
     scale = 5.4 / max(extent, 0.0001)
-    positions = [
-        tuple((vertex[axis] - center[axis]) * scale for axis in range(3))
-        for vertex in positions
-    ]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     texture_folder = output_path.parent / f"{output_path.stem}_textures"
     part_folder = output_path.parent / f"{output_path.stem}_parts"
+    if texture_folder.exists():
+        shutil.rmtree(texture_folder)
+    if part_folder.exists():
+        shutil.rmtree(part_folder)
     texture_folder.mkdir(parents=True, exist_ok=True)
     part_folder.mkdir(parents=True, exist_ok=True)
 
-    used_materials = []
-    for batch in batches:
-        material_id = batch["material"]
-        if material_id not in used_materials:
-            used_materials.append(material_id)
-
     copied_textures = {}
     manifest_lines = ["# obj|texture|red|green|blue"]
-    for material_index, material_id in enumerate(used_materials):
-        material = materials.get(material_id, {"color": (0.82, 0.82, 0.82), "texture": None})
-        material_faces = [
-            face
-            for batch in batches
-            if batch["material"] == material_id
-            for face in batch["faces"]
+    material_count = 0
+    vertex_count = 0
+    triangle_count = 0
+
+    for source_data in loaded_sources:
+        source_index = source_data["index"]
+        source_path = source_data["path"]
+        positions = [
+            tuple((vertex[axis] - center[axis]) * scale for axis in range(3))
+            for vertex in source_data["positions"]
         ]
-        if not material_faces:
-            continue
+        normals = source_data["normals"]
+        texcoords = source_data["texcoords"]
+        batches = source_data["batches"]
+        materials = source_data["materials"]
+        vertex_count += len(positions)
+        triangle_count += sum(len(batch["faces"]) for batch in batches)
 
-        used_positions = sorted({corner[0] for face in material_faces for corner in face})
-        used_texcoords = sorted({corner[1] for face in material_faces for corner in face if corner[1] is not None})
-        used_normals = sorted({corner[2] for face in material_faces for corner in face if corner[2] is not None})
-        position_remap = {index: local_index + 1 for local_index, index in enumerate(used_positions)}
-        texcoord_remap = {index: local_index + 1 for local_index, index in enumerate(used_texcoords)}
-        normal_remap = {index: local_index + 1 for local_index, index in enumerate(used_normals)}
+        used_materials = []
+        for batch in batches:
+            material_id = batch["material"]
+            if material_id not in used_materials:
+                used_materials.append(material_id)
 
-        part_name = f"{material_index:02d}_{safe_name(material_id)}.obj"
-        part_path = part_folder / part_name
-        with part_path.open("w", encoding="ascii", newline="\n") as output:
-            output.write("# Pieza completa de un material COLLADA para Raylib\n")
-            output.write(f"o {safe_name(material_id)}\n")
-            for index in used_positions:
-                vertex = positions[index]
-                output.write(f"v {vertex[0]:.7f} {vertex[1]:.7f} {vertex[2]:.7f}\n")
-            for index in used_texcoords:
-                texcoord = texcoords[index]
-                output.write(f"vt {texcoord[0]:.7f} {texcoord[1]:.7f}\n")
-            for index in used_normals:
-                normal = normals[index]
-                output.write(f"vn {normal[0]:.7f} {normal[1]:.7f} {normal[2]:.7f}\n")
-            for face in material_faces:
-                output.write(
-                    "f "
-                    + " ".join(
-                        face_token(corner, position_remap, texcoord_remap, normal_remap)
-                        for corner in face
+        for material_index, material_id in enumerate(used_materials):
+            material = materials.get(material_id, {"color": (0.82, 0.82, 0.82), "texture": None})
+            material_faces = [
+                face
+                for batch in batches
+                if batch["material"] == material_id
+                for face in batch["faces"]
+            ]
+            if not material_faces:
+                continue
+
+            used_positions = sorted({corner[0] for face in material_faces for corner in face})
+            used_texcoords = sorted({corner[1] for face in material_faces for corner in face if corner[1] is not None})
+            used_normals = sorted({corner[2] for face in material_faces for corner in face if corner[2] is not None})
+            position_remap = {index: local_index + 1 for local_index, index in enumerate(used_positions)}
+            texcoord_remap = {index: local_index + 1 for local_index, index in enumerate(used_texcoords)}
+            normal_remap = {index: local_index + 1 for local_index, index in enumerate(used_normals)}
+
+            source_name = safe_name(source_path.stem)
+            part_name = f"{source_index:02d}_{material_index:02d}_{source_name}_{safe_name(material_id)}.obj"
+            part_path = part_folder / part_name
+            with part_path.open("w", encoding="ascii", newline="\n") as output:
+                output.write("# Pieza completa de un material COLLADA para Raylib\n")
+                output.write(f"o {source_name}_{safe_name(material_id)}\n")
+                for index in used_positions:
+                    vertex = positions[index]
+                    output.write(f"v {vertex[0]:.7f} {vertex[1]:.7f} {vertex[2]:.7f}\n")
+                for index in used_texcoords:
+                    texcoord = texcoords[index]
+                    output.write(f"vt {texcoord[0]:.7f} {texcoord[1]:.7f}\n")
+                for index in used_normals:
+                    normal = normals[index]
+                    output.write(f"vn {normal[0]:.7f} {normal[1]:.7f} {normal[2]:.7f}\n")
+                for face in material_faces:
+                    output.write(
+                        "f "
+                        + " ".join(
+                            face_token(corner, position_remap, texcoord_remap, normal_remap)
+                            for corner in face
+                        )
+                        + "\n"
                     )
-                    + "\n"
-                )
 
-        texture_reference = "-"
-        texture_source = resolve_texture(source_path, material["texture"])
-        if texture_source is not None:
-            texture_key = str(texture_source).lower()
-            if texture_key not in copied_textures:
-                destination = texture_folder / texture_source.name
-                shutil.copy2(texture_source, destination)
-                copied_textures[texture_key] = destination
-            texture_reference = copied_textures[texture_key].relative_to(output_path.parent).as_posix()
+            texture_reference = "-"
+            texture_source = resolve_texture(source_path, material["texture"])
+            if texture_source is not None:
+                texture_key = str(texture_source).lower()
+                if texture_key not in copied_textures:
+                    destination = texture_folder / f"{len(copied_textures):02d}_{texture_source.name}"
+                    shutil.copy2(texture_source, destination)
+                    copied_textures[texture_key] = destination
+                texture_reference = copied_textures[texture_key].relative_to(output_path.parent).as_posix()
 
-        color = material["color"]
-        manifest_lines.append(
-            "|".join([
-                part_path.relative_to(output_path.parent).as_posix(),
-                texture_reference,
-                f"{color[0]:.6f}",
-                f"{color[1]:.6f}",
-                f"{color[2]:.6f}",
-            ])
-        )
+            color = material["color"]
+            manifest_lines.append(
+                "|".join([
+                    part_path.relative_to(output_path.parent).as_posix(),
+                    texture_reference,
+                    f"{color[0]:.6f}",
+                    f"{color[1]:.6f}",
+                    f"{color[2]:.6f}",
+                ])
+            )
+            material_count += 1
 
     with output_path.open("w", encoding="ascii", newline="\n") as output:
         output.write("\n".join(manifest_lines))
         output.write("\n")
 
-    triangle_count = sum(len(batch["faces"]) for batch in batches)
-    return len(positions), triangle_count, len(used_materials), len(copied_textures)
+    return vertex_count, triangle_count, material_count, len(copied_textures)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Genera OBJ + MTL + texturas para una vista previa Raylib.")
-    parser.add_argument("input", type=Path)
+    parser.add_argument("input", type=Path, nargs="+")
     parser.add_argument("output", type=Path)
     arguments = parser.parse_args()
 
@@ -428,8 +466,9 @@ def main():
         arguments.input,
         arguments.output,
     )
+    source_label = ", ".join(str(path) for path in arguments.input)
     print(
-        f"{arguments.output}: {vertex_count} vertices, {triangle_count} triangulos, "
+        f"{arguments.output}: {source_label}: {vertex_count} vertices, {triangle_count} triangulos, "
         f"{material_count} materiales, {texture_count} texturas"
     )
 
