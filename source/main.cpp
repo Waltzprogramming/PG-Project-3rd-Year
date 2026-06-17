@@ -26,9 +26,11 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
@@ -83,6 +85,13 @@ glm::vec3 gameplayCameraPosition{0.0f, 6.0f, 14.0f};
 glm::vec3 gameplayCameraTarget{0.0f, 2.0f, 0.0f};
 bool cameraInitialized = false;
 double modeSwitchUnavailableUntil = 0.0;
+
+struct WindowPosition {
+    int x{0};
+    int y{0};
+};
+
+std::optional<WindowPosition> lastRaylibMenuWindowPosition;
 
 void solicitarCargaMundo(EstadoJuego target) {
     loadingTarget = target;
@@ -152,11 +161,58 @@ bool gameOverContinuePressed(GLFWwindow* window) {
     return pressed;
 }
 
+std::filesystem::path raylibMenuPositionFilePath() {
+    wchar_t tempPathBuffer[MAX_PATH] = {};
+    const DWORD tempPathLength = GetTempPathW(MAX_PATH, tempPathBuffer);
+    std::filesystem::path tempRoot = tempPathLength > 0
+        ? std::filesystem::path(tempPathBuffer)
+        : std::filesystem::temp_directory_path();
+
+    return tempRoot / ("PaperPinixRaylibMenuPosition_" + std::to_string(GetCurrentProcessId()) + ".txt");
+}
+
+std::wstring quoteCommandArgument(const std::wstring& value) {
+    std::wstring quoted = L"\"";
+    for (wchar_t character : value) {
+        if (character == L'"') {
+            quoted += L'\\';
+        }
+        quoted += character;
+    }
+    quoted += L"\"";
+    return quoted;
+}
+
+void readRaylibMenuWindowPosition(const std::filesystem::path& positionPath) {
+    std::ifstream input(positionPath);
+    int x = 0;
+    int y = 0;
+    if (input >> x >> y) {
+        lastRaylibMenuWindowPosition = WindowPosition{x, y};
+    }
+
+    std::error_code ignored;
+    std::filesystem::remove(positionPath, ignored);
+}
+
+void applyLastRaylibMenuWindowPosition(GLFWwindow* window) {
+    if (!window || !lastRaylibMenuWindowPosition.has_value()) {
+        return;
+    }
+
+    glfwSetWindowPos(window, lastRaylibMenuWindowPosition->x, lastRaylibMenuWindowPosition->y);
+}
+
 int runRaylibMenuProcess(const std::wstring& arguments = L"") {
     wchar_t modulePath[MAX_PATH] = {};
     const DWORD moduleLength = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
     const std::filesystem::path executableDirectory =
         moduleLength > 0 ? std::filesystem::path(modulePath).parent_path() : std::filesystem::current_path();
+    const std::filesystem::path positionPath = raylibMenuPositionFilePath();
+
+    std::error_code ignored;
+    lastRaylibMenuWindowPosition.reset();
+    std::filesystem::remove(positionPath, ignored);
 
     const std::filesystem::path candidates[] = {
         std::filesystem::current_path() / "Menu" / "RaylibMenu" / "bin" / "PaperPinixRaylibMenu.exe",
@@ -182,6 +238,7 @@ int runRaylibMenuProcess(const std::wstring& arguments = L"") {
         if (!arguments.empty()) {
             command += L" " + arguments;
         }
+        command += L" --window-position-out " + quoteCommandArgument(positionPath.wstring());
 
         std::vector<wchar_t> commandBuffer(command.begin(), command.end());
         commandBuffer.push_back(L'\0');
@@ -209,6 +266,7 @@ int runRaylibMenuProcess(const std::wstring& arguments = L"") {
         GetExitCodeProcess(processInfo.hProcess, &exitCode);
         CloseHandle(processInfo.hThread);
         CloseHandle(processInfo.hProcess);
+        readRaylibMenuWindowPosition(positionPath);
 
         return static_cast<int>(exitCode);
     }
@@ -2180,6 +2238,7 @@ int runRaylibPauseMenuForWindow(GLFWwindow* window) {
     glfwMakeContextCurrent(nullptr);
     const int pauseAction = runRaylibPauseMenu();
     glfwMakeContextCurrent(window);
+    applyLastRaylibMenuWindowPosition(window);
     glfwShowWindow(window);
     glfwFocusWindow(window);
     lastFrame = static_cast<float>(glfwGetTime());
@@ -2193,6 +2252,7 @@ int runRaylibWorldMenuForWindow(GLFWwindow* window) {
     glfwMakeContextCurrent(nullptr);
     const int selectedWorld = runRaylibWorldSelectorMenu();
     glfwMakeContextCurrent(window);
+    applyLastRaylibMenuWindowPosition(window);
     glfwShowWindow(window);
     glfwFocusWindow(window);
     lastFrame = static_cast<float>(glfwGetTime());
@@ -2206,6 +2266,7 @@ int runRaylibMainMenuForWindow(GLFWwindow* window) {
     glfwMakeContextCurrent(nullptr);
     const int selectedWorld = runRaylibWorldMenu();
     glfwMakeContextCurrent(window);
+    applyLastRaylibMenuWindowPosition(window);
     glfwShowWindow(window);
     glfwFocusWindow(window);
     lastFrame = static_cast<float>(glfwGetTime());
@@ -2700,15 +2761,18 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    if (mapa1SmokeTest || mapa1CombatSmokeTest) {
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    }
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     GLFWwindow* window = glfwCreateWindow(WindowWidth, WindowHeight, "Paper Pinix", nullptr, nullptr);
     if (window == nullptr) {
         std::cerr << "Failed to create GLFW window." << std::endl;
         glfwTerminate();
         return 1;
+    }
+
+    applyLastRaylibMenuWindowPosition(window);
+    if (!mapa1SmokeTest && !mapa1CombatSmokeTest) {
+        glfwShowWindow(window);
     }
 
     glfwMakeContextCurrent(window);

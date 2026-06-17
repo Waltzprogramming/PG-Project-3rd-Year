@@ -689,6 +689,19 @@ const char* argumentValue(int argc, char** argv, const char* argument) {
     }
     return nullptr;
 }
+
+void writeWindowPosition(const char* path) {
+    if (path == nullptr || path[0] == '\0') {
+        return;
+    }
+
+    const Vector2 position = GetWindowPosition();
+    std::ofstream output(path, std::ios::trunc);
+    if (output.is_open()) {
+        output << static_cast<int>(std::round(position.x)) << ' '
+               << static_cast<int>(std::round(position.y)) << std::endl;
+    }
+}
 }
 
 int main(int argc, char** argv) {
@@ -703,6 +716,7 @@ int main(int argc, char** argv) {
     const bool startWorlds = hasArgument(argc, argv, "--worlds") || hasArgument(argc, argv, "--world-select");
     const char* screenshotPath = argumentValue(argc, argv, "--screenshot");
     const char* screenshotScreen = argumentValue(argc, argv, "--screen");
+    const char* windowPositionOutPath = argumentValue(argc, argv, "--window-position-out");
     const char* previewWorldArgument = argumentValue(argc, argv, "--world");
     const int previewWorld = previewWorldArgument != nullptr
         ? std::clamp(std::atoi(previewWorldArgument) - 1, 0, WorldCount - 1)
@@ -1026,6 +1040,7 @@ int main(int argc, char** argv) {
     }
     UnloadTexture(fallbackTexture);
     UnloadShader(lightingShader);
+    writeWindowPosition(windowPositionOutPath);
     CloseWindow();
     return resultCode;
 }
