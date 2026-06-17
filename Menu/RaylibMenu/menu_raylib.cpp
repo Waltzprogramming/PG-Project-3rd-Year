@@ -341,7 +341,7 @@ void drawCreditsPanel(float entry, float timeSeconds, int width, int height) {
         "Chamorro Mayen Holman Lennin",
         "Solorzano Walter Uriel",
         "Pérez García Leonardo Miguel",
-        "Matias"
+        "Mathias Eli Baldizon Orozco"
     }};
     for (int index = 0; index < static_cast<int>(names.size()); ++index) {
         const float nameY = y + 125.0f + index*48.0f;
