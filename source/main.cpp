@@ -2185,8 +2185,13 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
             }
             else {
                 const EstadoJuego pausedState = appState;
+                const bool resumeMusic = true;
+                mapa1.pauseBackgroundMusic();
                 const int pauseAction = runRaylibPauseMenuForWindow(window);
                 aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
+                if (appState == EstadoJuego::MUNDO_1 && (pauseAction == RaylibPauseResume || pauseAction <= 0) && resumeMusic) {
+                    mapa1.resumeBackgroundMusic();
+                }
             }
             break;
         case EstadoJuego::MUNDO_2:
@@ -2210,8 +2215,16 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
         case EstadoJuego::MUNDO_4:
         {
             const EstadoJuego pausedState = appState;
+            const bool resumeMusic = mapa4.musicOpen && mapa4.musicPlaying;
+            if (resumeMusic) {
+                mapa4.music.stop();
+                mapa4.musicPlaying = false;
+            }
             const int pauseAction = runRaylibPauseMenuForWindow(window);
             aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
+            if (appState == EstadoJuego::MUNDO_4 && (pauseAction == RaylibPauseResume || pauseAction <= 0) && resumeMusic && mapa4.musicOpen) {
+                mapa4.musicPlaying = mapa4.music.playLoop();
+            }
             break;
         }
         }
