@@ -456,6 +456,25 @@ void configureLightingShader(Shader shader) {
     SetShaderValue(shader, ambientLocation, &ambientColor, SHADER_UNIFORM_VEC3);
 }
 
+void configurePreviewLighting(Shader shader, bool nightMode) {
+    const Vector3 lightDirection = nightMode
+        ? Vector3{-0.18f, -0.94f, -0.28f}
+        : Vector3{-0.42f, -0.86f, -0.34f};
+    const Vector3 lightColor = nightMode
+        ? Vector3{0.42f, 0.48f, 0.70f}
+        : Vector3{1.08f, 1.02f, 0.92f};
+    const Vector3 ambientColor = nightMode
+        ? Vector3{0.14f, 0.17f, 0.26f}
+        : Vector3{0.44f, 0.49f, 0.58f};
+
+    const int directionLocation = GetShaderLocation(shader, "lightDirection");
+    const int colorLocation = GetShaderLocation(shader, "lightColor");
+    const int ambientLocation = GetShaderLocation(shader, "ambientColor");
+    SetShaderValue(shader, directionLocation, &lightDirection, SHADER_UNIFORM_VEC3);
+    SetShaderValue(shader, colorLocation, &lightColor, SHADER_UNIFORM_VEC3);
+    SetShaderValue(shader, ambientLocation, &ambientColor, SHADER_UNIFORM_VEC3);
+}
+
 void drawConceptPreview(int activeWorld, float rotationY, float groundY) {
     rlPushMatrix();
     rlTranslatef(0.0f, groundY, 0.0f);
@@ -513,6 +532,7 @@ void drawPreview(
     float timeSeconds
 ) {
     constexpr float groundY = -2.9f;
+    const bool nightMode = activeWorld == 3;
     float cameraTargetY = 0.0f;
     if (activeWorld >= 0 && activeWorld < WorldCount && models[activeWorld].loaded) {
         const float modelHeight =
@@ -530,18 +550,29 @@ void drawPreview(
 
     const int viewLocation = GetShaderLocation(lightingShader, "viewPosition");
     SetShaderValue(lightingShader, viewLocation, &camera.position, SHADER_UNIFORM_VEC3);
+    configurePreviewLighting(lightingShader, nightMode);
 
     BeginTextureMode(target);
-    ClearBackground({11, 23, 41, 255});
+    ClearBackground(nightMode ? Color{5, 10, 22, 255} : Color{11, 23, 41, 255});
     for (int index = 0; index < PreviewHeight; index += 32) {
-        DrawRectangle(0, index, PreviewWidth, 2, {25, 91, 176, 90});
+        DrawRectangle(0, index, PreviewWidth, 2, nightMode ? Color{16, 30, 74, 85} : Color{25, 91, 176, 90});
+    }
+    if (nightMode) {
+        DrawCircle(686, 98, 46.0f, Color{233, 238, 255, 210});
+        DrawCircle(686, 98, 60.0f, Color{233, 238, 255, 32});
+        DrawCircle(728, 140, 16.0f, Color{24, 40, 82, 255});
     }
 
     BeginMode3D(camera);
-    DrawPlane({0.0f, groundY, 0.0f}, {13.0f, 13.0f}, {19, 39, 65, 255});
+    DrawPlane({0.0f, groundY, 0.0f}, {13.0f, 13.0f}, nightMode ? Color{8, 18, 34, 255} : Color{19, 39, 65, 255});
     rlPushMatrix();
     rlTranslatef(0.0f, groundY + 0.01f, 0.0f);
-    DrawGrid(26, 0.5f);
+    if (nightMode) {
+        DrawGrid(26, 0.5f);
+        DrawCube({0.0f, groundY + 0.08f, 0.0f}, 13.0f, 0.02f, 13.0f, Color{9, 14, 26, 150});
+    } else {
+        DrawGrid(26, 0.5f);
+    }
     rlPopMatrix();
 
     const float rotationY = std::fmod(timeSeconds*5.5f, 360.0f);
@@ -572,9 +603,9 @@ void drawPreview(
     }
     EndMode3D();
 
-    DrawRectangle(0, PreviewHeight - 78, PreviewWidth, 78, withAlpha(DeepGreen, 0.92f));
-    DrawRectangle(0, PreviewHeight - 78, PreviewWidth, 7, SignalRed);
-    DrawTextEx(GetFontDefault(), "ROTACION Y // BASE FIJA AL PLANO", {24.0f, PreviewHeight - 50.0f}, 22.0f, 1.0f, Paper);
+    DrawRectangle(0, PreviewHeight - 78, PreviewWidth, 78, withAlpha(nightMode ? DeepBlue : DeepGreen, 0.92f));
+    DrawRectangle(0, PreviewHeight - 78, PreviewWidth, 7, nightMode ? PaperBlue : SignalRed);
+    DrawTextEx(GetFontDefault(), nightMode ? "NIGHT PREVIEW // REAL MAP 4" : "ROTATION Y // LOCKED TO PLANE", {24.0f, PreviewHeight - 50.0f}, 22.0f, 1.0f, Paper);
     EndTextureMode();
 }
 
@@ -665,7 +696,7 @@ int main(int argc, char** argv) {
         {"WORLD 1", "ISLANDS OF THE FIRST JOURNEY", "Menu/RaylibMenu/generated/world1_preview.preview", PaperGreen, true, {0.0f, 0.02f, 0.0f}, 1.65f},
         {"WORLD 2", "FREEZEEZY PEAK", "Menu/RaylibMenu/generated/world2_preview.preview", PaperBlue, true, {0.0f, 0.02f, 0.0f}, 1.12f},
         {"WORLD 3", "THIRD WORLD ADVENTURE", "Menu/RaylibMenu/generated/world3_preview.preview", SignalRed, true, {0.0f, 0.02f, 0.0f}, 1.20f},
-        {"WORLD 4", "FINAL CHALLENGE", "Menu/RaylibMenu/generated/world4_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.20f}
+        {"WORLD 4", "FINAL CHALLENGE", "Menu/RaylibMenu/generated/world4_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.05f}
     }};
 
     const bool pauseMode = hasArgument(argc, argv, "--pause");

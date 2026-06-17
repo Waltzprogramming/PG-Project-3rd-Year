@@ -163,7 +163,7 @@ $converter = Join-Path $menuRoot "convert_dae_preview.py"
 $world1Source = Join-Path $projectRoot "assets\mapa1\world1\CourseSelectW1.dae"
 $world2Source = Join-Path $projectRoot "assets\Mundos\FreezeezyPeak\Freezeezy Peak.dae"
 $world3Source = Join-Path $menuRoot "worlds\Mundo3\model.dae"
-$world4Source = Join-Path $menuRoot "worlds\Mundo4\model.dae"
+$world4Source = Join-Path $projectRoot "assets\mapa 4\mapamian\World 1\World 1\CourseSelectW1.dae"
 $world1Preview = Join-Path $generated "world1_preview.preview"
 $world2Preview = Join-Path $generated "world2_preview.preview"
 $world3Preview = Join-Path $generated "world3_preview.preview"
@@ -182,7 +182,7 @@ if ($python) {
         if (Test-Path $world4Source) {
             Invoke-PreviewConverter $python $converter $world4Source $world4Preview
         } else {
-            Write-Host "Mundo 4 usa la previsualizacion conceptual. Agrega worlds\Mundo4\model.dae para reemplazarla."
+            Write-Host "Mundo 4 usa la previsualizacion conceptual. No se encontro el DAE real del mapa 4."
         }
     } catch {
         Write-Warning "No se pudieron generar previews desde DAE. El menu se compilara sin bloquear el build. Detalle: $($_.Exception.Message)"
