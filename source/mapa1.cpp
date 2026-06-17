@@ -570,7 +570,7 @@ namespace {
             aiProcess_LimitBoneWeights);
 
         if (scene == nullptr || scene->mRootNode == nullptr) {
-            std::cerr << "Mapa 1 BangBoo animation could not be loaded: " << path
+            std::cerr << "Map 1 BangBoo animation could not be loaded: " << path
                 << " - " << importer.GetErrorString() << std::endl;
             return result;
         }
@@ -1141,12 +1141,12 @@ struct Mapa1::Impl {
             backgroundMusicPlaying = backgroundMusic.playLoop();
         }
         else {
-            std::cerr << "Mapa 1 background music could not be started." << std::endl;
+            std::cerr << "Map 1 background music could not be started." << std::endl;
         }
 
         parrySoundOpen = parrySound.open(resolveAssetPath("assets/audio/royal-guard.mp3"));
         if (!parrySoundOpen) {
-            std::cerr << "Mapa 1 parry sound could not be loaded." << std::endl;
+            std::cerr << "Map 1 parry sound could not be loaded." << std::endl;
         }
     }
 
@@ -1175,7 +1175,7 @@ struct Mapa1::Impl {
 
         auto texture = std::make_shared<Texture2D>();
         if (!texture->loadFromFile(resolved)) {
-            std::cerr << "Mapa 1 texture could not be loaded: " << resolved << std::endl;
+            std::cerr << "Map 1 texture could not be loaded: " << resolved << std::endl;
             return {};
         }
         textureCache.emplace(resolved, texture);
@@ -1234,13 +1234,13 @@ struct Mapa1::Impl {
         const std::string path = resolveAssetPath("assets/mapa1/player/bangboo/source/BangBoo.fbx");
         LoadedModel materialSource = ModelLoader::loadModel(path);
         if (materialSource.meshes.empty()) {
-            std::cerr << "Mapa 1 BangBoo player model could not be loaded." << std::endl;
+            std::cerr << "Map 1 BangBoo player model could not be loaded." << std::endl;
             return false;
         }
 
         bangbooPlayer = bakeAnimatedRuntimeModel(path, runtimeMaterialsFor(materialSource.materials));
         if (!bangbooPlayer.valid()) {
-            std::cerr << "Mapa 1 BangBoo player animation could not be prepared." << std::endl;
+            std::cerr << "Map 1 BangBoo player animation could not be prepared." << std::endl;
             return false;
         }
 
@@ -1253,7 +1253,7 @@ struct Mapa1::Impl {
 
         const std::filesystem::path directory(resolveAssetPath("assets/mapa1/player/" + folder));
         if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
-            std::cerr << "Mapa 1 player animation folder missing: " << directory.string() << std::endl;
+            std::cerr << "Map 1 player animation folder missing: " << directory.string() << std::endl;
             return false;
         }
 
@@ -1282,7 +1282,7 @@ struct Mapa1::Impl {
         for (const std::filesystem::path& framePath : framePaths) {
             Texture2D texture;
             if (!texture.loadFromFile(framePath.string())) {
-                std::cerr << "Mapa 1 player animation frame could not be loaded: " << framePath.string() << std::endl;
+                std::cerr << "Map 1 player animation frame could not be loaded: " << framePath.string() << std::endl;
                 return false;
             }
 
@@ -1298,7 +1298,7 @@ struct Mapa1::Impl {
         }
 
         if (meshes.empty()) {
-            std::cerr << "Mapa 1 player animation folder has no PNG frames: " << directory.string() << std::endl;
+            std::cerr << "Map 1 player animation folder has no PNG frames: " << directory.string() << std::endl;
             return false;
         }
         return true;
@@ -1333,7 +1333,7 @@ struct Mapa1::Impl {
         vanModel = {};
         vanModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/cabina_telefonica (1).glb"));
         if (vanModel.model.meshes.empty()) {
-            std::cerr << "Mapa 1 phone booth model could not be loaded." << std::endl;
+            std::cerr << "Map 1 phone booth model could not be loaded." << std::endl;
             vanModelLoaded = false;
             return false;
         }
@@ -1357,7 +1357,7 @@ struct Mapa1::Impl {
         gemModel = {};
         gemModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/Untitled.glb"));
         if (gemModel.model.meshes.empty()) {
-            std::cerr << "Mapa 1 red gem model could not be loaded." << std::endl;
+            std::cerr << "Map 1 red gem model could not be loaded." << std::endl;
             gemModelLoaded = false;
             return false;
         }
@@ -1444,14 +1444,14 @@ struct Mapa1::Impl {
         const float averageCellTriangles = terrainCells.empty()
             ? 0.0f
             : static_cast<float>(totalCellReferences) / static_cast<float>(terrainCells.size());
-        std::cout << "Mapa 1 ready. Walkable terrain triangles: " << terrainTriangles.size() << std::endl;
-        std::cout << "Mapa 1 terrain grid: " << terrainCells.size()
+        std::cout << "Map 1 ready. Walkable terrain triangles: " << terrainTriangles.size() << std::endl;
+        std::cout << "Map 1 terrain grid: " << terrainCells.size()
             << " cells | average candidates: " << averageCellTriangles
             << " | maximum candidates: " << maximumCellTriangles << std::endl;
-        std::cout << "Mapa 1 terrain bounds: X[" << terrainMin.x << ", " << terrainMax.x
+        std::cout << "Map 1 terrain bounds: X[" << terrainMin.x << ", " << terrainMax.x
             << "] Z[" << terrainMin.z << ", " << terrainMax.z << "]" << std::endl;
-        std::cout << "Mapa 1 parkour platforms: " << extraPlatforms.size() - 1 << std::endl;
-        std::cout << "Mapa 1 controls: A/D and W jump in 2D, WASD and Space jump in 3D, mouse aims and shoots in 2D, hold mouse to charge, F parries, E interacts with the phone booth, B opens the remote shop, Q uses purchased Salto Espectral near blue anchors, Tab switches view, Esc returns to menu." << std::endl;
+        std::cout << "Map 1 parkour platforms: " << extraPlatforms.size() - 1 << std::endl;
+        std::cout << "Map 1 controls: A/D and W jump in 2D, WASD and Space jump in 3D, mouse aims and shoots in 2D, hold mouse to charge, F parries, E interacts with the phone booth, B opens the remote shop, Q uses purchased Spectral Step near blue anchors, Tab switches view, Esc returns to menu." << std::endl;
     }
 
     const std::vector<std::uint32_t>& terrainCandidates(float x, float z) const {
@@ -1589,7 +1589,7 @@ struct Mapa1::Impl {
         for (size_t i = 0; i < enemyAnchors.size(); ++i) {
             DemonEnemy enemy;
             if (!findTerrainEnemyPosition(enemyAnchors[i], enemy.position)) {
-                std::cerr << "Mapa 1 could not place an enemy near X:" << enemyAnchors[i].x
+                std::cerr << "Map 1 could not place an enemy near X:" << enemyAnchors[i].x
                     << " Z:" << enemyAnchors[i].y << "." << std::endl;
                 continue;
             }
@@ -1600,7 +1600,7 @@ struct Mapa1::Impl {
             enemies.push_back(enemy);
         }
 
-        std::cout << "Mapa 1 Thalassa-style enemies: " << enemies.size() << std::endl;
+        std::cout << "Map 1 Thalassa-style enemies: " << enemies.size() << std::endl;
     }
 
     void resetMission() {
@@ -1630,7 +1630,7 @@ struct Mapa1::Impl {
         for (const glm::vec2& anchor : terrainAnchors) {
             Coin coin;
             if (!findTerrainCoinPosition(anchor, coin.position)) {
-                std::cerr << "Mapa 1 could not place a terrain coin near X:" << anchor.x << " Z:" << anchor.y << "." << std::endl;
+                std::cerr << "Map 1 could not place a terrain coin near X:" << anchor.x << " Z:" << anchor.y << "." << std::endl;
                 continue;
             }
             coin.phase = static_cast<float>(coins.size()) * 0.73f;
@@ -1650,16 +1650,16 @@ struct Mapa1::Impl {
 
     bool validateParkourMission() const {
         if (coins.size() != TotalCoins) {
-            std::cerr << "Mapa 1 mission expected " << TotalCoins << " coins but created " << coins.size() << "." << std::endl;
+            std::cerr << "Map 1 mission expected " << TotalCoins << " coins but created " << coins.size() << "." << std::endl;
             return false;
         }
         if (extraPlatforms.size() <= VanIslandPlatformIndex || spectralAnchors.size() < 2) {
-            std::cerr << "Mapa 1 special routes are missing platforms or anchors." << std::endl;
+            std::cerr << "Map 1 special routes are missing platforms or anchors." << std::endl;
             return false;
         }
         for (size_t i = VanRouteFirstPlatformIndex; i <= VanIslandPlatformIndex; ++i) {
             if (!extraPlatforms[i].visible || !extraPlatforms[i].projectIn2D) {
-                std::cerr << "Mapa 1 van route must stay visible and projected so it works in 2D and 3D." << std::endl;
+                std::cerr << "Map 1 van route must stay visible and projected so it works in 2D and 3D." << std::endl;
                 return false;
             }
         }
@@ -1681,12 +1681,12 @@ struct Mapa1::Impl {
 
         if (maximumPerspectiveRise > maximumJumpHeight - 0.08f ||
             maximumProjectedGap > maximumProjectedJumpDistance - 0.08f) {
-            std::cerr << "Mapa 1 perspective route is unreachable after projection." << std::endl;
+            std::cerr << "Map 1 perspective route is unreachable after projection." << std::endl;
             return false;
         }
 
         if (maximumPhysicalGap <= maximumProjectedJumpDistance + 1.0f) {
-            std::cerr << "Mapa 1 perspective route is not separated enough in 3D." << std::endl;
+            std::cerr << "Map 1 perspective route is not separated enough in 3D." << std::endl;
             return false;
         }
 
@@ -1697,7 +1697,7 @@ struct Mapa1::Impl {
         const float finalSpectralGap = finalSpectralIsland.minX - firstSpectralIsland.maxX;
         if (firstSpectralGap <= maximumProjectedJumpDistance + 1.0f ||
             finalSpectralGap <= maximumProjectedJumpDistance + 1.0f) {
-            std::cerr << "Mapa 1 spectral islands must stay out of normal jump range." << std::endl;
+            std::cerr << "Map 1 spectral islands must stay out of normal jump range." << std::endl;
             return false;
         }
 
@@ -1730,12 +1730,12 @@ struct Mapa1::Impl {
         if (maximumVanRouteRise > maximumJumpHeight - 0.08f ||
             maximumVanRouteProjectedGap > maximumProjectedJumpDistance - 0.08f ||
             maximumVanRoutePhysicalGap > maximumProjectedJumpDistance - 0.08f) {
-            std::cerr << "Mapa 1 van route is unreachable after 2D projection." << std::endl;
+            std::cerr << "Map 1 van route is unreachable after 2D projection." << std::endl;
             return false;
         }
 
         if (minimumVanRouteProjectedGap < 0.65f || minimumVanRoutePhysicalGap < 0.65f) {
-            std::cerr << "Mapa 1 van route platforms are too close together." << std::endl;
+            std::cerr << "Map 1 van route platforms are too close together." << std::endl;
             return false;
         }
 
@@ -1747,11 +1747,11 @@ struct Mapa1::Impl {
         }
         const glm::vec2 coinSpread = coinMax - coinMin;
         if (coinSpread.x < 24.0f || coinSpread.y < 12.0f) {
-            std::cerr << "Mapa 1 coins are not scattered widely enough across the map." << std::endl;
+            std::cerr << "Map 1 coins are not scattered widely enough across the map." << std::endl;
             return false;
         }
 
-        std::cout << "Mapa 1 mission coins: " << coins.size()
+        std::cout << "Map 1 mission coins: " << coins.size()
             << " | jump height: " << maximumJumpHeight
             << " | projected bridge gap: " << maximumProjectedGap
             << " | physical bridge gap: " << maximumPhysicalGap
@@ -1780,12 +1780,12 @@ struct Mapa1::Impl {
                 collectedCoins = std::min(collectedCoins + 1, TotalCoins);
                 coinMessageCount = collectedCoins;
                 coinMessageUntil = now + 2.6f;
-                showStatus("MONEDA " + std::to_string(collectedCoins) + "/" + std::to_string(TotalCoins));
+                showStatus("COIN " + std::to_string(collectedCoins) + "/" + std::to_string(TotalCoins));
 
                 if (collectedCoins >= TotalCoins) {
                     star.active = true;
                     starMessageUntil = now + 4.0f;
-                    showStatus("Todas las monedas listas - recoge la estrella");
+                    showStatus("All coins ready - collect the star");
                 }
                 break;
             }
@@ -1794,7 +1794,7 @@ struct Mapa1::Impl {
         if (star.active && touchesCollectible(star.position, 0.82f, 0.98f, star.projectIn2D)) {
             star.active = false;
             completed = true;
-            showStatus("NIVEL COMPLETADO");
+            showStatus("LEVEL COMPLETE");
         }
     }
 
@@ -1907,7 +1907,7 @@ struct Mapa1::Impl {
         spectralStepUnlocked = true;
         spectralUnlockHintUntil = now + 5.2f;
         spectralLockedHintUntil = 0.0f;
-        showStatus("PASO ESPECTRAL COMPRADO - usa Q junto a un ancla azul");
+        showStatus("SPECTRAL STEP BOUGHT - use Q near a blue anchor");
     }
 
     void registerEnemyDefeat(const glm::vec3& position, float now) {
@@ -1916,7 +1916,7 @@ struct Mapa1::Impl {
             now * 1.73f + static_cast<float>(droppedGems.size()) * 0.91f,
             true
             });
-        showStatus("GEMA ROJA LIBERADA - acercate para recogerla");
+        showStatus("RED GEM RELEASED - move close to collect it");
     }
 
     void updateDroppedGems() {
@@ -1929,17 +1929,17 @@ struct Mapa1::Impl {
 
             spectralGems = std::min(MaximumStoredGems, spectralGems + 1);
             droppedGems.erase(droppedGems.begin() + static_cast<std::ptrdiff_t>(index));
-            showStatus("GEMA ROJA OBTENIDA - saldo: " + std::to_string(spectralGems));
+            showStatus("RED GEM COLLECTED - balance: " + std::to_string(spectralGems));
         }
     }
 
     bool purchaseSpectralStep() {
         if (spectralStepUnlocked) {
-            showStatus("SALTO ESPECTRAL YA ADQUIRIDO");
+            showStatus("SPECTRAL STEP ALREADY OWNED");
             return false;
         }
         if (spectralGems < SpectralGemRequirement) {
-            showStatus("NO HAY SUFICIENTES GEMAS ROJAS");
+            showStatus("NOT ENOUGH RED GEMS");
             return false;
         }
 
@@ -1950,17 +1950,17 @@ struct Mapa1::Impl {
 
     bool purchaseDamageParry() {
         if (damageParryPurchased) {
-            showStatus("RETORNO REAL YA ADQUIRIDO");
+            showStatus("ROYAL RETURN ALREADY OWNED");
             return false;
         }
         if (spectralGems < DamageParryGemRequirement) {
-            showStatus("NO HAY SUFICIENTES GEMAS ROJAS");
+            showStatus("NOT ENOUGH RED GEMS");
             return false;
         }
 
         spectralGems -= DamageParryGemRequirement;
         damageParryPurchased = true;
-        showStatus("RETORNO REAL COMPRADO - el parry devuelve dano");
+        showStatus("ROYAL RETURN BOUGHT - parry reflects damage");
         return true;
     }
 
@@ -1984,13 +1984,13 @@ struct Mapa1::Impl {
         if (toggleDown && !shopTogglePressed) {
             vanShopOpen = !vanShopOpen;
             stopChargingPlayerAttack();
-            showStatus(vanShopOpen ? "TIENDA REMOTA ABIERTA" : "TIENDA CERRADA");
+            showStatus(vanShopOpen ? "REMOTE SHOP OPEN" : "SHOP CLOSED");
         }
 
         if (interactDown && !interactPressed && nearby) {
             vanShopOpen = true;
             stopChargingPlayerAttack();
-            showStatus("CONEXION CON LA CABINA ESTABLECIDA");
+            showStatus("PHONE BOOTH CONNECTION ESTABLISHED");
         }
         interactPressed = interactDown;
         shopTogglePressed = toggleDown;
@@ -2027,7 +2027,7 @@ struct Mapa1::Impl {
         grounded = true;
         playerAngle = anchor.target.x >= previousX ? 0.0f : 180.0f;
         startModeTransitionAnimation();
-        showStatus("PASO ESPECTRAL");
+        showStatus("SPECTRAL STEP");
     }
 
     void handleSpectralStep(GLFWwindow* window, float now) {
@@ -2045,7 +2045,7 @@ struct Mapa1::Impl {
         if (spectralDown && !spectralKeyPressed && anchorIndex >= 0) {
             if (!spectralStepUnlocked) {
                 spectralLockedHintUntil = std::max(spectralLockedHintUntil, now + SpectralHintTime);
-                showStatus("COMPRA SALTO ESPECTRAL EN LA TIENDA CON 5 GEMAS");
+                showStatus("BUY SPECTRAL STEP IN THE SHOP WITH 5 GEMS");
             }
             else if (spectralCooldown <= 0.0f) {
                 performSpectralStep(spectralAnchors[static_cast<size_t>(anchorIndex)], now);
@@ -2092,7 +2092,7 @@ struct Mapa1::Impl {
         stopChargingPlayerAttack();
         clearProjectilesRequested = true;
         playerInvulnerability = std::max(playerInvulnerability, animationDuration(playerDeathMeshes, PlayerDeathFramesPerSecond));
-        showStatus("DANO LETAL");
+        showStatus("LETHAL DAMAGE");
         if (mode3D) {
             showCombatRestriction(now);
         }
@@ -2145,12 +2145,12 @@ struct Mapa1::Impl {
             resetMission();
             resetSpectralProgress();
             resetEnemiesRequested = true;
-            showStatus("GAME OVER - se reinicio el mapa. Vidas: 3");
+            showStatus("GAME OVER - map restarted. Lives: 3");
             return;
         }
 
         resetPlayer(false);
-        showStatus("MORISTE - vidas restantes: " + std::to_string(lives));
+        showStatus("YOU DIED - lives remaining: " + std::to_string(lives));
     }
 
     float gameplayDistance(const glm::vec3& from, const glm::vec3& to) const {
@@ -2185,7 +2185,7 @@ struct Mapa1::Impl {
 
     void showCombatRestriction(float now) {
         combatHintUntil = std::max(combatHintUntil, now + 3.8f);
-        showStatus("CAMBIA A 2D CON TAB PARA DETENER A LOS ENEMIGOS");
+        showStatus("SWITCH TO 2D WITH TAB TO STOP ENEMIES");
     }
 
     void spawnEnemyProjectile(const DemonEnemy& enemy, float now) {
@@ -2270,7 +2270,7 @@ struct Mapa1::Impl {
             beginPlayerDeath(now);
         }
         else {
-            showStatus("DANO RECIBIDO - salud: " + std::to_string(playerHealth) + "/" + std::to_string(PlayerMaximumHealth));
+            showStatus("DAMAGE TAKEN - health: " + std::to_string(playerHealth) + "/" + std::to_string(PlayerMaximumHealth));
             if (wasMode3D) {
                 showCombatRestriction(now);
             }
@@ -2384,10 +2384,10 @@ struct Mapa1::Impl {
             projectile.velocity = targetDirection * ChargedPlayerShotSpeed;
             projectile.position = playerCenter + targetDirection * 0.48f;
             projectile.lifetime = 2.8f;
-            showStatus("RETORNO REAL - DANO DEVUELTO");
+            showStatus("ROYAL RETURN - DAMAGE REFLECTED");
         }
         else {
-            showStatus("ROYAL GUARD - PARRY PERFECTO");
+            showStatus("ROYAL GUARD - PERFECT PARRY");
         }
         return true;
     }
@@ -2423,7 +2423,7 @@ struct Mapa1::Impl {
                         else {
                             enemy.state = EnemyState::Hurt;
                             enemy.hurtTime = 0.36f;
-                            showStatus("GOLPE AL ENEMIGO - resistencia: " + std::to_string(enemy.health) + "/" + std::to_string(EnemyMaximumHealth));
+                            showStatus("ENEMY HIT - stamina: " + std::to_string(enemy.health) + "/" + std::to_string(EnemyMaximumHealth));
                         }
                         remove = true;
                         break;
@@ -2515,7 +2515,7 @@ struct Mapa1::Impl {
 
     bool runCombatSmokeTest() {
         if (enemies.size() < 3) {
-            std::cerr << "Mapa 1 combat smoke test needs at least 3 enemies." << std::endl;
+            std::cerr << "Map 1 combat smoke test needs at least 3 enemies." << std::endl;
             return false;
         }
 
@@ -2535,7 +2535,7 @@ struct Mapa1::Impl {
 
         glm::vec3 nearbyPosition;
         if (!findTerrainEnemyPosition({ 2.0f, 0.0f }, nearbyPosition)) {
-            std::cerr << "Mapa 1 combat smoke test could not find nearby terrain." << std::endl;
+            std::cerr << "Map 1 combat smoke test could not find nearby terrain." << std::endl;
             return false;
         }
         auto placePlayerForCombatTest = [&]() {
@@ -2735,7 +2735,7 @@ struct Mapa1::Impl {
             parryPurchaseWorks &&
             reflectedParryDealsDamage &&
             remoteShopOpens;
-        std::cout << "Mapa 1 combat smoke test: " << (passed ? "PASS" : "FAIL")
+        std::cout << "Map 1 combat smoke test: " << (passed ? "PASS" : "FAIL")
             << " | enemy attacks 2D: " << enemyAttacksIn2D
             << " | overhead passage: " << overheadPlatformAllowsPassage
             << " | player health: " << (firstHitLeavesTwoHealth && secondHitLeavesOneHealth && thirdHitStartsDeathAnimation && thirdHitCostsOneLife)
@@ -2782,14 +2782,14 @@ struct Mapa1::Impl {
             title << statusMessage << " | ";
         }
         title << (mode3D ? "Paper Mario 3D" : "Paper Mario 2D")
-            << " | Vidas:" << lives
-            << " | Salud:" << playerHealth << "/" << PlayerMaximumHealth
-            << " | Monedas:" << collectedCoins << "/" << TotalCoins
-            << " | Gemas:" << spectralGems
-            << " | Salto:" << (spectralStepUnlocked
-                ? std::string("LISTO")
+            << " | Lives:" << lives
+            << " | Health:" << playerHealth << "/" << PlayerMaximumHealth
+            << " | Coins:" << collectedCoins << "/" << TotalCoins
+            << " | Gems:" << spectralGems
+            << " | Step:" << (spectralStepUnlocked
+                ? std::string("READY")
                 : std::string("NO"))
-            << " | Retorno:" << (damageParryPurchased ? "LISTO" : "NO")
+            << " | Return:" << (damageParryPurchased ? "READY" : "NO")
             << " | X:" << posX
             << " Y:" << posY;
         if (mode3D) {
@@ -2870,7 +2870,7 @@ struct Mapa1::Impl {
                 }
                 playerAngle = 90.0f;
             }
-            std::cout << "Mapa 1 view changed to " << (mode3D ? "3D." : "2D.") << std::endl;
+            std::cout << "Map 1 view changed to " << (mode3D ? "3D." : "2D.") << std::endl;
         }
         tabPressed = tabDown;
         handlePlayerAttack(window, dt, now);
@@ -3430,22 +3430,22 @@ struct Mapa1::Impl {
 
         projectileSwordModel = ModelLoader::loadModel(resolveAssetPath("assets/items/vergil_summoned_sword/scene.gltf"));
         if (projectileSwordModel.meshes.empty()) {
-            std::cerr << "Mapa 1 summoned sword projectile could not be loaded." << std::endl;
+            std::cerr << "Map 1 summoned sword projectile could not be loaded." << std::endl;
             return false;
         }
 
         if (!skyboxTexture.loadFromFile(resolveAssetPath("assets/mapa1/skybox/R.jpg"))) {
-            std::cerr << "Mapa 1 skybox could not be loaded." << std::endl;
+            std::cerr << "Map 1 skybox could not be loaded." << std::endl;
             return false;
         }
         coinIconTexture.loadFromFile(resolveAssetPath("assets/images/coin_spin.png"));
         if (!platformSideTexture.loadFromFile(resolveAssetPath("assets/mapa1/world1/W1WallBlock_DM_alb.png")) ||
             !platformTopTexture.loadFromFile(resolveAssetPath("assets/mapa1/world1/Grass01_YD_alb.png"))) {
-            std::cerr << "Mapa 1 parkour textures could not be loaded." << std::endl;
+            std::cerr << "Map 1 parkour textures could not be loaded." << std::endl;
             return false;
         }
         if (!enemyTexture.loadFromFile(resolveAssetPath("assets/mapa1/enemies/Demon_Spritesheet.png"))) {
-            std::cerr << "Mapa 1 enemy texture could not be loaded." << std::endl;
+            std::cerr << "Map 1 enemy texture could not be loaded." << std::endl;
             return false;
         }
         skyboxTexture.bind();
@@ -3463,7 +3463,7 @@ struct Mapa1::Impl {
 
         const std::string worldBase = "assets/mapa1/world1/";
         if (!loadWorldModel(worldBase + "CourseSelectW1.dae")) {
-            std::cerr << "Mapa 1 world models could not be loaded." << std::endl;
+            std::cerr << "Map 1 world models could not be loaded." << std::endl;
             return false;
         }
         deferredWorldModelPaths = {
@@ -3522,7 +3522,7 @@ struct Mapa1::Impl {
 
         buildTerrainCollisions();
         if (terrainTriangles.empty()) {
-            std::cerr << "Mapa 1 did not generate walkable terrain." << std::endl;
+            std::cerr << "Map 1 did not generate walkable terrain." << std::endl;
             return false;
         }
 
@@ -3564,7 +3564,7 @@ struct Mapa1::Impl {
         resetMission();
         resetEnemies();
         if (enemies.size() != EnemySpawnCount) {
-            std::cerr << "Mapa 1 expected " << EnemySpawnCount << " enemies but created " << enemies.size() << "." << std::endl;
+            std::cerr << "Map 1 expected " << EnemySpawnCount << " enemies but created " << enemies.size() << "." << std::endl;
             return false;
         }
         if (!validateParkourMission()) {

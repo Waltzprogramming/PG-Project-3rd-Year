@@ -1003,7 +1003,7 @@ void MissionManager::generarMonedas(const Environment& environment, const glm::v
 
         m_star.position = m_coins.empty() ? playerSpawn + glm::vec3(2.2f, 1.2f, 0.0f) : m_coins.back().position + glm::vec3(0.0f, 0.18f, 0.0f);
         m_star.active = false;
-        std::cout << "Mapa 4 generated coins: " << m_coins.size() << " (visible " << visibleCount << ", hidden " << hiddenCount << ")" << std::endl;
+        std::cout << "Map 4 generated coins: " << m_coins.size() << " (visible " << visibleCount << ", hidden " << hiddenCount << ")" << std::endl;
         return;
     }
 
@@ -2613,39 +2613,39 @@ bool initializeMenu(MenuContext& menu) {
     menu.volver = createTextSprite(L"Back", 31, white, 250, false, true);
     menu.tituloComoJugar = createTextSprite(L"How to Play", 44, titleColor, 560, false, true);
     menu.textoComoJugar = createTextSprite(
-        L"- Usa las teclas de movimiento para controlar al personaje.\n"
-        L"- Evita obst\u00e1culos y enemigos.\n"
-        L"- Mundo 1: apunta y dispara con el mouse; mantenlo para cargar.\n"
-        L"- Pulsa F justo antes del impacto para hacer parry.\n"
-        L"- Completa el nivel para ganar.\n"
-        L"- Presiona ESC o el bot\u00f3n Volver para regresar al men\u00fa.",
+        L"- Use the movement keys to control the character.\n"
+        L"- Avoid obstacles and enemies.\n"
+        L"- World 1: aim and shoot with the mouse; hold it to charge.\n"
+        L"- Press F right before impact to parry.\n"
+        L"- Complete the level to win.\n"
+        L"- Press ESC or the Back button to return to the menu.",
         23, white, 700, true, false);
     menu.tituloCreditos = createTextSprite(L"Credits", 44, titleColor, 520, false, true);
     menu.textoCreditos = createTextSprite(
         L"Paper Pinix\n"
-        L"Proyecto avanzado\n"
-        L"Desarrollado por: [Nombre del estudiante]\n"
-        L"Mundo 2: [Nombre del estudiante]",
+        L"Advanced project\n"
+        L"Developed by: [Student name]\n"
+        L"World 2: [Student name]",
         27, white, 610, true, false);
-    menu.noDisponible = createTextSprite(L"Este mundo a\u00fan no est\u00e1 disponible", 26, white, 510, false, true);
-    menu.cargando = createTextSprite(L"Cargando", 48, titleColor, 460, false, true);
-    menu.preparandoMundo = createTextSprite(L"Preparando mundo...", 27, white, 430, false, true);
-    menu.modoNoDisponible = createTextSprite(L"No est\u00e1 disponible", 28, white, 330, false, true);
+    menu.noDisponible = createTextSprite(L"This world is not available yet", 26, white, 510, false, true);
+    menu.cargando = createTextSprite(L"Loading", 48, titleColor, 460, false, true);
+    menu.preparandoMundo = createTextSprite(L"Preparing world...", 27, white, 430, false, true);
+    menu.modoNoDisponible = createTextSprite(L"Not available", 28, white, 330, false, true);
     for (int i = 0; i <= MissionCoinTotal; ++i) {
         menu.coinCounters[i] = createTextSprite(formatCoinProgress(i), 28, white, 132, false, true);
         menu.coinMessages[i] = createTextSprite(formatCoinProgress(i), 31, white, 132, false, true);
     }
     menu.estrellaLista = createTextSprite(L"STAR UNLOCKED!", 29, titleColor, 400, false, true);
-    menu.nivelCompletado = createTextSprite(L"NIVEL COMPLETADO", 42, titleColor, 540, true, true);
-    menu.nivelCompletadoDetalle = createTextSprite(L"Objetivo completado", 27, white, 420, false, true);
-    menu.juegoTerminado = createTextSprite(L"JUEGO TERMINADO", 42, titleColor, 520, true, true);
-    menu.juegoTerminadoContinuar = createTextSprite(L"ENTER PARA CONTINUAR", 27, white, 520, false, true);
+    menu.nivelCompletado = createTextSprite(L"LEVEL COMPLETE", 42, titleColor, 540, true, true);
+    menu.nivelCompletadoDetalle = createTextSprite(L"Objective complete", 27, white, 420, false, true);
+    menu.juegoTerminado = createTextSprite(L"GAME OVER", 42, titleColor, 520, true, true);
+    menu.juegoTerminadoContinuar = createTextSprite(L"PRESS ENTER TO CONTINUE", 27, white, 520, false, true);
     menu.mapa4FinalDetalleVictoria = createTextSprite(L"All 10 coins were collected successfully.", 22, white, 500, true, true);
     menu.mapa4FinalDetalleDerrota = createTextSprite(L"The player was defeated before collecting every coin.", 21, white, 500, true, true);
     menu.mapa4FinalContinuar = createTextSprite(L"Press ENTER or ESC to return to the new main menu.", 20, white, 500, true, true);
-    menu.combateSolo2D = createTextSprite(L"\u00a1Peligro! Cambia a 2D con TAB para detener a los enemigos.", 27, white, 720, false, true);
-    menu.vidaJugador = createTextSprite(L"VIDA", 25, white, 120, false, false);
-    menu.luzJugador = createTextSprite(L"LUZ", 25, white, 120, false, false);
+    menu.combateSolo2D = createTextSprite(L"Danger! Switch to 2D with TAB to stop the enemies.", 27, white, 720, false, true);
+    menu.vidaJugador = createTextSprite(L"HP", 25, white, 120, false, false);
+    menu.luzJugador = createTextSprite(L"LIGHT", 25, white, 120, false, false);
     menu.mapa4Instructions = createTextSprite(
         L"Use TAB to switch between 3D and 2D mode. Press E to use the shield. "
         L"You can only attack enemies while you are in 2D mode. To beat the level, "
@@ -2655,47 +2655,47 @@ bool initializeMenu(MenuContext& menu) {
         470,
         true,
         true);
-    menu.cargandoAtaque = createTextSprite(L"CARGANDO TIRO", 21, white, 250, false, false);
+    menu.cargandoAtaque = createTextSprite(L"CHARGING SHOT", 21, white, 250, false, false);
     menu.parryActivo = createTextSprite(L"PARRY", 23, white, 150, false, true);
-    menu.tiendaBoton = createTextSprite(L"TIENDA  [B]", 23, white, 190, false, true);
-    menu.tiendaTitulo = createTextSprite(L"TIENDA", 38, white, 300, false, true);
-    menu.tiendaSubtitulo = createTextSprite(L"INSTRUCCIONES Y HABILIDADES // MUNDO 01", 18, glm::vec3(0.78f), 520, false, false);
-    menu.tiendaCerrar = createTextSprite(L"CERRAR", 19, white, 120, false, true);
-    menu.tiendaHabilidades = createTextSprite(L"HABILIDADES", 19, white, 175, false, true);
-    menu.tiendaManual = createTextSprite(L"INSTRUCCIONES", 17, white, 185, false, true);
-    menu.tiendaCabina = createTextSprite(L"CABINA", 19, white, 150, false, true);
-    menu.tiendaSaldo = createTextSprite(L"GEMAS ROJAS", 17, white, 160, false, true);
+    menu.tiendaBoton = createTextSprite(L"SHOP  [B]", 23, white, 190, false, true);
+    menu.tiendaTitulo = createTextSprite(L"SHOP", 38, white, 300, false, true);
+    menu.tiendaSubtitulo = createTextSprite(L"INSTRUCTIONS AND SKILLS // WORLD 01", 18, glm::vec3(0.78f), 520, false, false);
+    menu.tiendaCerrar = createTextSprite(L"CLOSE", 19, white, 120, false, true);
+    menu.tiendaHabilidades = createTextSprite(L"SKILLS", 19, white, 175, false, true);
+    menu.tiendaManual = createTextSprite(L"INSTRUCTIONS", 17, white, 185, false, true);
+    menu.tiendaCabina = createTextSprite(L"BOOTH", 19, white, 150, false, true);
+    menu.tiendaSaldo = createTextSprite(L"RED GEMS", 17, white, 160, false, true);
     for (int i = 0; i < static_cast<int>(menu.gemCounters.size()); ++i) {
         menu.gemCounters[static_cast<size_t>(i)] =
             createTextSprite(twoDigits(i), 28, white, 105, false, true);
     }
-    menu.saltoEspectralTitulo = createTextSprite(L"SALTO ESPECTRAL", 28, white, 330, false, true);
+    menu.saltoEspectralTitulo = createTextSprite(L"SPECTRAL STEP", 28, white, 330, false, true);
     menu.saltoEspectralDescripcion = createTextSprite(
-        L"Rompe la distancia entre anclas azules y alcanza islas imposibles.\n"
-        L"Una compra permanente hasta reiniciar completamente el mundo.",
+        L"Break the distance between blue anchors and reach impossible islands.\n"
+        L"A permanent purchase until the world fully restarts.",
         18, white, 570, true, false);
-    menu.saltoEspectralControl = createTextSprite(L"USO: ac\u00e9rcate a un ancla azul y pulsa Q", 18, white, 500, false, true);
-    menu.parryRetornoTitulo = createTextSprite(L"PARRY: RETORNO REAL", 28, white, 390, false, true);
+    menu.saltoEspectralControl = createTextSprite(L"USE: stand near a blue anchor and press Q", 18, white, 500, false, true);
+    menu.parryRetornoTitulo = createTextSprite(L"PARRY: ROYAL RETURN", 28, white, 390, false, true);
     menu.parryRetornoDescripcion = createTextSprite(
-        L"Un parry perfecto ya no solo bloquea: devuelve el proyectil\n"
-        L"con fuerza suficiente para destruir al demonio que lo lanz\u00f3.",
+        L"A perfect parry no longer only blocks: it returns the projectile\n"
+        L"with enough force to destroy the demon that fired it.",
         18, white, 590, true, false);
-    menu.parryRetornoControl = createTextSprite(L"USO: pulsa F justo antes de recibir el impacto", 18, white, 510, false, true);
-    menu.comprarCincoGemas = createTextSprite(L"COMPRAR - 5 GEMAS", 16, white, 176, false, true);
-    menu.comprarTresGemas = createTextSprite(L"COMPRAR - 3 GEMAS", 16, white, 176, false, true);
-    menu.habilidadAdquirida = createTextSprite(L"ADQUIRIDA", 18, white, 155, false, true);
-    menu.gemasInsuficientes = createTextSprite(L"FALTAN GEMAS", 16, white, 165, false, true);
-    menu.manualTitulo = createTextSprite(L"INSTRUCCIONES", 28, white, 330, false, true);
-    menu.manualMovimiento = createTextSprite(L"MOVERSE // 2D: A y D     3D: W, A, S y D", 18, white, 650, false, true);
-    menu.manualSalto = createTextSprite(L"SALTAR // W en 2D     ESPACIO en 3D", 18, white, 620, false, true);
-    menu.manualDimension = createTextSprite(L"CAMBIAR DIMENSI\u00d3N // TAB alterna entre 2D y 3D", 18, white, 680, false, true);
-    menu.manualDisparo = createTextSprite(L"DISPARAR // apunta con el mouse y haz clic izquierdo", 18, white, 680, false, true);
-    menu.manualCarga = createTextSprite(L"TIRO CARGADO // mant\u00e9n clic izquierdo y suelta al llenarse", 18, white, 720, false, true);
-    menu.manualParry = createTextSprite(L"PARRY // pulsa F en el instante anterior al impacto", 18, white, 670, false, true);
-    menu.manualTienda = createTextSprite(L"TIENDA REMOTA // pulsa B desde cualquier lugar del mapa", 18, white, 690, false, true);
-    menu.cabinaPrompt = createTextSprite(L"PULSA E PARA USAR LA CABINA TELEF\u00d3NICA", 22, white, 440, false, true);
-    menu.tiendaAyudaScroll = createTextSprite(L"RUEDA DEL MOUSE\nPARA DESPLAZAR", 16, white, 180, true, true);
-    menu.enemigosRestantes = createTextSprite(L"LOS DEMONIOS SUELTAN GEMAS ROJAS", 17, white, 310, false, true);
+    menu.parryRetornoControl = createTextSprite(L"USE: press F right before impact", 18, white, 510, false, true);
+    menu.comprarCincoGemas = createTextSprite(L"BUY - 5 GEMS", 16, white, 176, false, true);
+    menu.comprarTresGemas = createTextSprite(L"BUY - 3 GEMS", 16, white, 176, false, true);
+    menu.habilidadAdquirida = createTextSprite(L"OWNED", 18, white, 155, false, true);
+    menu.gemasInsuficientes = createTextSprite(L"NEED GEMS", 16, white, 165, false, true);
+    menu.manualTitulo = createTextSprite(L"INSTRUCTIONS", 28, white, 330, false, true);
+    menu.manualMovimiento = createTextSprite(L"MOVE // 2D: A and D     3D: W, A, S and D", 18, white, 650, false, true);
+    menu.manualSalto = createTextSprite(L"JUMP // W in 2D     SPACE in 3D", 18, white, 620, false, true);
+    menu.manualDimension = createTextSprite(L"SWITCH DIMENSION // TAB toggles 2D and 3D", 18, white, 680, false, true);
+    menu.manualDisparo = createTextSprite(L"SHOOT // aim with the mouse and left-click", 18, white, 680, false, true);
+    menu.manualCarga = createTextSprite(L"CHARGED SHOT // hold left-click and release when full", 18, white, 720, false, true);
+    menu.manualParry = createTextSprite(L"PARRY // press F right before impact", 18, white, 670, false, true);
+    menu.manualTienda = createTextSprite(L"REMOTE SHOP // press B anywhere on the map", 18, white, 690, false, true);
+    menu.cabinaPrompt = createTextSprite(L"PRESS E TO USE THE PHONE BOOTH", 22, white, 440, false, true);
+    menu.tiendaAyudaScroll = createTextSprite(L"MOUSE WHEEL\nTO SCROLL", 16, white, 180, true, true);
+    menu.enemigosRestantes = createTextSprite(L"DEMONS DROP RED GEMS", 17, white, 310, false, true);
     return true;
 }
 

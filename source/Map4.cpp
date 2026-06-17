@@ -1030,7 +1030,7 @@ bool Map4LightManager::loadSunModel() {
         model = ModelLoader::loadModel(resolveAssetPath("assets/items/sol.glb"));
     }
     if (model.meshes.empty()) {
-        std::cerr << "Mapa 4 sun model could not be loaded. Using procedural fallback sun." << std::endl;
+        std::cerr << "Map 4 sun model could not be loaded. Using procedural fallback sun." << std::endl;
         return false;
     }
 
@@ -1176,7 +1176,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     locked2DDepth = spawnPoint.z;
     cameraInitialized = false;
 
-    std::cout << "Mapa 4 ready. Collision volumes: " << mapa4.environment.collisionPreview().size() << std::endl;
+    std::cout << "Map 4 ready. Collision volumes: " << mapa4.environment.collisionPreview().size() << std::endl;
 
     mapa4.initialized = true;
     mapa4.sessionActive = true;

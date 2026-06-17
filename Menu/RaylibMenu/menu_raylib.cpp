@@ -888,7 +888,7 @@ int main(int argc, char** argv) {
         : 1;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
-    InitWindow(1280, 720, pauseMode ? "Paper Pinix - Pausa" : "Paper Pinix - Seleccion de mundo");
+    InitWindow(1280, 720, pauseMode ? "Paper Pinix - Pause" : "Paper Pinix - World Select");
     const std::filesystem::path projectRoot = std::filesystem::weakly_canonical(
         std::filesystem::path(GetApplicationDirectory())/".."/".."/"..");
     ChangeDirectory(projectRoot.string().c_str());

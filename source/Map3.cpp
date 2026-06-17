@@ -1651,7 +1651,7 @@ bool iniciarMap3(Map3Runtime& map3) {
     map3.skipFirstUpdateFrame = true;
     resetMap3ViewForEnvironment(map3.environment, map3.player);
 
-    std::cout << "Mundo 3 ready. Collision volumes: " << map3ActiveColliders(map3).size() << std::endl;
+    std::cout << "World 3 ready. Collision volumes: " << map3ActiveColliders(map3).size() << std::endl;
     std::cout << "Controls: TAB cambia 2D/3D, E esquiva en 3D y hace parry en 2D." << std::endl;
 
     map3.initialized = true;
@@ -1805,7 +1805,7 @@ void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, 
     }
     if (!startHint.texture || !startHint.texture->valid()) {
         startHint = createTextSprite(
-            L"Llega al final para ganar. Evita morir en el proceso.",
+            L"Reach the end to win. Try not to die on the way.",
             24,
             glm::vec3(1.0f),
             720,
@@ -1814,7 +1814,7 @@ void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, 
     }
     if (!invisibleWallNotice.texture || !invisibleWallNotice.texture->valid()) {
         invisibleWallNotice = createTextSprite(
-            L"No puedes pasar. Tal vez desde otra perspectiva sea posible.",
+            L"You cannot pass. Maybe another perspective makes it possible.",
             24,
             glm::vec3(1.0f),
             720,

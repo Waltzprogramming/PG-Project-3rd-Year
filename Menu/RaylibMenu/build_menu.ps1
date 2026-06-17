@@ -183,21 +183,21 @@ if ($python) {
         Invoke-PreviewConverter -Python $python -Converter $converter -InputPath $world1Source -OutputPath $world1Preview
         Invoke-PreviewConverter -Python $python -Converter $converter -InputPath $world2Source -OutputPath $world2Preview
         if (Test-Path $world3Source) {
-            Write-Host "Mundo 3 usa el GLTF real directamente en la preview del menu."
+            Write-Host "World 3 uses the real GLTF directly in the menu preview."
         } else {
-            Write-Warning "No se encontro el GLTF real de Mundo 3 para la preview directa."
+            Write-Warning "The real World 3 GLTF was not found for the direct preview."
         }
         $existingWorld4Sources = @($world4Sources | Where-Object { Test-Path $_ })
         if ($existingWorld4Sources.Count -gt 0) {
             Invoke-PreviewConverter -Python $python -Converter $converter -InputPath $existingWorld4Sources -OutputPath $world4Preview
         } else {
-            Write-Host "Mundo 4 usa la previsualizacion conceptual. No se encontraron los DAE reales del mapa 4."
+            Write-Host "World 4 uses the conceptual preview. No real Map 4 DAE files were found."
         }
     } catch {
-        Write-Warning "No se pudieron generar previews desde DAE. El menu se compilara sin bloquear el build. Detalle: $($_.Exception.Message)"
+        Write-Warning "Could not generate previews from DAE. The menu will still compile without blocking the build. Detail: $($_.Exception.Message)"
     }
 } else {
-    Write-Warning "Python no esta instalado. Se omite la generacion de previews, pero el menu se compilara."
+    Write-Warning "Python is not installed. Preview generation will be skipped, but the menu will still compile."
 }
 
 $source = Join-Path $menuRoot "menu_raylib.cpp"
@@ -237,7 +237,7 @@ if ($mingw) {
     }
 
     if ($LASTEXITCODE -ne 0) {
-        throw "No se pudo compilar el menu Raylib con MinGW."
+        throw "Could not compile the Raylib menu with MinGW."
     }
 
     Write-Host "Menu Raylib compilado en: $output"
@@ -251,12 +251,12 @@ if (-not $msvc) {
 }
 
 if (-not $msvc) {
-    throw "No se encontro Raylib. Agrega Raylib a Menu\RaylibMenu\vendor\raylib o permite que el script lo descargue."
+    throw "Raylib was not found. Add Raylib to Menu\RaylibMenu\vendor\raylib or allow the script to download it."
 }
 
 $vcvars = Find-VcVars64
 if (-not $vcvars) {
-    throw "No se encontro vcvars64.bat. Instala Visual Studio con las herramientas de C++ para compilar el menu."
+    throw "vcvars64.bat was not found. Install Visual Studio with the C++ tools to compile the menu."
 }
 
 $buildCommand = Join-Path $bin "build_menu_msvc.cmd"
@@ -269,7 +269,7 @@ Set-Content -Path $buildCommand -Value $batchLines -Encoding ASCII
 
 & cmd.exe /d /c "`"$buildCommand`""
 if ($LASTEXITCODE -ne 0) {
-    throw "No se pudo compilar el menu Raylib con MSVC."
+    throw "Could not compile the Raylib menu with MSVC."
 }
 
 Write-Host "Menu Raylib compilado en: $output"

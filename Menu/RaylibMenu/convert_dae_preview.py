@@ -340,7 +340,7 @@ def write_preview(source_paths, output_path):
         all_positions.extend(positions)
 
     if not all_positions or not loaded_sources:
-        raise RuntimeError("No se encontro geometria util en los archivos DAE.")
+        raise RuntimeError("No usable geometry was found in the DAE files.")
 
     minimum = [min(vertex[axis] for vertex in all_positions) for axis in range(3)]
     maximum = [max(vertex[axis] for vertex in all_positions) for axis in range(3)]

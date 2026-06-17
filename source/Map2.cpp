@@ -23,12 +23,12 @@ void initializeMundo2HudResources(Mundo2HudResources& hud) {
 
     const glm::vec3 white(1.0f);
     const glm::vec3 titleColor(1.0f, 0.92f, 0.35f);
-    hud.promptHablarToad = createTextSprite(L"Pulsa F para hablar", 28, white, 330, false, true);
+    hud.promptHablarToad = createTextSprite(L"Press F to talk", 28, white, 330, false, true);
     hud.nombreToad = createTextSprite(L"Toad", 30, titleColor, 170, false, true);
     hud.dialogoToad = createTextSprite(
-        L"\u00a1Oh nooo! Todos estos enemigos vinieron a estorbar...\n"
-        L"Para ganar, recoge las 10 monedas del mapa. Cuando las tengas,\n"
-        L"aparecer\u00e1 una estrella de cristal. T\u00f3mala para completar el nivel.",
+        L"Oh nooo! All these enemies came to get in the way...\n"
+        L"To win, collect all 10 coins on the map. Once you have them,\n"
+        L"a crystal star will appear. Take it to complete the level.",
         21, white, 790, true, false);
     hud.initialized = true;
 }
@@ -227,7 +227,7 @@ bool iniciarMundo2(Mundo2Runtime& mundo2) {
     mundo2.lastInteractKey = false;
     resetGameplayView(mundo2.player);
 
-    std::cout << "Mundo 2 ready. Collision volumes: " << mundo2.environment.collisionPreview().size() << std::endl;
+    std::cout << "World 2 ready. Collision volumes: " << mundo2.environment.collisionPreview().size() << std::endl;
     std::cout << "Controls 3D: WASD move, mouse camera, Space jump, TAB switch to 2D, Esc back to menu." << std::endl;
     std::cout << "Controls 2D: A/D move, Space jump, TAB switch to 3D." << std::endl;
     mundo2.initialized = true;
