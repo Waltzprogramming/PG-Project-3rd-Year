@@ -46,6 +46,7 @@ struct WorldEntry {
     bool available;
     Vector3 previewPosition;
     float previewScale;
+    Vector3 previewRotation{0.0f, 0.0f, 0.0f};
 };
 
 struct AnimatedButton {
@@ -65,8 +66,12 @@ struct PreviewModel {
     bool loaded{false};
     bool loadAttempted{false};
     int texturedMaterials{0};
+    Vector3 minBounds{0.0f, 0.0f, 0.0f};
+    Vector3 maxBounds{0.0f, 0.0f, 0.0f};
     float minY{0.0f};
     float maxY{0.0f};
+    float autoScale{1.0f};
+    Vector3 center{0.0f, 0.0f, 0.0f};
 };
 
 float clamp01(float value) {
@@ -87,6 +92,71 @@ float easeOutBack(float value) {
 float easeOutCubic(float value) {
     const float t = 1.0f - clamp01(value);
     return 1.0f - t*t*t;
+}
+
+Vector3 rotatePreviewVector(Vector3 value, Vector3 rotationDegrees) {
+    const auto rotateX = [](Vector3 vector, float degrees) {
+        const float radians = degrees*DEG2RAD;
+        const float cosine = std::cos(radians);
+        const float sine = std::sin(radians);
+        return Vector3{
+            vector.x,
+            vector.y*cosine - vector.z*sine,
+            vector.y*sine + vector.z*cosine
+        };
+    };
+    const auto rotateY = [](Vector3 vector, float degrees) {
+        const float radians = degrees*DEG2RAD;
+        const float cosine = std::cos(radians);
+        const float sine = std::sin(radians);
+        return Vector3{
+            vector.x*cosine + vector.z*sine,
+            vector.y,
+            -vector.x*sine + vector.z*cosine
+        };
+    };
+    const auto rotateZ = [](Vector3 vector, float degrees) {
+        const float radians = degrees*DEG2RAD;
+        const float cosine = std::cos(radians);
+        const float sine = std::sin(radians);
+        return Vector3{
+            vector.x*cosine - vector.y*sine,
+            vector.x*sine + vector.y*cosine,
+            vector.z
+        };
+    };
+
+    value = rotateX(value, rotationDegrees.x);
+    value = rotateY(value, rotationDegrees.y);
+    return rotateZ(value, rotationDegrees.z);
+}
+
+BoundingBox rotatedPreviewBounds(const PreviewModel& model, Vector3 rotationDegrees) {
+    const std::array<Vector3, 8> corners{{
+        {model.minBounds.x, model.minBounds.y, model.minBounds.z},
+        {model.minBounds.x, model.minBounds.y, model.maxBounds.z},
+        {model.minBounds.x, model.maxBounds.y, model.minBounds.z},
+        {model.minBounds.x, model.maxBounds.y, model.maxBounds.z},
+        {model.maxBounds.x, model.minBounds.y, model.minBounds.z},
+        {model.maxBounds.x, model.minBounds.y, model.maxBounds.z},
+        {model.maxBounds.x, model.maxBounds.y, model.minBounds.z},
+        {model.maxBounds.x, model.maxBounds.y, model.maxBounds.z}
+    }};
+
+    BoundingBox bounds{
+        {std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max()},
+        {std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()}
+    };
+    for (Vector3 corner : corners) {
+        const Vector3 rotated = rotatePreviewVector(corner, rotationDegrees);
+        bounds.min.x = std::min(bounds.min.x, rotated.x);
+        bounds.min.y = std::min(bounds.min.y, rotated.y);
+        bounds.min.z = std::min(bounds.min.z, rotated.z);
+        bounds.max.x = std::max(bounds.max.x, rotated.x);
+        bounds.max.y = std::max(bounds.max.y, rotated.y);
+        bounds.max.z = std::max(bounds.max.z, rotated.z);
+    }
+    return bounds;
 }
 
 Color withAlpha(Color color, float alpha) {
@@ -358,6 +428,16 @@ void drawCreditsPanel(float entry, float timeSeconds, int width, int height) {
 PreviewModel loadTexturedModel(const char* path, Shader lightingShader, Texture2D fallbackTexture) {
     PreviewModel result;
     result.loadAttempted = true;
+    result.minBounds = {
+        std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max()
+    };
+    result.maxBounds = {
+        std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::lowest()
+    };
     result.minY = std::numeric_limits<float>::max();
     result.maxY = std::numeric_limits<float>::lowest();
     if (!FileExists(path)) {
@@ -393,6 +473,12 @@ PreviewModel loadTexturedModel(const char* path, Shader lightingShader, Texture2
             continue;
         }
         const BoundingBox bounds = GetModelBoundingBox(part.model);
+        result.minBounds.x = std::min(result.minBounds.x, bounds.min.x);
+        result.minBounds.y = std::min(result.minBounds.y, bounds.min.y);
+        result.minBounds.z = std::min(result.minBounds.z, bounds.min.z);
+        result.maxBounds.x = std::max(result.maxBounds.x, bounds.max.x);
+        result.maxBounds.y = std::max(result.maxBounds.y, bounds.max.y);
+        result.maxBounds.z = std::max(result.maxBounds.z, bounds.max.z);
         result.minY = std::min(result.minY, bounds.min.y);
         result.maxY = std::max(result.maxY, bounds.max.y);
 
@@ -430,8 +516,16 @@ PreviewModel loadTexturedModel(const char* path, Shader lightingShader, Texture2
 
     result.loaded = !result.parts.empty();
     if (!result.loaded) {
+        result.minBounds = {0.0f, 0.0f, 0.0f};
+        result.maxBounds = {0.0f, 0.0f, 0.0f};
         result.minY = 0.0f;
         result.maxY = 0.0f;
+    } else {
+        result.center = {
+            (result.minBounds.x + result.maxBounds.x)*0.5f,
+            (result.minBounds.y + result.maxBounds.y)*0.5f,
+            (result.minBounds.z + result.maxBounds.z)*0.5f
+        };
     }
     TraceLog(
         LOG_INFO,
@@ -441,6 +535,68 @@ PreviewModel loadTexturedModel(const char* path, Shader lightingShader, Texture2
         meshCount,
         result.texturedMaterials);
     return result;
+}
+
+PreviewModel loadDirectModel(const char* path, Shader lightingShader, Texture2D fallbackTexture) {
+    PreviewModel result;
+    result.loadAttempted = true;
+    if (!FileExists(path)) {
+        TraceLog(LOG_WARNING, "PREVIEW: model not found: %s", path);
+        return result;
+    }
+
+    PreviewPart part;
+    part.model = LoadModel(path);
+    if (part.model.meshCount <= 0) {
+        TraceLog(LOG_WARNING, "PREVIEW: model has no meshes: %s", path);
+        return result;
+    }
+
+    const BoundingBox bounds = GetModelBoundingBox(part.model);
+    result.minBounds = bounds.min;
+    result.maxBounds = bounds.max;
+    result.minY = bounds.min.y;
+    result.maxY = bounds.max.y;
+    result.center = {
+        (bounds.min.x + bounds.max.x)*0.5f,
+        (bounds.min.y + bounds.max.y)*0.5f,
+        (bounds.min.z + bounds.max.z)*0.5f
+    };
+    const float extent = std::max({
+        bounds.max.x - bounds.min.x,
+        bounds.max.y - bounds.min.y,
+        bounds.max.z - bounds.min.z
+    });
+    result.autoScale = 5.4f/std::max(extent, 0.0001f);
+
+    for (int materialIndex = 0; materialIndex < part.model.materialCount; ++materialIndex) {
+        Material& material = part.model.materials[materialIndex];
+        material.shader = lightingShader;
+        if (material.maps[MATERIAL_MAP_DIFFUSE].texture.id > 0) {
+            SetTextureFilter(material.maps[MATERIAL_MAP_DIFFUSE].texture, TEXTURE_FILTER_BILINEAR);
+            result.texturedMaterials += 1;
+        } else {
+            SetMaterialTexture(&material, MATERIAL_MAP_DIFFUSE, fallbackTexture);
+        }
+    }
+
+    result.parts.push_back(std::move(part));
+    result.loaded = true;
+    TraceLog(
+        LOG_INFO,
+        "PREVIEW: %s loaded directly with %i meshes and %i diffuse textures",
+        path,
+        result.parts.front().model.meshCount,
+        result.texturedMaterials);
+    return result;
+}
+
+PreviewModel loadPreviewModel(const char* path, Shader lightingShader, Texture2D fallbackTexture) {
+    const std::filesystem::path previewPath(path);
+    if (previewPath.extension() == ".preview") {
+        return loadTexturedModel(path, lightingShader, fallbackTexture);
+    }
+    return loadDirectModel(path, lightingShader, fallbackTexture);
 }
 
 void configureLightingShader(Shader shader) {
@@ -535,8 +691,11 @@ void drawPreview(
     const bool nightMode = activeWorld == 3;
     float cameraTargetY = 0.0f;
     if (activeWorld >= 0 && activeWorld < WorldCount && models[activeWorld].loaded) {
+        const WorldEntry& world = worlds[activeWorld];
+        const float previewScale = world.previewScale*models[activeWorld].autoScale;
+        const BoundingBox transformedBounds = rotatedPreviewBounds(models[activeWorld], world.previewRotation);
         const float modelHeight =
-            (models[activeWorld].maxY - models[activeWorld].minY)*worlds[activeWorld].previewScale;
+            (transformedBounds.max.y - transformedBounds.min.y)*previewScale;
         cameraTargetY = groundY + modelHeight*0.48f;
     }
 
@@ -578,21 +737,27 @@ void drawPreview(
     const float rotationY = std::fmod(timeSeconds*5.5f, 360.0f);
     if (activeWorld >= 0 && activeWorld < WorldCount && models[activeWorld].loaded) {
         const WorldEntry& world = worlds[activeWorld];
-        const Vector3 groundedPosition{
-            world.previewPosition.x,
-            groundY - models[activeWorld].minY*world.previewScale + world.previewPosition.y,
-            world.previewPosition.z
+        const PreviewModel& model = models[activeWorld];
+        const float previewScale = world.previewScale*model.autoScale;
+        const BoundingBox transformedBounds = rotatedPreviewBounds(model, world.previewRotation);
+        const Vector3 transformedCenter{
+            (transformedBounds.min.x + transformedBounds.max.x)*0.5f,
+            (transformedBounds.min.y + transformedBounds.max.y)*0.5f,
+            (transformedBounds.min.z + transformedBounds.max.z)*0.5f
         };
         rlDisableBackfaceCulling();
+        rlPushMatrix();
+        rlTranslatef(world.previewPosition.x, groundY + world.previewPosition.y, world.previewPosition.z);
+        rlRotatef(rotationY, 0.0f, 1.0f, 0.0f);
+        rlScalef(previewScale, previewScale, previewScale);
+        rlTranslatef(-transformedCenter.x, -transformedBounds.min.y, -transformedCenter.z);
+        rlRotatef(world.previewRotation.x, 1.0f, 0.0f, 0.0f);
+        rlRotatef(world.previewRotation.y, 0.0f, 1.0f, 0.0f);
+        rlRotatef(world.previewRotation.z, 0.0f, 0.0f, 1.0f);
         for (const PreviewPart& part : models[activeWorld].parts) {
-            DrawModelEx(
-                part.model,
-                groundedPosition,
-                {0.0f, 1.0f, 0.0f},
-                rotationY,
-                {world.previewScale, world.previewScale, world.previewScale},
-                WHITE);
+            DrawModel(part.model, {0.0f, 0.0f, 0.0f}, 1.0f, WHITE);
         }
+        rlPopMatrix();
         rlEnableBackfaceCulling();
     } else if (activeWorld == 2 || activeWorld == 3) {
         drawConceptPreview(activeWorld, rotationY, groundY);
@@ -706,10 +871,10 @@ void writeWindowPosition(const char* path) {
 
 int main(int argc, char** argv) {
     const std::array<WorldEntry, WorldCount> worlds{{
-        {"WORLD 1", "ISLANDS OF THE FIRST JOURNEY", "Menu/RaylibMenu/generated/world1_preview.preview", PaperGreen, true, {0.0f, 0.02f, 0.0f}, 1.65f},
-        {"WORLD 2", "FREEZEEZY PEAK", "Menu/RaylibMenu/generated/world2_preview.preview", PaperBlue, true, {0.0f, 0.02f, 0.0f}, 1.12f},
-        {"WORLD 3", "THIRD WORLD ADVENTURE", "Menu/RaylibMenu/generated/world3_preview.preview", SignalRed, true, {0.0f, 0.02f, 0.0f}, 1.20f},
-        {"WORLD 4", "FINAL CHALLENGE", "Menu/RaylibMenu/generated/world4_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.05f}
+        {"WORLD 1", "ISLANDS OF THE FIRST JOURNEY", "Menu/RaylibMenu/generated/world1_preview.preview", PaperGreen, true, {0.0f, 0.02f, 0.0f}, 1.65f, {0.0f, 0.0f, 0.0f}},
+        {"WORLD 2", "FREEZEEZY PEAK", "Menu/RaylibMenu/generated/world2_preview.preview", PaperBlue, true, {0.0f, 0.02f, 0.0f}, 0.92f, {90.0f, 0.0f, 0.0f}},
+        {"WORLD 3", "THIRD WORLD ADVENTURE", "assets/mundo3/game_pirate_adventure_map/scene_map3.gltf", SignalRed, true, {0.0f, 0.02f, 0.0f}, 1.45f, {0.0f, 0.0f, 0.0f}},
+        {"WORLD 4", "FINAL CHALLENGE", "Menu/RaylibMenu/generated/world4_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.55f, {0.0f, 0.0f, 0.0f}}
     }};
 
     const bool pauseMode = hasArgument(argc, argv, "--pause");
@@ -774,7 +939,7 @@ int main(int argc, char** argv) {
                 diagnostics << "loading world=" << worldIndex + 1 << std::endl;
             }
             if (worlds[worldIndex].modelPath != nullptr && FileExists(worlds[worldIndex].modelPath)) {
-                models[worldIndex] = loadTexturedModel(
+                models[worldIndex] = loadPreviewModel(
                     worlds[worldIndex].modelPath,
                     lightingShader,
                     fallbackTexture);

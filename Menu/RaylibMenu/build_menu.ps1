@@ -147,13 +147,18 @@ function Invoke-PreviewConverter {
     param(
         [object]$Python,
         [string]$Converter,
-        [string]$InputPath,
+        [string[]]$InputPath,
         [string]$OutputPath
     )
 
-    & $Python.Source @($Python.Args) $Converter $InputPath $OutputPath
+    $arguments = @()
+    $arguments += @($Python.Args)
+    $arguments += $Converter
+    $arguments += $InputPath
+    $arguments += $OutputPath
+    & $Python.Source @arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "El convertidor fallo para $InputPath"
+        throw "El convertidor fallo para $($InputPath -join ', ')"
     }
 }
 
@@ -162,27 +167,31 @@ New-Item -ItemType Directory -Force -Path $generated, $bin | Out-Null
 $converter = Join-Path $menuRoot "convert_dae_preview.py"
 $world1Source = Join-Path $projectRoot "assets\mapa1\world1\CourseSelectW1.dae"
 $world2Source = Join-Path $projectRoot "assets\Mundos\FreezeezyPeak\Freezeezy Peak.dae"
-$world3Source = Join-Path $menuRoot "worlds\Mundo3\model.dae"
-$world4Source = Join-Path $projectRoot "assets\mapa 4\mapamian\World 1\World 1\CourseSelectW1.dae"
+$world3Source = Join-Path $projectRoot "assets\mundo3\game_pirate_adventure_map\scene_map3.gltf"
+$world4Sources = @(
+    (Join-Path $projectRoot "assets\mapa 4\mapamian\World 1\World 1\CourseSelectW1.dae"),
+    (Join-Path $projectRoot "assets\mapa 4\mapamian\World 1\World 1\CourseSelectWallW1.dae"),
+    (Join-Path $projectRoot "assets\mapa 4\mapamian\World 1\World 1\CourseSelectWaveW1.dae")
+)
 $world1Preview = Join-Path $generated "world1_preview.preview"
 $world2Preview = Join-Path $generated "world2_preview.preview"
-$world3Preview = Join-Path $generated "world3_preview.preview"
 $world4Preview = Join-Path $generated "world4_preview.preview"
 
 $python = Find-PythonCommand
 if ($python) {
     try {
-        Invoke-PreviewConverter $python $converter $world1Source $world1Preview
-        Invoke-PreviewConverter $python $converter $world2Source $world2Preview
+        Invoke-PreviewConverter -Python $python -Converter $converter -InputPath $world1Source -OutputPath $world1Preview
+        Invoke-PreviewConverter -Python $python -Converter $converter -InputPath $world2Source -OutputPath $world2Preview
         if (Test-Path $world3Source) {
-            Invoke-PreviewConverter $python $converter $world3Source $world3Preview
+            Write-Host "Mundo 3 usa el GLTF real directamente en la preview del menu."
         } else {
-            Write-Host "Mundo 3 usa la previsualizacion conceptual. Agrega worlds\Mundo3\model.dae para reemplazarla."
+            Write-Warning "No se encontro el GLTF real de Mundo 3 para la preview directa."
         }
-        if (Test-Path $world4Source) {
-            Invoke-PreviewConverter $python $converter $world4Source $world4Preview
+        $existingWorld4Sources = @($world4Sources | Where-Object { Test-Path $_ })
+        if ($existingWorld4Sources.Count -gt 0) {
+            Invoke-PreviewConverter -Python $python -Converter $converter -InputPath $existingWorld4Sources -OutputPath $world4Preview
         } else {
-            Write-Host "Mundo 4 usa la previsualizacion conceptual. No se encontro el DAE real del mapa 4."
+            Write-Host "Mundo 4 usa la previsualizacion conceptual. No se encontraron los DAE reales del mapa 4."
         }
     } catch {
         Write-Warning "No se pudieron generar previews desde DAE. El menu se compilara sin bloquear el build. Detalle: $($_.Exception.Message)"
