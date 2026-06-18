@@ -30,12 +30,118 @@ constexpr int Map4EnemyMaximumHealth = 3;
 constexpr float Map4LightEnergyMaximum = 20.0f;
 constexpr float Map4LightRespawnTime = 10.0f;
 constexpr size_t Map4SunPickupTotal = 5;
+constexpr float Map4JumpBufferSeconds = 0.16f;
 
 bool map4BoundsIntersect(const Bounds& a, const Bounds& b) {
     // chequeo simple de cajas para saber si dos cosas del mapa se están tocando
     const glm::vec3 delta = glm::abs(a.center - b.center);
     const glm::vec3 total = a.halfExtent + b.halfExtent;
     return delta.x < total.x && delta.y < total.y && delta.z < total.z;
+}
+
+bool map4FloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float& floorY) {
+    bool found = false;
+    float bestScore = std::numeric_limits<float>::max();
+    for (const Bounds& collider : colliders) {
+        const float top = collider.center.y + collider.halfExtent.y;
+        const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
+        const bool floorLike = collider.halfExtent.y <= 0.40f && area >= 0.18f;
+        const bool inside =
+            x >= collider.center.x - collider.halfExtent.x - 0.08f &&
+            x <= collider.center.x + collider.halfExtent.x + 0.08f &&
+            z >= collider.center.z - collider.halfExtent.z - 0.08f &&
+            z <= collider.center.z + collider.halfExtent.z + 0.08f;
+        if (!floorLike || !inside) {
+            continue;
+        }
+
+        const float score = std::abs(top - preferredY);
+        if (score < bestScore) {
+            bestScore = score;
+            floorY = top;
+            found = true;
+        }
+    }
+    return found;
+}
+
+std::vector<Bounds> buildMapa4PlayerColliders(const Environment& environment, float lockedDepth, PlayMode mode) {
+    const std::vector<Bounds>& rawColliders = environment.collisionPreview();
+    const glm::vec3 worldMin = environment.worldMin();
+    std::vector<Bounds> filtered;
+    filtered.reserve(rawColliders.size());
+
+    for (const Bounds& collider : rawColliders) {
+        const float width = collider.halfExtent.x * 2.0f;
+        const float height = collider.halfExtent.y * 2.0f;
+        const float depth = collider.halfExtent.z * 2.0f;
+        const float area = width * depth;
+        const float top = collider.center.y + collider.halfExtent.y;
+        const bool floorLike = collider.halfExtent.y <= 0.40f && area >= 0.18f;
+        const bool majorBlocker = height >= 1.15f && (width >= 0.38f || depth >= 0.38f);
+        const bool largeLowObstacle = height >= 0.58f && area >= 1.35f;
+        const bool playableHeight = top >= worldMin.y - 0.35f;
+
+        if (!playableHeight) {
+            continue;
+        }
+
+        if (mode == PlayMode::Mode2D) {
+            const bool nearLockedPlane =
+                lockedDepth >= collider.center.z - collider.halfExtent.z - 0.42f &&
+                lockedDepth <= collider.center.z + collider.halfExtent.z + 0.42f;
+            if (!nearLockedPlane) {
+                continue;
+            }
+        }
+
+        if (floorLike || majorBlocker || largeLowObstacle) {
+            filtered.push_back(collider);
+        }
+    }
+
+    return filtered;
+}
+
+void prepareMapa4Jump(Mapa4Runtime& mapa4, PlayerInput& input, const std::vector<Bounds>& colliders, float timeSeconds) {
+    if (input.jumpPressed) {
+        mapa4.jumpBufferUntil = static_cast<double>(timeSeconds) + Map4JumpBufferSeconds;
+    }
+
+    if (timeSeconds > static_cast<float>(mapa4.jumpBufferUntil)) {
+        input.jumpPressed = false;
+        return;
+    }
+
+    input.jumpPressed = true;
+    if (mapa4.player.grounded()) {
+        mapa4.jumpBufferUntil = 0.0;
+        return;
+    }
+
+    float floorY = mapa4.player.position().y;
+    if (!map4FloorAt(colliders, mapa4.player.position().x, mapa4.player.position().z, mapa4.player.position().y, floorY)) {
+        input.jumpPressed = false;
+        return;
+    }
+
+    const float distanceToFloor = mapa4.player.position().y - floorY;
+    if (distanceToFloor < -0.06f || distanceToFloor > 0.30f) {
+        input.jumpPressed = false;
+        return;
+    }
+
+    PlayerInput settleInput = input;
+    settleInput.jumpPressed = false;
+    mapa4.player.update(settleInput, colliders, mapa4.environment.worldMin(), mapa4.environment.worldMax(), 1.0f / 60.0f);
+    if (!mapa4.player.grounded()) {
+        input.jumpPressed = false;
+        return;
+    }
+
+    mapa4.player.update(input, colliders, mapa4.environment.worldMin(), mapa4.environment.worldMax(), 0.0f);
+    input.jumpPressed = false;
+    mapa4.jumpBufferUntil = 0.0;
 }
 
 glm::vec3 findMarioMapa4Spawn(const Environment& environment) {
@@ -187,6 +293,9 @@ void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Project
     static Mesh swordGuardMesh = Mesh::cube();
     static Mesh swordPommelMesh = Mesh::cube();
     static Mesh swordAuraMesh = Mesh::cylinder(28, 1.0f, 0.14f);
+    static Mesh enemyLaserCoreMesh = Mesh::cylinder(28, 1.0f, 0.055f);
+    static Mesh enemyLaserGlowMesh = Mesh::cylinder(36, 1.0f, 0.15f);
+    static Mesh enemyLaserPulseMesh = Mesh::cylinder(32, 1.0f, 0.24f);
     Material playerBladeMaterial;
     playerBladeMaterial.baseColor = {0.24f, 0.80f, 1.00f};
     playerBladeMaterial.emissive = {0.12f, 0.36f, 0.58f};
@@ -213,11 +322,23 @@ void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Project
     playerEdgeMaterial.emissive = {0.24f, 0.44f, 0.70f};
     playerEdgeMaterial.roughness = 0.04f;
     playerEdgeMaterial.fogAmount = 0.02f;
-    Material enemyArrowMaterial;
-    enemyArrowMaterial.baseColor = {0.78f, 0.22f, 0.18f};
-    enemyArrowMaterial.emissive = {0.20f, 0.05f, 0.04f};
-    enemyArrowMaterial.roughness = 0.48f;
-    enemyArrowMaterial.fogAmount = 0.12f;
+    Material enemyLaserCoreMaterial;
+    enemyLaserCoreMaterial.baseColor = {1.00f, 0.84f, 0.78f};
+    enemyLaserCoreMaterial.emissive = {0.70f, 0.20f, 0.14f};
+    enemyLaserCoreMaterial.roughness = 0.04f;
+    enemyLaserCoreMaterial.fogAmount = 0.03f;
+    Material enemyLaserGlowMaterial;
+    enemyLaserGlowMaterial.baseColor = {1.00f, 0.05f, 0.04f};
+    enemyLaserGlowMaterial.emissive = {0.50f, 0.02f, 0.03f};
+    enemyLaserGlowMaterial.roughness = 0.08f;
+    enemyLaserGlowMaterial.fogAmount = 0.04f;
+    enemyLaserGlowMaterial.opacity = 0.38f;
+    Material enemyLaserPulseMaterial;
+    enemyLaserPulseMaterial.baseColor = {1.00f, 0.18f, 0.10f};
+    enemyLaserPulseMaterial.emissive = {0.62f, 0.04f, 0.02f};
+    enemyLaserPulseMaterial.roughness = 0.02f;
+    enemyLaserPulseMaterial.fogAmount = 0.03f;
+    enemyLaserPulseMaterial.opacity = 0.24f;
 
     for (const Mapa4Projectile& projectile : projectiles) {
         if (glm::length(projectile.position - cameraPosition) > 22.0f) {
@@ -238,9 +359,41 @@ void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Project
         shader.use();
         shader.setFloat("uTime", timeSeconds);
         if (projectile.fromEnemy) {
-            const glm::mat4 arrowModel = glm::scale(model, glm::vec3(0.12f, Map4ProjectileLength, 0.12f));
-            shader.setMat4("uModel", arrowModel);
-            bindSceneMaterial(shader, enemyArrowMaterial);
+            const float pulse = 0.88f + std::sin(timeSeconds * 18.0f + projectile.traveledDistance * 2.4f) * 0.12f;
+            const float flicker = 0.82f + std::abs(std::sin(timeSeconds * 26.0f + projectile.position.x * 3.0f)) * 0.18f;
+            const float beamLength = Map4ProjectileLength * 1.28f;
+
+            Material pulseMaterial = enemyLaserPulseMaterial;
+            pulseMaterial.opacity *= pulse;
+            pulseMaterial.emissive *= flicker;
+            const glm::mat4 pulseModel = model
+                * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, beamLength * 0.06f, 0.0f))
+                * glm::scale(glm::mat4(1.0f), glm::vec3(0.24f * pulse, beamLength * 0.92f, 0.24f * pulse));
+            shader.setMat4("uModel", pulseModel);
+            bindSceneMaterial(shader, pulseMaterial);
+            enemyLaserPulseMesh.draw();
+
+            const glm::mat4 glowModel = model
+                * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, beamLength * 0.08f, 0.0f))
+                * glm::scale(glm::mat4(1.0f), glm::vec3(0.15f, beamLength, 0.15f));
+            shader.setMat4("uModel", glowModel);
+            bindSceneMaterial(shader, enemyLaserGlowMaterial);
+            enemyLaserGlowMesh.draw();
+
+            Material coreMaterial = enemyLaserCoreMaterial;
+            coreMaterial.emissive *= flicker;
+            const glm::mat4 coreModel = model
+                * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, beamLength * 0.10f, 0.0f))
+                * glm::scale(glm::mat4(1.0f), glm::vec3(0.055f, beamLength * 1.04f, 0.055f));
+            shader.setMat4("uModel", coreModel);
+            bindSceneMaterial(shader, coreMaterial);
+            enemyLaserCoreMesh.draw();
+
+            const glm::mat4 hotTipModel = model
+                * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, beamLength * 1.14f, 0.0f))
+                * glm::scale(glm::mat4(1.0f), glm::vec3(0.16f, 0.12f, 0.16f));
+            shader.setMat4("uModel", hotTipModel);
+            bindSceneMaterial(shader, enemyLaserGlowMaterial);
             arrowMesh.draw();
             continue;
         }
@@ -1111,6 +1264,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
             mapa4.projectiles.clear();
             mapa4.projectileCooldown = 0.0f;
             mapa4.secretCompleteKeyHeld = false;
+            mapa4.jumpBufferUntil = 0.0;
             mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
             mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
             currentMode = PlayMode::Mode2D;
@@ -1172,6 +1326,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     mapa4.projectiles.clear();
     mapa4.projectileCooldown = 0.0f;
     mapa4.secretCompleteKeyHeld = false;
+    mapa4.jumpBufferUntil = 0.0;
     mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
     mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
     currentMode = PlayMode::Mode2D;
@@ -1204,6 +1359,7 @@ void volverAlMenu(Mapa4Runtime& mapa4) {
     mapa4.startSequencePending = false;
     mapa4.skipFirstUpdateFrame = false;
     mapa4.secretCompleteKeyHeld = false;
+    mapa4.jumpBufferUntil = 0.0;
     mapa4.instructionBoxAvailableAt = 0.0;
     mapa4.instructionBoxHideAt = 0.0;
     mapa4.sessionActive = false;
@@ -1247,7 +1403,7 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
             mapa4.mission.forceComplete(now);
         }
 
-        const PlayerInput playerInput = buildPlayerInput(window, mapa4.player);
+        PlayerInput playerInput = buildPlayerInput(window, mapa4.player);
         const bool shieldDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
         const bool shieldPressed = shieldDown && !lastShieldKey;
         lastShieldKey = shieldDown;
@@ -1266,8 +1422,9 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
                 mapa4.shieldActive = false;
             }
         }
-        std::vector<Bounds> playerColliders = mapa4.environment.collisionPreview();
+        std::vector<Bounds> playerColliders = buildMapa4PlayerColliders(mapa4.environment, locked2DDepth, currentMode);
         appendDimensionRestrictionColliders(playerColliders, mapa4.environment, locked2DDepth);
+        prepareMapa4Jump(mapa4, playerInput, playerColliders, now);
         mapa4.player.update(playerInput, playerColliders, mapa4.environment.worldMin(), mapa4.environment.worldMax(), frameDelta);
         mapa4.lightPickups.update(mapa4.player, now, frameDelta, mapa4.lightEnergy);
         mapa4.coinCollectDelay = std::max(0.0f, mapa4.coinCollectDelay - frameDelta);

@@ -145,6 +145,7 @@ struct Mapa4Runtime {
     double instructionBoxAvailableAt{0.0};
     double instructionBoxHideAt{0.0};
     bool secretCompleteKeyHeld{false};
+    double jumpBufferUntil{0.0};
 };
 
 bool isMarioMapa4Environment(const Environment& environment);
