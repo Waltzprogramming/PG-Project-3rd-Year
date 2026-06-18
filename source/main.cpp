@@ -2203,7 +2203,7 @@ bool levelIntroActive() {
     return levelIntroCamera.active;
 }
 
-void beginLevelIntro(const Environment& environment, const Player& player, float timeSeconds) {
+void beginLevelIntro(const Environment& environment, const Player& player, float timeSeconds, float introZoomScale) {
     const glm::vec3 finalPosition = gameplayCameraPosition;
     const glm::vec3 finalTarget = gameplayCameraTarget;
     const glm::vec3 worldMin = environment.worldMin();
@@ -2224,7 +2224,8 @@ void beginLevelIntro(const Environment& environment, const Player& player, float
 
     const float horizontalSize = std::max(worldSize.x, worldSize.z);
     const float verticalSize = std::max(worldSize.y, 1.0f);
-    const float cameraDistance = std::clamp(horizontalSize * 0.85f + verticalSize * 0.30f + 7.5f, 11.0f, 52.0f);
+    const float baseCameraDistance = std::clamp(horizontalSize * 0.85f + verticalSize * 0.30f + 7.5f, 11.0f, 52.0f);
+    const float cameraDistance = std::clamp(baseCameraDistance * std::max(0.1f, introZoomScale), 6.5f, 52.0f);
     const glm::vec3 farTarget = worldCenter + glm::vec3(0.0f, std::clamp(verticalSize * 0.10f, 1.5f, 6.0f), 0.0f);
     const glm::vec3 farDirection = glm::normalize(glm::vec3(-0.38f, 0.42f, 1.0f));
 

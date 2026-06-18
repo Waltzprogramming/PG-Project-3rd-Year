@@ -77,6 +77,7 @@ constexpr float Map3Camera3DMaxLead = 0.42f;
 constexpr float Map3Camera2DDistance = 2.0f;
 constexpr float Map3Camera2DTargetHeight = 0.70f;
 constexpr float Map3Camera2DHeight = 0.20f;
+constexpr float Mundo2IntroZoomScale = 0.50f;
 constexpr float Map3PlayerHeight = 0.34f;
 constexpr glm::vec3 Map3PlayerCollisionHalf{0.048f, Map3PlayerHeight * 0.46f, 0.038f};
 constexpr float Map3PlayerVisualYOffset = -0.24f;
@@ -1610,7 +1611,7 @@ bool iniciarMap3(Map3Runtime& map3) {
             map3.skipFirstUpdateFrame = true;
             resetMap3ViewForEnvironment(map3.environment, map3.player);
             updateMap3GameplayCamera(map3.player, map3.environment, map3.mission, static_cast<float>(glfwGetTime()), 0.0f);
-            beginLevelIntro(map3.environment, map3.player, static_cast<float>(glfwGetTime()));
+            beginLevelIntro(map3.environment, map3.player, static_cast<float>(glfwGetTime()), Mundo2IntroZoomScale);
             map3.sessionActive = true;
         }
         startMap3Music(map3);
@@ -1650,7 +1651,7 @@ bool iniciarMap3(Map3Runtime& map3) {
     map3.skipFirstUpdateFrame = true;
     resetMap3ViewForEnvironment(map3.environment, map3.player);
     updateMap3GameplayCamera(map3.player, map3.environment, map3.mission, static_cast<float>(glfwGetTime()), 0.0f);
-    beginLevelIntro(map3.environment, map3.player, static_cast<float>(glfwGetTime()));
+    beginLevelIntro(map3.environment, map3.player, static_cast<float>(glfwGetTime()), Mundo2IntroZoomScale);
 
     std::cout << "World 2 ready. Collision volumes: " << map3ActiveColliders(map3).size() << std::endl;
     std::cout << "Controls: TAB cambia 2D/3D, E esquiva en 3D y hace parry en 2D." << std::endl;

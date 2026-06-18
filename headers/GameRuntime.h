@@ -37,7 +37,7 @@ void bindSceneMaterial(const Shader& shader, const Material& material);
 glm::mat4 localPartMatrix(const MissionRenderablePart& part);
 PlayerInput buildPlayerInput(GLFWwindow* window, const Player& player);
 void resetGameplayView(const Player& player);
-void beginLevelIntro(const Environment& environment, const Player& player, float timeSeconds);
+void beginLevelIntro(const Environment& environment, const Player& player, float timeSeconds, float introZoomScale = 1.0f);
 bool levelIntroActive();
 void updateLevelIntroCamera(float timeSeconds);
 void consumeLevelIntroInput(GLFWwindow* window);
