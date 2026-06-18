@@ -1,0 +1,527 @@
+{
+  "accessors": [
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 7090,
+      "max": [
+        0.81989586353302,
+        0.8140442967414856,
+        4.581891059875488
+      ],
+      "min": [
+        -1.0805178880691528,
+        -1.3479195833206177,
+        0.5385940670967102
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 85080,
+      "componentType": 5126,
+      "count": 7090,
+      "max": [
+        0.9995049238204956,
+        0.9989567399024963,
+        0.9992676973342896
+      ],
+      "min": [
+        -0.9977808594703674,
+        -0.9989758729934692,
+        -0.9997852444648743
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 7090,
+      "max": [
+        -0.1348857879638672,
+        -0.1463419795036316
+      ],
+      "min": [
+        -0.13488587737083435,
+        -0.14634203910827637
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "componentType": 5125,
+      "count": 30240,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 170160,
+      "componentType": 5126,
+      "count": 112,
+      "max": [
+        0.9441409111022949,
+        1.580209732055664,
+        48.3794059753418
+      ],
+      "min": [
+        -0.9441408514976501,
+        -1.6131336688995361,
+        -0.9991880059242249
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 171504,
+      "componentType": 5126,
+      "count": 112,
+      "max": [
+        0.9994952082633972,
+        0.9792577028274536,
+        1.0
+      ],
+      "min": [
+        -0.9994828701019287,
+        -0.9334989786148071,
+        -1.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 56720,
+      "componentType": 5126,
+      "count": 112,
+      "max": [
+        0.9784548282623291,
+        0.7035501599311829
+      ],
+      "min": [
+        0.02457658387720585,
+        0.031193777918815613
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 120960,
+      "componentType": 5125,
+      "count": 192,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 172848,
+      "componentType": 5126,
+      "count": 140,
+      "max": [
+        0.08919017761945724,
+        0.34974801540374756,
+        3.2781894207000732
+      ],
+      "min": [
+        -0.08919019252061844,
+        -0.32967832684516907,
+        1.956202507019043
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 174528,
+      "componentType": 5126,
+      "count": 140,
+      "max": [
+        0.9954812526702881,
+        0.9564436078071594,
+        0.5426671504974365
+      ],
+      "min": [
+        -0.9954813122749329,
+        -0.9559954404830933,
+        -0.9266085624694824
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 57616,
+      "componentType": 5126,
+      "count": 140,
+      "max": [
+        0.9905807971954346,
+        0.9895026087760925
+      ],
+      "min": [
+        0.01284143328666687,
+        0.5181472301483154
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 121728,
+      "componentType": 5125,
+      "count": 288,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 176208,
+      "componentType": 5126,
+      "count": 100,
+      "max": [
+        0.023090403527021408,
+        0.35514315962791443,
+        3.3099536895751953
+      ],
+      "min": [
+        -0.02309042401611805,
+        -0.3400106132030487,
+        2.5607752799987793
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 177408,
+      "componentType": 5126,
+      "count": 100,
+      "max": [
+        0.9889592528343201,
+        0.945659339427948,
+        0.9266092777252197
+      ],
+      "min": [
+        -0.9889582991600037,
+        -0.9286247491836548,
+        -0.21635764837265015
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 58736,
+      "componentType": 5126,
+      "count": 100,
+      "max": [
+        0.7247494459152222,
+        0.9858373403549194
+      ],
+      "min": [
+        0.00860583782196045,
+        0.030735492706298828
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 122880,
+      "componentType": 5125,
+      "count": 168,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "extras": {
+      "author": "Henry_Frean (https://sketchfab.com/Henry_Frean)",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://sketchfab.com/3d-models/maiz-low-poly-94b1a33c64fa40998273fc2bbcb06569",
+      "title": "Maiz Low Poly"
+    },
+    "generator": "Sketchfab-16.59.0",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 123552,
+      "name": "floatBufferViews",
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 59536,
+      "byteOffset": 123552,
+      "byteStride": 8,
+      "name": "floatBufferViews",
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 178608,
+      "byteOffset": 183088,
+      "byteStride": 12,
+      "name": "floatBufferViews",
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 361696,
+      "uri": "scene.bin"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Tallo",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.00299785,
+          0.0908362,
+          0.0,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.9853306353361956
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Choclo",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.00318503,
+          0.190176,
+          0.0,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.9694349603962313
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Choclo2",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.661858,
+          0.542607,
+          0.00581284,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.8816665616669407
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Hojas_Tallo_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 0,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "Tallo_Tallo_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 4,
+            "TEXCOORD_0": 6
+          },
+          "indices": 7,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "Choclo_Choclo_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 9,
+            "POSITION": 8,
+            "TEXCOORD_0": 10
+          },
+          "indices": 11,
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "Choclo_Choclo2_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 13,
+            "POSITION": 12,
+            "TEXCOORD_0": 14
+          },
+          "indices": 15,
+          "material": 2,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "children": [
+        1
+      ],
+      "matrix": [
+        0.49595728516578674,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.1012463944432821e-16,
+        -0.49595728516578674,
+        0.0,
+        0.0,
+        0.49595728516578674,
+        1.1012463944432821e-16,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Sketchfab_model"
+    },
+    {
+      "children": [
+        2
+      ],
+      "matrix": [
+        0.009999999776482582,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.009999999776482582,
+        0.0,
+        0.0,
+        -0.009999999776482582,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "0e89229cda1a4dd38a24793483efd1b0.fbx"
+    },
+    {
+      "children": [
+        3,
+        5,
+        7
+      ],
+      "name": "RootNode"
+    },
+    {
+      "children": [
+        4
+      ],
+      "matrix": [
+        -30.014293861604997,
+        1.2378712285895585e-14,
+        -107.3817532501959,
+        0.0,
+        -107.38175325019385,
+        2.170937027644906e-05,
+        30.014293861604433,
+        0.0,
+        2.0525538794654025e-05,
+        109.45795440673622,
+        -5.737097167759613e-06,
+        0.0,
+        0.2857888638973236,
+        -58.16299819946289,
+        -0.4184917211532593,
+        1.0
+      ],
+      "name": "Hojas"
+    },
+    {
+      "mesh": 0,
+      "name": "Hojas_Tallo_0"
+    },
+    {
+      "children": [
+        6
+      ],
+      "matrix": [
+        12.096420288085938,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1.970757011544094e-06,
+        -12.096420288085778,
+        0.0,
+        0.0,
+        12.096420288085778,
+        -1.970757011544094e-06,
+        0.0,
+        0.0,
+        12.015292167663574,
+        0.0,
+        1.0
+      ],
+      "name": "Tallo"
+    },
+    {
+      "mesh": 1,
+      "name": "Tallo_Tallo_0"
+    },
+    {
+      "children": [
+        8,
+        9
+      ],
+      "matrix": [
+        100.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1.629206793918314e-05,
+        -99.99999999999868,
+        0.0,
+        0.0,
+        99.99999999999868,
+        -1.629206793918314e-05,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Choclo"
+    },
+    {
+      "mesh": 2,
+      "name": "Choclo_Choclo_0"
+    },
+    {
+      "mesh": 3,
+      "name": "Choclo_Choclo2_0"
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Sketchfab_Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ]
+}
