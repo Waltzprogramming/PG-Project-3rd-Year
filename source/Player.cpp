@@ -288,7 +288,8 @@ void Player::render(const Shader& shader) const {
         material.baseColor = {1.0f, 1.0f, 1.0f};
         material.roughness = 1.0f;
         material.checkerStrength = 0.0f;
-        material.fogAmount = 0.12f;
+        material.fogAmount = 0.0f;
+        material.unlit = true;
         material.opacity = 1.0f;
         material.texture = frame->texture;
         shader.setMat4("uModel", spriteModelMatrix());
@@ -463,6 +464,7 @@ void Player::bindMaterial(const Shader& shader, const Material& material) const 
     shader.setFloat("uMaterial.roughness", material.roughness);
     shader.setFloat("uMaterial.checkerStrength", material.checkerStrength);
     shader.setFloat("uMaterial.fogAmount", material.fogAmount);
+    shader.setBool("uMaterial.unlit", material.unlit);
     shader.setFloat("uMaterial.opacity", material.opacity);
     shader.setBool("uMaterial.hasTexture", material.texture && material.texture->valid());
     if (material.texture && material.texture->valid()) {

@@ -74,6 +74,7 @@ void bindMaterial(const Shader& shader, const Material& material) {
     shader.setFloat("uMaterial.roughness", material.roughness);
     shader.setFloat("uMaterial.checkerStrength", material.checkerStrength);
     shader.setFloat("uMaterial.fogAmount", material.fogAmount);
+    shader.setBool("uMaterial.unlit", material.unlit);
     shader.setFloat("uMaterial.opacity", material.opacity);
     shader.setBool("uMaterial.hasTexture", material.texture && material.texture->valid());
     if (material.texture && material.texture->valid()) {

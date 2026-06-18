@@ -269,7 +269,7 @@ void renderMundo2(GLFWwindow* window, Mundo2Runtime& mundo2, MenuContext& menu, 
         consumeLevelIntroInput(window);
         mundo2.lastInteractKey = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
         updateLevelIntroCamera(now);
-    } else {
+    } else if (!mundo2.mission.levelComplete()) {
         const PlayerInput playerInput = buildPlayerInput(window, mundo2.player);
         const bool interactDown = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
         const bool interactPressed = interactDown && !mundo2.lastInteractKey;

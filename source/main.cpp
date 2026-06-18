@@ -406,6 +406,7 @@ void bindSceneMaterial(const Shader& shader, const Material& material) {
     shader.setFloat("uMaterial.roughness", material.roughness);
     shader.setFloat("uMaterial.checkerStrength", material.checkerStrength);
     shader.setFloat("uMaterial.fogAmount", material.fogAmount);
+    shader.setBool("uMaterial.unlit", material.unlit);
     shader.setFloat("uMaterial.opacity", material.opacity);
     shader.setBool("uMaterial.hasTexture", material.texture && material.texture->valid());
     if (material.texture && material.texture->valid()) {
@@ -2073,6 +2074,25 @@ void drawLevelCompleteHud(MenuContext& menu, int width, int height) {
     drawText(menu, menu.juegoTerminadoContinuar, panel.x + (panel.width - menu.juegoTerminadoContinuar.size.x) * 0.5f, panel.y + 198.0f, {0.94f, 0.96f, 1.0f, 0.96f});
 }
 
+void drawMundo2VictoryHud(MenuContext& menu, int width, int height) {
+    beginUiFrame(menu, width, height);
+    drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.01f, 0.02f, 0.06f, 0.58f});
+    const float timeSeconds = static_cast<float>(glfwGetTime());
+    const float pulse = 0.94f + std::sin(timeSeconds * 4.8f) * 0.06f;
+    const Rect glow = centeredRect(width * 0.5f, height * 0.5f - 116.0f, 690.0f * pulse, 230.0f * pulse);
+    drawRect(menu, glow, {0.95f, 0.73f, 0.12f, 0.12f});
+    const Rect panel = centeredRect(width * 0.5f, height * 0.5f - 108.0f, 660.0f, 248.0f);
+    drawRect(menu, {panel.x + 10.0f, panel.y + 12.0f, panel.width, panel.height}, {0.0f, 0.0f, 0.0f, 0.44f});
+    drawRect(menu, {panel.x - 5.0f, panel.y - 5.0f, panel.width + 10.0f, panel.height + 10.0f}, {0.99f, 0.82f, 0.20f, 0.96f});
+    drawPanel(menu, panel);
+    const Rect ribbon = centeredRect(width * 0.5f, panel.y + 22.0f, 320.0f, 40.0f);
+    drawRect(menu, ribbon, {0.92f, 0.18f, 0.16f, 0.96f});
+    drawText(menu, menu.estrellaLista, ribbon.x + (ribbon.width - menu.estrellaLista.size.x) * 0.5f, ribbon.y + (ribbon.height - menu.estrellaLista.size.y) * 0.5f, {1.0f, 0.92f, 0.24f, 1.0f});
+    drawText(menu, menu.mundo2Victoria, panel.x + (panel.width - menu.mundo2Victoria.size.x) * 0.5f, panel.y + 78.0f);
+    drawText(menu, menu.mundo2VictoriaDetalle, panel.x + (panel.width - menu.mundo2VictoriaDetalle.size.x) * 0.5f, panel.y + 146.0f, {0.94f, 0.96f, 1.0f, 0.98f});
+    drawText(menu, menu.juegoTerminadoContinuar, panel.x + (panel.width - menu.juegoTerminadoContinuar.size.x) * 0.5f, panel.y + 198.0f, {0.94f, 0.96f, 1.0f, 0.96f});
+}
+
 void mostrarMenuPrincipal(MenuContext& menu, int width, int height, float timeSeconds, const glm::vec2& mouse, bool clicked, GLFWwindow* window) {
     // Menú principal del juego con la navegación visual base entre pantallas.
     beginUiFrame(menu, width, height);
@@ -2479,6 +2499,9 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
             break;
         case EstadoJuego::MUNDO_2:
         {
+            if (mundo2.mission.levelComplete()) {
+                break;
+            }
             const EstadoJuego pausedState = appState;
             const bool resumeMusic = pausarMusicaMundo2(mundo2);
             const int pauseAction = runRaylibPauseMenuForWindow(window);
@@ -2729,6 +2752,8 @@ bool initializeMenu(MenuContext& menu) {
     menu.estrellaLista = createTextSprite(L"STAR UNLOCKED!", 29, titleColor, 400, false, true);
     menu.nivelCompletado = createTextSprite(L"LEVEL COMPLETE", 42, titleColor, 540, true, true);
     menu.nivelCompletadoDetalle = createTextSprite(L"Objective complete", 27, white, 420, false, true);
+    menu.mundo2Victoria = createTextSprite(L"YOU WON!", 46, titleColor, 440, true, true);
+    menu.mundo2VictoriaDetalle = createTextSprite(L"You collected the star and completed World 2.", 25, white, 620, true, true);
     menu.juegoTerminado = createTextSprite(L"GAME OVER", 42, titleColor, 520, true, true);
     menu.juegoTerminadoContinuar = createTextSprite(L"PRESS ENTER TO CONTINUE", 27, white, 520, false, true);
     menu.mapa4FinalDetalleVictoria = createTextSprite(L"All 10 coins were collected successfully.", 22, white, 500, true, true);
@@ -2974,9 +2999,13 @@ int main(int argc, char** argv) {
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
             } else {
                 renderMundo2(window, mundo2, menu, sceneShader, lavaShader, now);
-                drawModeSwitchUnavailableMessage(menu, width, height, now);
                 if (mundo2.mission.levelComplete()) {
-                    volverASeleccionDeMundos(window, EstadoJuego::MUNDO_2, mapa1, mundo2, map3, mapa4);
+                    drawMundo2VictoryHud(menu, width, height);
+                    if (gameOverContinuePressed(window)) {
+                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_2, mapa1, mundo2, map3, mapa4);
+                    }
+                } else {
+                    drawModeSwitchUnavailableMessage(menu, width, height, now);
                 }
             }
         } else if (appState == EstadoJuego::MUNDO_3) {

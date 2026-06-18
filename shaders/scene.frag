@@ -6,6 +6,7 @@ struct Material {
     float roughness;
     float checkerStrength;
     float fogAmount;
+    bool unlit;
     bool hasTexture;
     float opacity;
     sampler2D albedoMap;
@@ -62,6 +63,11 @@ void main() {
 
     if (alpha < 0.08) {
         discard;
+    }
+
+    if (uMaterial.unlit) {
+        FragColor = vec4(albedo, alpha);
+        return;
     }
 
     float checker = step(0.5, fract(vUv.x * 6.0) + fract(vUv.y * 6.0));

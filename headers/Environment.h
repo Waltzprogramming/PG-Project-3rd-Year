@@ -19,6 +19,7 @@ struct Material {
     float fogAmount{1.0f};
     std::shared_ptr<Texture2D> texture;
     float opacity{1.0f};
+    bool unlit{false};
 };
 
 struct PointLight {

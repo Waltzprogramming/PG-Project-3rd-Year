@@ -55,6 +55,8 @@ struct MenuContext {
     TextSprite estrellaLista;
     TextSprite nivelCompletado;
     TextSprite nivelCompletadoDetalle;
+    TextSprite mundo2Victoria;
+    TextSprite mundo2VictoriaDetalle;
     TextSprite juegoTerminado;
     TextSprite juegoTerminadoContinuar;
     TextSprite mapa4FinalDetalleVictoria;
