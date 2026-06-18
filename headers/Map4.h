@@ -37,7 +37,7 @@ class Map4LightManager {
 public:
     bool initialize();
     void reset(const Environment& environment, const glm::vec3& playerSpawn);
-    void update(Player& player, float timeSeconds, float deltaTime, float& energySeconds);
+    bool update(Player& player, float timeSeconds, float deltaTime, float& energySeconds);
     void render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const;
 
 private:
@@ -123,6 +123,11 @@ struct Mapa4Runtime {
     SimpleEnemyManager enemies;
     AudioPlayer music;
     AudioPlayer coinSound;
+    AudioPlayer sunSound;
+    AudioPlayer footstepSound;
+    AudioPlayer enemyShotSound;
+    AudioPlayer gameOverSound;
+    AudioPlayer levelWinSound;
     bool initialized{false};
     bool sessionActive{false};
     bool startSequencePending{false};
@@ -130,6 +135,14 @@ struct Mapa4Runtime {
     bool musicOpen{false};
     bool musicPlaying{false};
     bool coinSoundOpen{false};
+    bool sunSoundOpen{false};
+    bool footstepSoundOpen{false};
+    bool enemyShotSoundOpen{false};
+    bool gameOverSoundOpen{false};
+    bool levelWinSoundOpen{false};
+    bool gameOverSoundPlayed{false};
+    bool levelWinSoundPlayed{false};
+    double nextFootstepSoundAt{0.0};
     int lastCollectedCount{0};
     float coinCollectDelay{0.0f};
     int health{3};

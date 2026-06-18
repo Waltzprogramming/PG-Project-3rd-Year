@@ -1068,8 +1068,9 @@ void Map4LightManager::reset(const Environment& environment, const glm::vec3& pl
     }
 }
 
-void Map4LightManager::update(Player& player, float timeSeconds, float deltaTime, float& energySeconds) {
+bool Map4LightManager::update(Player& player, float timeSeconds, float deltaTime, float& energySeconds) {
     // baja la energía con el tiempo y la rellena cuando el jugador toca un sol
+    bool collectedSun = false;
     energySeconds = std::max(0.0f, energySeconds - deltaTime);
     const Bounds playerBounds = player.bounds();
     for (SunPickup& pickup : m_pickups) {
@@ -1085,8 +1086,10 @@ void Map4LightManager::update(Player& player, float timeSeconds, float deltaTime
             pickup.respawnAt = timeSeconds + Map4LightRespawnTime;
             // cada sol recarga bastante pero no deja pasar el máximo de energía
             energySeconds = std::min(Map4LightEnergyMaximum, energySeconds + Map4LightEnergyMaximum);
+            collectedSun = true;
         }
     }
+    return collectedSun;
 }
 
 void Map4LightManager::render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const {
@@ -1230,6 +1233,67 @@ glm::mat4 Map4LightManager::sunModelMatrix(const SunPickup& pickup, float timeSe
     return model;
 }
 
+void openMapa4Sfx(Mapa4Runtime& mapa4) {
+    if (!mapa4.sunSoundOpen) {
+        mapa4.sunSoundOpen = mapa4.sunSound.open(resolveFirstExistingAsset({
+            "assets/audio/sol.mp3",
+            "assets/audio/Sol.mp3"
+        }));
+        if (mapa4.sunSoundOpen) {
+            mapa4.sunSound.setVolume(920);
+        }
+    }
+
+    if (!mapa4.footstepSoundOpen) {
+        mapa4.footstepSoundOpen = mapa4.footstepSound.open(resolveFirstExistingAsset({
+            "assets/audio/pasos.mp3",
+            "assets/audio/Pasos.mp3"
+        }));
+        if (mapa4.footstepSoundOpen) {
+            mapa4.footstepSound.setVolume(360);
+        }
+    }
+
+    if (!mapa4.enemyShotSoundOpen) {
+        mapa4.enemyShotSoundOpen = mapa4.enemyShotSound.open(resolveFirstExistingAsset({
+            "assets/audio/disparo.mp3",
+            "assets/audio/Disparo.mp3"
+        }));
+        if (mapa4.enemyShotSoundOpen) {
+            mapa4.enemyShotSound.setVolume(360);
+        }
+    }
+
+    if (!mapa4.gameOverSoundOpen) {
+        mapa4.gameOverSoundOpen = mapa4.gameOverSound.open(resolveFirstExistingAsset({
+            "assets/audio/game over.mp3",
+            "assets/audio/Game Over.mp3",
+            "assets/audio/gameover.mp3"
+        }));
+        if (mapa4.gameOverSoundOpen) {
+            mapa4.gameOverSound.setVolume(860);
+        }
+    }
+
+    if (!mapa4.levelWinSoundOpen) {
+        mapa4.levelWinSoundOpen = mapa4.levelWinSound.open(resolveFirstExistingAsset({
+            "assets/audio/level win.mp3",
+            "assets/audio/Level Win.mp3",
+            "assets/audio/levelwin.mp3"
+        }));
+        if (mapa4.levelWinSoundOpen) {
+            mapa4.levelWinSound.setVolume(880);
+        }
+    }
+}
+
+void stopMapa4BackgroundMusic(Mapa4Runtime& mapa4) {
+    if (mapa4.musicOpen && mapa4.musicPlaying) {
+        mapa4.music.stop();
+        mapa4.musicPlaying = false;
+    }
+}
+
 bool isMarioMapa4Environment(const Environment& environment) {
     // revisa la ruta cargada para saber si se deben aplicar las reglas propias de mapa 4
     const std::string source = environment.levelSource();
@@ -1265,8 +1329,12 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
             mapa4.projectileCooldown = 0.0f;
             mapa4.secretCompleteKeyHeld = false;
             mapa4.jumpBufferUntil = 0.0;
+            mapa4.nextFootstepSoundAt = 0.0;
+            mapa4.gameOverSoundPlayed = false;
+            mapa4.levelWinSoundPlayed = false;
             mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
             mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
+            openMapa4Sfx(mapa4);
             currentMode = PlayMode::Mode2D;
             locked2DDepth = spawnPoint.z;
             cameraInitialized = false;
@@ -1292,6 +1360,8 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     }
 
     mapa4.coinSoundOpen = mapa4.coinSound.open(resolveFirstExistingAsset({
+        "assets/audio/coin.mp3",
+        "assets/audio/Coin.mp3",
         "assets/mapa 4/coin sound.mp3",
         "assets/mapa 4/Coin Sound.mp3",
         "assets/audio/coin sound.mp3"
@@ -1299,6 +1369,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     if (mapa4.coinSoundOpen) {
         mapa4.coinSound.setVolume(860);
     }
+    openMapa4Sfx(mapa4);
 
     mapa4.player.load(resolveAssetPath("assets/characters/deadpool.glb"));
     const glm::vec3 spawnPoint = isMarioMapa4Environment(mapa4.environment)
@@ -1327,6 +1398,9 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     mapa4.projectileCooldown = 0.0f;
     mapa4.secretCompleteKeyHeld = false;
     mapa4.jumpBufferUntil = 0.0;
+    mapa4.nextFootstepSoundAt = 0.0;
+    mapa4.gameOverSoundPlayed = false;
+    mapa4.levelWinSoundPlayed = false;
     mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
     mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
     currentMode = PlayMode::Mode2D;
@@ -1344,14 +1418,14 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
 
 void volverAlMenu(Mapa4Runtime& mapa4) {
     // limpia estados temporales del mapa antes de volver al menú principal
-    if (mapa4.musicOpen && mapa4.musicPlaying) {
-        mapa4.music.stop();
-        mapa4.musicPlaying = false;
-    }
+    stopMapa4BackgroundMusic(mapa4);
     mapa4.lastCollectedCount = 0;
     mapa4.coinCollectDelay = 0.0f;
     mapa4.projectiles.clear();
     mapa4.projectileCooldown = 0.0f;
+    mapa4.nextFootstepSoundAt = 0.0;
+    mapa4.gameOverSoundPlayed = false;
+    mapa4.levelWinSoundPlayed = false;
     mapa4.pendingHits = 0;
     mapa4.shieldActive = false;
     mapa4.shieldTimer = 0.0f;
@@ -1426,7 +1500,18 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
         appendDimensionRestrictionColliders(playerColliders, mapa4.environment, locked2DDepth);
         prepareMapa4Jump(mapa4, playerInput, playerColliders, now);
         mapa4.player.update(playerInput, playerColliders, mapa4.environment.worldMin(), mapa4.environment.worldMax(), frameDelta);
-        mapa4.lightPickups.update(mapa4.player, now, frameDelta, mapa4.lightEnergy);
+        if (mapa4.footstepSoundOpen && mapa4.player.grounded()) {
+            const glm::vec3 velocity = mapa4.player.velocity();
+            const float horizontalSpeed = glm::length(glm::vec2(velocity.x, velocity.z));
+            if (horizontalSpeed > 0.28f && now >= static_cast<float>(mapa4.nextFootstepSoundAt)) {
+                mapa4.footstepSound.playOnce();
+                mapa4.nextFootstepSoundAt = static_cast<double>(now) + 0.34;
+            }
+        }
+
+        if (mapa4.lightPickups.update(mapa4.player, now, frameDelta, mapa4.lightEnergy) && mapa4.sunSoundOpen) {
+            mapa4.sunSound.playOnce();
+        }
         mapa4.coinCollectDelay = std::max(0.0f, mapa4.coinCollectDelay - frameDelta);
         if (mapa4.coinCollectDelay <= 0.0f) {
             mapa4.mission.update(mapa4.player, now);
@@ -1437,7 +1522,17 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
         }
         mapa4.lastCollectedCount = collectedCount;
         mapa4.damageCooldown = std::max(0.0f, mapa4.damageCooldown - frameDelta);
-        if (mapa4.enemies.update(mapa4.player, mapa4.environment, frameDelta, now, mapa4.projectiles) && mapa4.damageCooldown <= 0.0f) {
+        const size_t projectileCountBeforeEnemies = mapa4.projectiles.size();
+        const bool enemyTouchedPlayer = mapa4.enemies.update(mapa4.player, mapa4.environment, frameDelta, now, mapa4.projectiles);
+        if (mapa4.enemyShotSoundOpen) {
+            for (size_t index = projectileCountBeforeEnemies; index < mapa4.projectiles.size(); ++index) {
+                if (mapa4.projectiles[index].fromEnemy) {
+                    mapa4.enemyShotSound.playOnce();
+                    break;
+                }
+            }
+        }
+        if (enemyTouchedPlayer && mapa4.damageCooldown <= 0.0f) {
             if (!mapa4.shieldActive) {
                 ++mapa4.pendingHits;
                 mapa4.damageCooldown = 0.28f;
@@ -1488,6 +1583,20 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
     }
     if (!introActive) {
         updateMapa4Projectiles(mapa4, frameDelta);
+    }
+
+    if (mapa4.gameOver && !mapa4.gameOverSoundPlayed) {
+        stopMapa4BackgroundMusic(mapa4);
+        if (mapa4.gameOverSoundOpen) {
+            mapa4.gameOverSound.playOnce();
+        }
+        mapa4.gameOverSoundPlayed = true;
+    } else if (mapa4.mission.levelComplete() && !mapa4.levelWinSoundPlayed) {
+        stopMapa4BackgroundMusic(mapa4);
+        if (mapa4.levelWinSoundOpen) {
+            mapa4.levelWinSound.playOnce();
+        }
+        mapa4.levelWinSoundPlayed = true;
     }
 
     glEnable(GL_DEPTH_TEST);
