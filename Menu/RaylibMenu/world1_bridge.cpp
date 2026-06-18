@@ -1,7 +1,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#include "../../headers/Mapa1.h"
+#include "../../headers/Map4.h"
 
 namespace {
 Mapa1 g_world1;

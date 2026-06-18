@@ -1,1661 +1,3958 @@
 #include "Map4.h"
 
-#include "GameRuntime.h"
+#include "AudioPlayer.h"
+#include "Mesh.h"
+#include "ModelLoader.h"
+#include "Shader.h"
+#include "Texture2D.h"
+
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <sstream>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace {
-// valores base del combate y de la mecánica de luz para que todo el mapa use el mismo ritmo
-constexpr float Map4ProjectileLifetime = 4.20f;
-constexpr float Map4ProjectileSpeed = 5.40f;
-constexpr float Map4ProjectileCooldown = 0.34f;
-constexpr float Map4ProjectileLength = 0.86f;
-constexpr float Map4ProjectileMaxDistance = 8.40f;
-constexpr float Map4EnemyProjectileSpeed = 2.05f;
-constexpr float Map4EnemyProjectileCooldown = 2.10f;
-constexpr float Map4EnemyDetectionRange = 4.6f;
-constexpr float Map4EnemyProjectileRange = 5.2f;
-constexpr int Map4EnemyMaximumHealth = 3;
-constexpr float Map4LightEnergyMaximum = 20.0f;
-constexpr float Map4LightRespawnTime = 10.0f;
-constexpr size_t Map4SunPickupTotal = 5;
-constexpr float Map4JumpBufferSeconds = 0.16f;
+    constexpr float MapScale = 0.0100f;
+    const glm::vec3 MapCenter(1336.45f, 0.0f, -200.0f);
+    constexpr float MinimumWalkableNormal = 0.35f;
+    constexpr float MinimumWalkableHeight = -1.08f;
+    constexpr float TriangleMargin = 0.012f;
+    constexpr float TerrainCellSize = 1.50f;
+    constexpr float LandingMargin = 0.09f;
+    constexpr float StepHeightWithoutJump = 0.12f;
+    constexpr int StartingLives = 3;
+    constexpr int PlayerMaximumHealth = 3;
+    constexpr int EnemyMaximumHealth = 3;
+    constexpr int TotalCoins = 10;
+    constexpr float DeathHeight = -4.0f;
+    constexpr float MoveSpeed2D = 1.20f;
+    constexpr float MoveSpeed3D = 1.28f;
+    constexpr float JumpSpeed = 6.25f;
+    constexpr float Gravity = 9.20f;
+    constexpr float EnemyDetectionRange = 9.50f;
+    constexpr float EnemyAttackRange = 4.60f;
+    constexpr float EnemyStopDistance = 1.10f;
+    constexpr float EnemyMoveSpeed = 0.82f;
+    constexpr float EnemyMaximumStepHeight = 0.24f;
+    constexpr float EnemyShotCooldown = 2.80f;
+    constexpr float EnemyShotSpeed = 3.20f;
+    constexpr float PlayerShotSpeed = 5.40f;
+    constexpr float ChargedPlayerShotSpeed = 6.20f;
+    constexpr float ProjectileLifetime = 4.20f;
+    constexpr float PlayerInvulnerabilityTime = 1.25f;
+    constexpr float PlayerAttackCooldown = 0.38f;
+    constexpr float PlayerChargeTime = 1.65f;
+    constexpr float ParryWindow = 0.50f;
+    constexpr float ParryEffectTime = 0.34f;
+    constexpr float ProjectileSwordLength = 0.72f;
+    constexpr float CornProjectileLength = 0.82f;
+    constexpr float PlayerSpriteHeight = 1.15f;
+    constexpr float CameraPlayerCenterOffset = PlayerSpriteHeight * 0.5f;
+    constexpr float PlayerRunFramesPerSecond = 12.0f;
+    constexpr float PlayerJumpFramesPerSecond = 12.0f;
+    constexpr float PlayerAttackFramesPerSecond = 14.0f;
+    constexpr float PlayerBlockFramesPerSecond = 14.0f;
+    constexpr float PlayerEntranceFramesPerSecond = 11.0f;
+    constexpr float PlayerDeathFramesPerSecond = 7.0f;
+    constexpr float PlayerTransitionFramesPerSecond = 16.0f;
+    constexpr float LevelIntroFarHoldSeconds = 2.0f;
+    constexpr float LevelIntroZoomSeconds = 1.35f;
+    constexpr float BangbooPlayerHeight = 1.12f;
+    constexpr float BangbooWalkSampleRate = 18.0f;
+    constexpr int BangbooMinimumWalkFrames = 8;
+    constexpr int BangbooMaximumWalkFrames = 48;
+    constexpr float BangbooYawOffsetDegrees = 90.0f;
+    constexpr int EnemySpawnCount = 11;
+    constexpr int SpectralGemRequirement = 5;
+    constexpr int DamageParryGemRequirement = 3;
+    constexpr int MaximumStoredGems = 99;
+    constexpr float GemPickupRadius = 0.62f;
+    constexpr float GemPickupVerticalRange = 0.82f;
+    constexpr float SpectralAnchorPromptRange = 0.95f;
+    constexpr float SpectralAnchorVerticalRange = 1.35f;
+    constexpr float VanPromptRange = 3.25f;
+    constexpr float VanPromptVerticalRange = 4.80f;
+    constexpr float VanRenderRangeX = 30.0f;
+    constexpr float VanRenderRangeZ = 30.0f;
+    constexpr float VanModelDisplaySize = 7.80f;
+    constexpr float GemModelDisplaySize = 0.62f;
+    constexpr float PlayerSpawnDistanceFromVan = 2.25f;
+    constexpr float SpectralStepCooldown = 0.75f;
+    constexpr float SpectralHintTime = 3.8f;
+    constexpr size_t NormalRouteFirstPlatformIndex = 8;
+    constexpr size_t SpectralAnchorPlatformIndex = 11;
+    constexpr size_t FirstSpectralIslandIndex = 12;
+    constexpr size_t FinalSpectralIslandIndex = 13;
+    constexpr size_t VanRouteFirstPlatformIndex = 14;
+    constexpr size_t VanIslandPlatformIndex = 18;
 
-bool map4BoundsIntersect(const Bounds& a, const Bounds& b) {
-    // chequeo simple de cajas para saber si dos cosas del mapa se están tocando
-    const glm::vec3 delta = glm::abs(a.center - b.center);
-    const glm::vec3 total = a.halfExtent + b.halfExtent;
-    return delta.x < total.x && delta.y < total.y && delta.z < total.z;
-}
+    struct TerrainTriangle {
+        glm::vec3 a{ 0.0f };
+        glm::vec3 b{ 0.0f };
+        glm::vec3 c{ 0.0f };
+        float minX{ 0.0f };
+        float maxX{ 0.0f };
+        float minZ{ 0.0f };
+        float maxZ{ 0.0f };
+        const std::string* name{ nullptr };
+    };
 
-bool map4FloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float& floorY) {
-    bool found = false;
-    float bestScore = std::numeric_limits<float>::max();
-    for (const Bounds& collider : colliders) {
-        const float top = collider.center.y + collider.halfExtent.y;
-        const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
-        const bool floorLike = collider.halfExtent.y <= 0.40f && area >= 0.18f;
-        const bool inside =
-            x >= collider.center.x - collider.halfExtent.x - 0.08f &&
-            x <= collider.center.x + collider.halfExtent.x + 0.08f &&
-            z >= collider.center.z - collider.halfExtent.z - 0.08f &&
-            z <= collider.center.z + collider.halfExtent.z + 0.08f;
-        if (!floorLike || !inside) {
-            continue;
+    enum class PlatformShape {
+        Rectangle,
+        Ellipse
+    };
+
+    struct ExtraPlatform {
+        PlatformShape shape{ PlatformShape::Rectangle };
+        float minX{ 0.0f };
+        float maxX{ 0.0f };
+        float minZ{ 0.0f };
+        float maxZ{ 0.0f };
+        float height{ 0.0f };
+        float thickness{ 0.24f };
+        glm::vec4 color{ 1.0f };
+        const char* name{ nullptr };
+        bool visible{ true };
+        bool projectIn2D{ false };
+    };
+
+    struct Coin {
+        glm::vec3 position{ 0.0f };
+        bool collected{ false };
+        float phase{ 0.0f };
+        bool projectIn2D{ false };
+    };
+
+    struct Star {
+        glm::vec3 position{ 0.0f };
+        bool active{ false };
+        bool projectIn2D{ false };
+    };
+
+    struct SpectralAnchor {
+        glm::vec3 origin{ 0.0f };
+        glm::vec3 target{ 0.0f };
+        bool projectIn2D{ true };
+        float phase{ 0.0f };
+    };
+
+    struct DroppedGem {
+        glm::vec3 position{ 0.0f };
+        float phase{ 0.0f };
+        bool projectIn2D{ true };
+    };
+
+    enum class EnemyState {
+        Idle,
+        Chase,
+        Attack,
+        Hurt,
+        Dying
+    };
+
+    struct DemonEnemy {
+        glm::vec3 position{ 0.0f };
+        glm::vec3 spawnPosition{ 0.0f };
+        EnemyState state{ EnemyState::Idle };
+        float shotCooldown{ 0.0f };
+        float animationTime{ 0.0f };
+        float hurtTime{ 0.0f };
+        int health{ EnemyMaximumHealth };
+        bool facingLeft{ false };
+        bool alive{ true };
+    };
+
+    struct Projectile {
+        glm::vec3 position{ 0.0f };
+        glm::vec3 velocity{ 0.0f };
+        float lifetime{ ProjectileLifetime };
+        bool fromPlayer{ false };
+        int damage{ 1 };
+        bool charged{ false };
+        bool cornVisual{ false };
+    };
+
+    struct AtlasFrame {
+        int x{ 0 };
+        int y{ 0 };
+        int width{ 0 };
+        int height{ 0 };
+    };
+
+    struct MapMaterial {
+        glm::vec4 color{ 1.0f };
+        std::shared_ptr<Texture2D> texture;
+    };
+
+    struct WorldModel {
+        LoadedModel model;
+        std::vector<MapMaterial> materials;
+    };
+
+    struct AnimatedRuntimeModel {
+        std::vector<WorldModel> frames;
+        glm::vec3 minBounds{ 0.0f };
+        glm::vec3 maxBounds{ 0.0f };
+        float framesPerSecond{ BangbooWalkSampleRate };
+
+        bool valid() const {
+            return !frames.empty() && !frames.front().model.meshes.empty();
         }
+    };
 
-        const float score = std::abs(top - preferredY);
-        if (score < bestScore) {
-            bestScore = score;
-            floorY = top;
-            found = true;
-        }
+    glm::vec3 toGlmVector(const aiVector3D& value) {
+        return { value.x, value.y, value.z };
     }
-    return found;
-}
 
-std::vector<Bounds> buildMapa4PlayerColliders(const Environment& environment, float lockedDepth, PlayMode mode) {
-    const std::vector<Bounds>& rawColliders = environment.collisionPreview();
-    const glm::vec3 worldMin = environment.worldMin();
-    std::vector<Bounds> filtered;
-    filtered.reserve(rawColliders.size());
+    glm::vec4 toGlmColor(const aiColor4D& value) {
+        return { value.r, value.g, value.b, value.a };
+    }
 
-    for (const Bounds& collider : rawColliders) {
-        const float width = collider.halfExtent.x * 2.0f;
-        const float height = collider.halfExtent.y * 2.0f;
-        const float depth = collider.halfExtent.z * 2.0f;
-        const float area = width * depth;
-        const float top = collider.center.y + collider.halfExtent.y;
-        const bool floorLike = collider.halfExtent.y <= 0.40f && area >= 0.18f;
-        const bool majorBlocker = height >= 1.15f && (width >= 0.38f || depth >= 0.38f);
-        const bool largeLowObstacle = height >= 0.58f && area >= 1.35f;
-        const bool playableHeight = top >= worldMin.y - 0.35f;
+    std::string lowercase(std::string text) {
+        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char value) {
+            return static_cast<char>(std::tolower(value));
+            });
+        return text;
+    }
 
-        if (!playableHeight) {
-            continue;
+    const aiAnimation* selectWalkAnimation(const aiScene* scene) {
+        if (scene == nullptr || scene->mNumAnimations == 0) {
+            return nullptr;
         }
 
-        if (mode == PlayMode::Mode2D) {
-            const bool nearLockedPlane =
-                lockedDepth >= collider.center.z - collider.halfExtent.z - 0.42f &&
-                lockedDepth <= collider.center.z + collider.halfExtent.z + 0.42f;
-            if (!nearLockedPlane) {
+        for (unsigned int i = 0; i < scene->mNumAnimations; ++i) {
+            const aiAnimation* animation = scene->mAnimations[i];
+            if (animation == nullptr) {
                 continue;
             }
+
+            const std::string name = lowercase(animation->mName.C_Str());
+            if (name.find("walk") != std::string::npos ||
+                name.find("run") != std::string::npos ||
+                name.find("move") != std::string::npos) {
+                return animation;
+            }
         }
 
-        if (floorLike || majorBlocker || largeLowObstacle) {
-            filtered.push_back(collider);
+        return scene->mAnimations[0];
+    }
+
+    float interpolationFactor(double time, double current, double next) {
+        const double span = next - current;
+        if (span <= 0.000001) {
+            return 0.0f;
+        }
+        return static_cast<float>(std::clamp((time - current) / span, 0.0, 1.0));
+    }
+
+    unsigned int keyBefore(double time, const aiVectorKey* keys, unsigned int count) {
+        if (count <= 1) {
+            return 0;
+        }
+
+        for (unsigned int i = 0; i + 1 < count; ++i) {
+            if (time < keys[i + 1].mTime) {
+                return i;
+            }
+        }
+        return count - 2;
+    }
+
+    unsigned int keyBefore(double time, const aiQuatKey* keys, unsigned int count) {
+        if (count <= 1) {
+            return 0;
+        }
+
+        for (unsigned int i = 0; i + 1 < count; ++i) {
+            if (time < keys[i + 1].mTime) {
+                return i;
+            }
+        }
+        return count - 2;
+    }
+
+    aiVector3D sampleVectorKey(double time, const aiVectorKey* keys, unsigned int count, const aiVector3D& fallback) {
+        if (keys == nullptr || count == 0) {
+            return fallback;
+        }
+        if (count == 1) {
+            return keys[0].mValue;
+        }
+
+        const unsigned int index = keyBefore(time, keys, count);
+        const aiVectorKey& current = keys[index];
+        const aiVectorKey& next = keys[index + 1];
+        const float factor = interpolationFactor(time, current.mTime, next.mTime);
+        return current.mValue + (next.mValue - current.mValue) * factor;
+    }
+
+    aiQuaternion sampleRotationKey(double time, const aiQuatKey* keys, unsigned int count, const aiQuaternion& fallback) {
+        if (keys == nullptr || count == 0) {
+            return fallback;
+        }
+        if (count == 1) {
+            return keys[0].mValue;
+        }
+
+        const unsigned int index = keyBefore(time, keys, count);
+        const aiQuatKey& current = keys[index];
+        const aiQuatKey& next = keys[index + 1];
+        const float factor = interpolationFactor(time, current.mTime, next.mTime);
+        aiQuaternion result;
+        aiQuaternion::Interpolate(result, current.mValue, next.mValue, factor);
+        result.Normalize();
+        return result;
+    }
+
+    aiMatrix4x4 composeTransform(const aiVector3D& translation, const aiQuaternion& rotation, const aiVector3D& scale) {
+        aiMatrix4x4 translationMatrix;
+        aiMatrix4x4::Translation(translation, translationMatrix);
+        const aiMatrix4x4 rotationMatrix(rotation.GetMatrix());
+        aiMatrix4x4 scaleMatrix;
+        aiMatrix4x4::Scaling(scale, scaleMatrix);
+        return translationMatrix * rotationMatrix * scaleMatrix;
+    }
+
+    aiMatrix4x4 sampledNodeTransform(const aiNode* node, const aiNodeAnim* channel, double animationTick) {
+        if (node == nullptr || channel == nullptr) {
+            return node != nullptr ? node->mTransformation : aiMatrix4x4();
+        }
+
+        aiVector3D fallbackScale;
+        aiQuaternion fallbackRotation;
+        aiVector3D fallbackTranslation;
+        node->mTransformation.Decompose(fallbackScale, fallbackRotation, fallbackTranslation);
+
+        const aiVector3D translation = sampleVectorKey(
+            animationTick,
+            channel->mPositionKeys,
+            channel->mNumPositionKeys,
+            fallbackTranslation);
+        const aiQuaternion rotation = sampleRotationKey(
+            animationTick,
+            channel->mRotationKeys,
+            channel->mNumRotationKeys,
+            fallbackRotation);
+        const aiVector3D scale = sampleVectorKey(
+            animationTick,
+            channel->mScalingKeys,
+            channel->mNumScalingKeys,
+            fallbackScale);
+
+        return composeTransform(translation, rotation, scale);
+    }
+
+    void collectAnimationChannels(const aiAnimation* animation, std::unordered_map<std::string, const aiNodeAnim*>& channels) {
+        channels.clear();
+        if (animation == nullptr) {
+            return;
+        }
+
+        channels.reserve(animation->mNumChannels);
+        for (unsigned int i = 0; i < animation->mNumChannels; ++i) {
+            const aiNodeAnim* channel = animation->mChannels[i];
+            if (channel != nullptr) {
+                channels.emplace(channel->mNodeName.C_Str(), channel);
+            }
         }
     }
 
-    return filtered;
-}
-
-void prepareMapa4Jump(Mapa4Runtime& mapa4, PlayerInput& input, const std::vector<Bounds>& colliders, float timeSeconds) {
-    if (input.jumpPressed) {
-        mapa4.jumpBufferUntil = static_cast<double>(timeSeconds) + Map4JumpBufferSeconds;
-    }
-
-    if (timeSeconds > static_cast<float>(mapa4.jumpBufferUntil)) {
-        input.jumpPressed = false;
-        return;
-    }
-
-    input.jumpPressed = true;
-    if (mapa4.player.grounded()) {
-        mapa4.jumpBufferUntil = 0.0;
-        return;
-    }
-
-    float floorY = mapa4.player.position().y;
-    if (!map4FloorAt(colliders, mapa4.player.position().x, mapa4.player.position().z, mapa4.player.position().y, floorY)) {
-        input.jumpPressed = false;
-        return;
-    }
-
-    const float distanceToFloor = mapa4.player.position().y - floorY;
-    if (distanceToFloor < -0.06f || distanceToFloor > 0.30f) {
-        input.jumpPressed = false;
-        return;
-    }
-
-    PlayerInput settleInput = input;
-    settleInput.jumpPressed = false;
-    mapa4.player.update(settleInput, colliders, mapa4.environment.worldMin(), mapa4.environment.worldMax(), 1.0f / 60.0f);
-    if (!mapa4.player.grounded()) {
-        input.jumpPressed = false;
-        return;
-    }
-
-    mapa4.player.update(input, colliders, mapa4.environment.worldMin(), mapa4.environment.worldMax(), 0.0f);
-    input.jumpPressed = false;
-    mapa4.jumpBufferUntil = 0.0;
-}
-
-glm::vec3 findMarioMapa4Spawn(const Environment& environment) {
-    // busca un piso estable del lado izquierdo para que el jugador aparezca en una zona segura
-    const auto& colliders = environment.collisionPreview();
-    const glm::vec3 worldMin = environment.worldMin();
-    const glm::vec3 worldMax = environment.worldMax();
-    glm::vec3 best{worldMin.x + 2.5f, worldMin.y + 1.2f, (worldMin.z + worldMax.z) * 0.5f};
-    float bestScore = std::numeric_limits<float>::max();
-
-    for (const Bounds& collider : colliders) {
-        const float top = collider.center.y + collider.halfExtent.y;
-        const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
-        const bool floorLike = collider.halfExtent.y <= 0.35f && area >= 0.30f;
-        if (!floorLike) {
-            continue;
-        }
-        if (isMarioMapa4Environment(environment) && top < worldMin.y + 0.55f) {
-            continue;
+    void collectNodeTransforms(
+        const aiNode* node,
+        const aiMatrix4x4& parentTransform,
+        double animationTick,
+        const std::unordered_map<std::string, const aiNodeAnim*>& channels,
+        std::unordered_map<std::string, aiMatrix4x4>& nodeTransforms) {
+        if (node == nullptr) {
+            return;
         }
 
-        const bool leftSide = collider.center.x <= worldMin.x + (worldMax.x - worldMin.x) * 0.22f;
-        const bool validHeight = top >= worldMin.y - 0.2f && top <= worldMin.y + 4.0f;
-        if (!leftSide || !validHeight) {
-            continue;
-        }
+        const std::string nodeName = node->mName.C_Str();
+        const auto channel = channels.find(nodeName);
+        const aiMatrix4x4 localTransform = sampledNodeTransform(
+            node,
+            channel != channels.end() ? channel->second : nullptr,
+            animationTick);
+        const aiMatrix4x4 globalTransform = parentTransform * localTransform;
+        nodeTransforms[nodeName] = globalTransform;
 
-        glm::vec3 candidate = collider.center;
-        candidate.y = top + 0.05f;
-        // le da prioridad a plataformas cerca de la zona de inicio para evitar spawns raros
-        const float score = std::abs(candidate.x - (worldMin.x + 2.4f)) + std::abs(candidate.y - (worldMin.y + 0.8f)) * 0.5f;
-        if (score < bestScore) {
-            bestScore = score;
-            best = candidate;
+        for (unsigned int i = 0; i < node->mNumChildren; ++i) {
+            collectNodeTransforms(node->mChildren[i], globalTransform, animationTick, channels, nodeTransforms);
         }
     }
 
-    return best;
-}
-
-Mesh createMapa4ShieldRingMesh() {
-    // arma un aro sencillo para el escudo sin depender de un modelo extra
-    constexpr int segments = 48;
-    constexpr float outerRadius = 1.0f;
-    constexpr float innerRadius = 0.88f;
-    std::vector<Vertex> vertices;
-    std::vector<unsigned int> indices;
-    vertices.reserve((segments + 1) * 2);
-    indices.reserve(segments * 6);
-
-    for (int index = 0; index <= segments; ++index) {
-        const float t = static_cast<float>(index) / static_cast<float>(segments);
-        const float angle = t * glm::two_pi<float>();
-        const float c = std::cos(angle);
-        const float s = std::sin(angle);
-        Vertex outer{};
-        outer.position = {c * outerRadius, s * outerRadius, 0.0f};
-        outer.normal = {0.0f, 0.0f, 1.0f};
-        outer.uv = {t, 1.0f};
-        outer.color = glm::vec4(1.0f);
-        vertices.push_back(outer);
-
-        Vertex inner{};
-        inner.position = {c * innerRadius, s * innerRadius, 0.0f};
-        inner.normal = {0.0f, 0.0f, 1.0f};
-        inner.uv = {t, 0.0f};
-        inner.color = glm::vec4(1.0f);
-        vertices.push_back(inner);
+    aiVector3D transformNormal(const aiMatrix4x4& matrix, const aiVector3D& normal) {
+        aiMatrix3x3 normalMatrix(matrix);
+        normalMatrix.Inverse();
+        normalMatrix.Transpose();
+        aiVector3D transformed = normalMatrix * normal;
+        if (transformed.SquareLength() > 0.000001f) {
+            transformed.Normalize();
+        }
+        return transformed;
     }
 
-    for (int index = 0; index < segments; ++index) {
-        const unsigned int root = static_cast<unsigned int>(index * 2);
-        indices.push_back(root + 0);
-        indices.push_back(root + 1);
-        indices.push_back(root + 2);
-        indices.push_back(root + 2);
-        indices.push_back(root + 1);
-        indices.push_back(root + 3);
-    }
-
-    Mesh mesh;
-    mesh.upload(vertices, indices);
-    return mesh;
-}
-
-void updateMapa4Projectiles(Mapa4Runtime& mapa4, float dt) {
-    // mueve todos los proyectiles y decide cuándo pegan o cuándo se deben borrar
-    for (size_t i = 0; i < mapa4.projectiles.size();) {
-        Mapa4Projectile& projectile = mapa4.projectiles[i];
-        const glm::vec3 frameStep = projectile.velocity * dt;
-        projectile.position += frameStep;
-        projectile.traveledDistance += glm::length(frameStep);
-        projectile.lifetime -= dt;
-
-        if (!projectile.fromEnemy) {
-            projectile.velocity *= std::max(0.0f, 1.0f - dt * 0.22f);
+    LoadedMesh buildSampledMesh(
+        const aiMesh* source,
+        const aiMatrix4x4& meshNodeTransform,
+        const aiMatrix4x4& rootInverseTransform,
+        const std::unordered_map<std::string, aiMatrix4x4>& nodeTransforms) {
+        LoadedMesh loaded;
+        if (source == nullptr) {
+            return loaded;
         }
 
-        const glm::vec3 worldMin = mapa4.environment.worldMin();
-        const glm::vec3 worldMax = mapa4.environment.worldMax();
-        const bool outsideWorld =
-            projectile.position.x < worldMin.x - 2.0f ||
-            projectile.position.x > worldMax.x + 2.0f ||
-            projectile.position.y < worldMin.y - 2.0f ||
-            projectile.position.y > worldMax.y + 8.0f ||
-            projectile.position.z < worldMin.z - 2.0f ||
-            projectile.position.z > worldMax.z + 2.0f;
+        loaded.name = source->mName.C_Str();
+        loaded.materialIndex = source->mMaterialIndex;
+        loaded.minBounds = glm::vec3(std::numeric_limits<float>::max());
+        loaded.maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
 
-        bool remove = projectile.lifetime <= 0.0f || outsideWorld || projectile.traveledDistance >= Map4ProjectileMaxDistance;
-        if (!remove) {
-            if (projectile.fromEnemy) {
-                // los tiros enemigos no quitan vida de golpe sino que suman impactos
-                const glm::vec3 playerCenter = mapa4.player.bounds().center;
-                const bool hitPlayer =
-                    std::abs(projectile.position.x - playerCenter.x) <= 0.52f &&
-                    std::abs(projectile.position.y - playerCenter.y) <= 0.88f &&
-                    std::abs(projectile.position.z - playerCenter.z) <= 0.52f;
-                if (hitPlayer) {
-                    remove = true;
-                    if (!mapa4.shieldActive) {
-                        ++mapa4.pendingHits;
-                        if (mapa4.pendingHits >= 2) {
-                            mapa4.pendingHits = 0;
-                            mapa4.health = std::max(0, mapa4.health - 1);
-                            if (mapa4.health <= 0) {
-                                mapa4.gameOver = true;
-                            }
-                        }
+        std::vector<aiVector3D> positions(source->mNumVertices, aiVector3D(0.0f, 0.0f, 0.0f));
+        std::vector<aiVector3D> normals(source->mNumVertices, aiVector3D(0.0f, 0.0f, 0.0f));
+        std::vector<float> weights(source->mNumVertices, 0.0f);
+
+        if (source->HasBones()) {
+            for (unsigned int boneIndex = 0; boneIndex < source->mNumBones; ++boneIndex) {
+                const aiBone* bone = source->mBones[boneIndex];
+                if (bone == nullptr) {
+                    continue;
+                }
+
+                const auto nodeTransform = nodeTransforms.find(bone->mName.C_Str());
+                const aiMatrix4x4 boneGlobalTransform = nodeTransform != nodeTransforms.end()
+                    ? nodeTransform->second
+                    : aiMatrix4x4();
+                const aiMatrix4x4 finalTransform = rootInverseTransform * boneGlobalTransform * bone->mOffsetMatrix;
+
+                for (unsigned int weightIndex = 0; weightIndex < bone->mNumWeights; ++weightIndex) {
+                    const aiVertexWeight& weight = bone->mWeights[weightIndex];
+                    if (weight.mVertexId >= source->mNumVertices || weight.mWeight <= 0.0f) {
+                        continue;
                     }
-                }
-            } else {
-                // los tiros del jugador revisan con el gestor de enemigos si hubo impacto
-                remove = mapa4.enemies.damageEnemyAt(projectile.position, 0.58f, 0.72f, projectile.damage);
-            }
-        }
 
-        if (remove) {
-            mapa4.projectiles.erase(mapa4.projectiles.begin() + static_cast<std::ptrdiff_t>(i));
-        } else {
-            ++i;
-        }
-    }
-}
-
-void renderMapa4Projectiles(const Shader& shader, const std::vector<Mapa4Projectile>& projectiles, const glm::vec3& cameraPosition, float timeSeconds) {
-    // dibuja los disparos usando la misma malla base pero con materiales distintos
-    static Mesh arrowMesh = Mesh::cylinder(18, 1.0f, 0.08f);
-    static Mesh swordBladeMesh = Mesh::cube();
-    static Mesh swordGuardMesh = Mesh::cube();
-    static Mesh swordPommelMesh = Mesh::cube();
-    static Mesh swordAuraMesh = Mesh::cylinder(28, 1.0f, 0.14f);
-    static Mesh enemyLaserCoreMesh = Mesh::cylinder(28, 1.0f, 0.055f);
-    static Mesh enemyLaserGlowMesh = Mesh::cylinder(36, 1.0f, 0.15f);
-    static Mesh enemyLaserPulseMesh = Mesh::cylinder(32, 1.0f, 0.24f);
-    Material playerBladeMaterial;
-    playerBladeMaterial.baseColor = {0.24f, 0.80f, 1.00f};
-    playerBladeMaterial.emissive = {0.12f, 0.36f, 0.58f};
-    playerBladeMaterial.roughness = 0.10f;
-    playerBladeMaterial.fogAmount = 0.04f;
-    Material playerCoreMaterial;
-    playerCoreMaterial.baseColor = {0.98f, 1.00f, 1.00f};
-    playerCoreMaterial.emissive = {0.34f, 0.46f, 0.68f};
-    playerCoreMaterial.roughness = 0.03f;
-    playerCoreMaterial.fogAmount = 0.02f;
-    Material playerGuardMaterial;
-    playerGuardMaterial.baseColor = {0.18f, 0.16f, 0.42f};
-    playerGuardMaterial.emissive = {0.08f, 0.05f, 0.18f};
-    playerGuardMaterial.roughness = 0.26f;
-    playerGuardMaterial.fogAmount = 0.08f;
-    Material playerAuraMaterial;
-    playerAuraMaterial.baseColor = {0.56f, 0.36f, 1.00f};
-    playerAuraMaterial.emissive = {0.16f, 0.22f, 0.60f};
-    playerAuraMaterial.roughness = 0.02f;
-    playerAuraMaterial.fogAmount = 0.02f;
-    playerAuraMaterial.opacity = 0.26f;
-    Material playerEdgeMaterial;
-    playerEdgeMaterial.baseColor = {0.72f, 0.94f, 1.00f};
-    playerEdgeMaterial.emissive = {0.24f, 0.44f, 0.70f};
-    playerEdgeMaterial.roughness = 0.04f;
-    playerEdgeMaterial.fogAmount = 0.02f;
-    Material enemyLaserCoreMaterial;
-    enemyLaserCoreMaterial.baseColor = {1.00f, 0.84f, 0.78f};
-    enemyLaserCoreMaterial.emissive = {0.70f, 0.20f, 0.14f};
-    enemyLaserCoreMaterial.roughness = 0.04f;
-    enemyLaserCoreMaterial.fogAmount = 0.03f;
-    Material enemyLaserGlowMaterial;
-    enemyLaserGlowMaterial.baseColor = {1.00f, 0.05f, 0.04f};
-    enemyLaserGlowMaterial.emissive = {0.50f, 0.02f, 0.03f};
-    enemyLaserGlowMaterial.roughness = 0.08f;
-    enemyLaserGlowMaterial.fogAmount = 0.04f;
-    enemyLaserGlowMaterial.opacity = 0.38f;
-    Material enemyLaserPulseMaterial;
-    enemyLaserPulseMaterial.baseColor = {1.00f, 0.18f, 0.10f};
-    enemyLaserPulseMaterial.emissive = {0.62f, 0.04f, 0.02f};
-    enemyLaserPulseMaterial.roughness = 0.02f;
-    enemyLaserPulseMaterial.fogAmount = 0.03f;
-    enemyLaserPulseMaterial.opacity = 0.24f;
-
-    for (const Mapa4Projectile& projectile : projectiles) {
-        if (glm::length(projectile.position - cameraPosition) > 22.0f) {
-            continue;
-        }
-
-        glm::vec3 direction = glm::length(projectile.velocity) > 0.0001f
-            ? glm::normalize(projectile.velocity)
-            : glm::vec3(1.0f, 0.0f, 0.0f);
-        const float yaw = std::atan2(direction.x, direction.z);
-        const float pitch = -std::atan2(direction.y, std::max(std::sqrt(direction.x * direction.x + direction.z * direction.z), 0.0001f));
-
-        glm::mat4 model(1.0f);
-        model = glm::translate(model, projectile.position);
-        model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::rotate(model, pitch, glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::rotate(model, glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
-        shader.use();
-        shader.setFloat("uTime", timeSeconds);
-        if (projectile.fromEnemy) {
-            const float pulse = 0.88f + std::sin(timeSeconds * 18.0f + projectile.traveledDistance * 2.4f) * 0.12f;
-            const float flicker = 0.82f + std::abs(std::sin(timeSeconds * 26.0f + projectile.position.x * 3.0f)) * 0.18f;
-            const float beamLength = Map4ProjectileLength * 1.28f;
-
-            Material pulseMaterial = enemyLaserPulseMaterial;
-            pulseMaterial.opacity *= pulse;
-            pulseMaterial.emissive *= flicker;
-            const glm::mat4 pulseModel = model
-                * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, beamLength * 0.06f, 0.0f))
-                * glm::scale(glm::mat4(1.0f), glm::vec3(0.24f * pulse, beamLength * 0.92f, 0.24f * pulse));
-            shader.setMat4("uModel", pulseModel);
-            bindSceneMaterial(shader, pulseMaterial);
-            enemyLaserPulseMesh.draw();
-
-            const glm::mat4 glowModel = model
-                * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, beamLength * 0.08f, 0.0f))
-                * glm::scale(glm::mat4(1.0f), glm::vec3(0.15f, beamLength, 0.15f));
-            shader.setMat4("uModel", glowModel);
-            bindSceneMaterial(shader, enemyLaserGlowMaterial);
-            enemyLaserGlowMesh.draw();
-
-            Material coreMaterial = enemyLaserCoreMaterial;
-            coreMaterial.emissive *= flicker;
-            const glm::mat4 coreModel = model
-                * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, beamLength * 0.10f, 0.0f))
-                * glm::scale(glm::mat4(1.0f), glm::vec3(0.055f, beamLength * 1.04f, 0.055f));
-            shader.setMat4("uModel", coreModel);
-            bindSceneMaterial(shader, coreMaterial);
-            enemyLaserCoreMesh.draw();
-
-            const glm::mat4 hotTipModel = model
-                * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, beamLength * 1.14f, 0.0f))
-                * glm::scale(glm::mat4(1.0f), glm::vec3(0.16f, 0.12f, 0.16f));
-            shader.setMat4("uModel", hotTipModel);
-            bindSceneMaterial(shader, enemyLaserGlowMaterial);
-            arrowMesh.draw();
-            continue;
-        }
-
-        const float shimmer = 0.92f + std::sin(timeSeconds * 15.0f + projectile.position.x * 2.5f) * 0.08f;
-        const float travelRatio = std::clamp(projectile.traveledDistance / Map4ProjectileMaxDistance, 0.0f, 1.0f);
-        const float sizeFade = 1.0f - travelRatio * 0.18f;
-        const float spin = std::sin(timeSeconds * 18.0f + projectile.traveledDistance * 1.2f) * 0.16f;
-        glm::mat4 spinningModel = model;
-        spinningModel = glm::rotate(spinningModel, spin, glm::vec3(0.0f, 1.0f, 0.0f));
-
-        const glm::mat4 auraModel = spinningModel
-            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.16f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.14f, Map4ProjectileLength * 1.04f, 0.12f) * sizeFade);
-        shader.setMat4("uModel", auraModel);
-        bindSceneMaterial(shader, playerAuraMaterial);
-        swordAuraMesh.draw();
-
-        Material shimmeringBlade = playerBladeMaterial;
-        shimmeringBlade.emissive *= shimmer;
-        const glm::mat4 bladeModel = spinningModel
-            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.18f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.08f, Map4ProjectileLength * 0.88f, 0.038f) * sizeFade);
-        shader.setMat4("uModel", bladeModel);
-        bindSceneMaterial(shader, shimmeringBlade);
-        swordBladeMesh.draw();
-
-        const glm::mat4 coreModel = spinningModel
-            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.20f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.026f, Map4ProjectileLength * 0.82f, 0.016f) * sizeFade);
-        shader.setMat4("uModel", coreModel);
-        bindSceneMaterial(shader, playerCoreMaterial);
-        swordBladeMesh.draw();
-
-        const glm::mat4 edgeModel = spinningModel
-            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, Map4ProjectileLength * 0.34f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.034f, Map4ProjectileLength * 0.18f, 0.020f) * sizeFade);
-        shader.setMat4("uModel", edgeModel);
-        bindSceneMaterial(shader, playerEdgeMaterial);
-        swordPommelMesh.draw();
-
-        const glm::mat4 guardModel = spinningModel
-            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -Map4ProjectileLength * 0.18f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.28f, 0.028f, 0.07f) * sizeFade);
-        shader.setMat4("uModel", guardModel);
-        bindSceneMaterial(shader, playerGuardMaterial);
-        swordGuardMesh.draw();
-
-        const glm::mat4 pommelModel = spinningModel
-            * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -Map4ProjectileLength * 0.30f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(0.048f, 0.10f, 0.048f) * sizeFade);
-        shader.setMat4("uModel", pommelModel);
-        bindSceneMaterial(shader, playerCoreMaterial);
-        swordPommelMesh.draw();
-    }
-}
-
-void renderMapa4Shield(const Shader& shader, const Player& player, float timeSeconds) {
-    // el escudo usa varios aros cruzados para verse claro sin tapar al personaje
-    static Mesh shieldRing = createMapa4ShieldRingMesh();
-
-    const float pulse = 0.96f + 0.04f * std::sin(timeSeconds * 9.0f);
-    Material ringMaterial;
-    ringMaterial.baseColor = {0.22f, 1.00f, 0.94f};
-    ringMaterial.emissive = {0.02f, 0.08f, 0.08f};
-    ringMaterial.roughness = 0.95f;
-    ringMaterial.fogAmount = 0.02f;
-    ringMaterial.opacity = 0.16f;
-
-    const glm::vec3 center = player.position() + glm::vec3(0.0f, 0.58f, 0.0f);
-    glm::mat4 frontRing(1.0f);
-    frontRing = glm::translate(frontRing, center);
-    frontRing = glm::scale(frontRing, glm::vec3(0.88f, 0.94f, 0.88f) * pulse);
-
-    glm::mat4 sideRing(1.0f);
-    sideRing = glm::translate(sideRing, center);
-    sideRing = glm::rotate(sideRing, glm::half_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f));
-    sideRing = glm::scale(sideRing, glm::vec3(0.88f, 0.94f, 0.88f) * pulse);
-
-    glm::mat4 horizontalRing(1.0f);
-    horizontalRing = glm::translate(horizontalRing, center);
-    horizontalRing = glm::rotate(horizontalRing, glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
-    horizontalRing = glm::scale(horizontalRing, glm::vec3(0.76f, 0.76f, 0.76f) * pulse);
-
-    shader.use();
-    shader.setFloat("uTime", timeSeconds);
-    shader.setMat4("uModel", frontRing);
-    bindSceneMaterial(shader, ringMaterial);
-    shieldRing.draw();
-
-    shader.setMat4("uModel", sideRing);
-    bindSceneMaterial(shader, ringMaterial);
-    shieldRing.draw();
-
-    Material horizontalMaterial = ringMaterial;
-    horizontalMaterial.opacity = 0.11f;
-    shader.setMat4("uModel", horizontalRing);
-    bindSceneMaterial(shader, horizontalMaterial);
-    shieldRing.draw();
-}
-
-void renderMapa4Backdrop(const Shader& shader, const Environment& environment, const glm::vec3& cameraPosition, float timeSeconds) {
-    // el skybox se mueve con la cámara para que el fondo siempre rodee al mapa
-    static bool skyboxLoaded = false;
-    static LoadedModel skyboxModel;
-    static std::vector<std::shared_ptr<Texture2D>> skyboxTextures;
-    static std::vector<Material> skyboxMaterials;
-    static std::string activeSkyboxPath;
-
-    const std::string skyboxPath = resolveFirstExistingAsset({
-        "assets/Mundos/skybox noche.glb",
-        "assets/mundos/skybox noche.glb",
-        "assets/Mundos/Skybox Noche.glb",
-        "assets/Mundos/skyboxmapa4.glb",
-        "assets/mundos/skyboxmapa4.glb",
-        "assets/Mundos/SkyboxMapa4.glb"
-    });
-
-    if (!skyboxPath.empty() && (!skyboxLoaded || activeSkyboxPath != skyboxPath)) {
-        skyboxLoaded = false;
-        skyboxModel = LoadedModel{};
-        skyboxTextures.clear();
-        skyboxMaterials.clear();
-        activeSkyboxPath = skyboxPath;
-
-        const std::string resolvedSkyboxPath = resolveAssetPath(skyboxPath);
-        skyboxModel = ModelLoader::loadModel(resolvedSkyboxPath);
-        if (!skyboxModel.meshes.empty()) {
-            skyboxMaterials.reserve(skyboxModel.materials.size());
-            const std::filesystem::path skyboxModelPath = std::filesystem::path(resolvedSkyboxPath);
-            for (const LoadedMaterial& loadedMaterial : skyboxModel.materials) {
-                Material material;
-                material.baseColor = loadedMaterial.diffuseColor;
-                material.emissive = glm::vec3(0.10f, 0.10f, 0.14f);
-                material.roughness = 1.0f;
-                material.fogAmount = 0.0f;
-                material.texture = loadTextureFromMaterial(loadedMaterial, skyboxModelPath, skyboxTextures);
-                skyboxMaterials.push_back(material);
-            }
-            skyboxLoaded = true;
-        }
-    }
-
-    if (!skyboxLoaded || skyboxModel.meshes.empty()) {
-        return;
-    }
-
-    glDepthMask(GL_FALSE);
-    // el fondo no escribe profundidad para no ponerse delante del escenario
-    shader.use();
-    shader.setFloat("uTime", timeSeconds);
-    const glm::vec3 worldMin = environment.worldMin();
-    const glm::vec3 worldMax = environment.worldMax();
-    const glm::vec3 worldCenter = (worldMin + worldMax) * 0.5f;
-    const float span = std::max({worldMax.x - worldMin.x, worldMax.y - worldMin.y, worldMax.z - worldMin.z, 1.0f});
-
-    glm::mat4 model(1.0f);
-    model = glm::translate(model, cameraPosition + glm::vec3(0.0f, (worldCenter.y - cameraPosition.y) * 0.08f + 0.6f, 0.0f));
-    model = glm::scale(model, glm::vec3(span * 0.24f));
-
-    const size_t materialCount = skyboxMaterials.size();
-    for (size_t meshIndex = 0; meshIndex < skyboxModel.meshes.size(); ++meshIndex) {
-        shader.setMat4("uModel", model);
-        if (materialCount > 0) {
-            const size_t materialIndex = std::min<size_t>(skyboxModel.meshes[meshIndex].materialIndex, materialCount - 1);
-            bindSceneMaterial(shader, skyboxMaterials[materialIndex]);
-        }
-        skyboxModel.meshes[meshIndex].mesh.draw();
-    }
-    glDepthMask(GL_TRUE);
-}
-
-} // helpers internos de mapa 4
-
-bool SimpleEnemyManager::initialize() {
-    // carga los modelos de enemigos una vez y luego los reutiliza durante toda la sesión
-    if (m_initialized) {
-        return true;
-    }
-
-    loadEnemyModel(resolveAssetPath("assets/mapa 4/enemigo-01/source/enemigo-01.fbx"), {0.86f, 0.18f, 0.12f}, m_models[0]);
-    loadEnemyModel(resolveAssetPath("assets/mapa 4/enemigo-02/source/enemigo-02.fbx"), {0.18f, 0.42f, 0.90f}, m_models[1]);
-    m_initialized = true;
-    return true;
-}
-
-void SimpleEnemyManager::reset(const Environment& environment, const glm::vec3& playerSpawn) {
-    // vuelve a crear los enemigos en pisos válidos y les deja una patrulla sencilla
-    m_enemies.clear();
-    const glm::vec3 worldMin = environment.worldMin();
-    const glm::vec3 worldMax = environment.worldMax();
-    const glm::vec2 center((worldMin.x + worldMax.x) * 0.5f, (worldMin.z + worldMax.z) * 0.5f);
-    const std::array<glm::vec2, 6> anchors = {
-        center + glm::vec2(-7.0f, -5.4f),
-        center + glm::vec2(7.0f, -4.8f),
-        center + glm::vec2(-6.1f, 5.8f),
-        center + glm::vec2(6.3f, 5.6f),
-        center + glm::vec2(-1.8f, -6.2f),
-        center + glm::vec2(2.4f, 6.4f)
-    };
-
-    for (size_t index = 0; index < anchors.size(); ++index) {
-        Enemy enemy;
-        enemy.modelIndex = static_cast<int>(index % m_models.size());
-        enemy.position = findSpawnPosition(environment, playerSpawn, anchors[index]);
-        enemy.patrolCenter = enemy.position;
-        enemy.patrolRadius = 2.8f + static_cast<float>(index % 3) * 0.65f;
-        // cambiar radio y fase hace que no todos se muevan igual
-        enemy.patrolSpeed = 0.56f + static_cast<float>(index) * 0.08f;
-        enemy.patrolPhase = static_cast<float>(index) * 1.37f;
-        enemy.patrolOnX = index % 2 == 0;
-        enemy.attackCooldown = static_cast<float>(index) * 0.22f;
-        enemy.detectionRange = Map4EnemyDetectionRange + static_cast<float>(index % 2) * 0.35f;
-        enemy.attackRange = Map4EnemyProjectileRange + static_cast<float>(index % 3) * 0.25f;
-        enemy.health = Map4EnemyMaximumHealth;
-        enemy.alive = true;
-        m_enemies.push_back(enemy);
-    }
-}
-
-bool SimpleEnemyManager::update(const Player& player, const Environment& environment, float deltaTime, float timeSeconds, std::vector<Mapa4Projectile>& projectiles) {
-    // resuelve patrulla, detección cercana y disparo lento de cada enemigo
-    bool damagedPlayer = false;
-    const Bounds playerBounds = player.bounds();
-    const glm::vec3 playerPosition = player.position();
-    const float dt = std::clamp(deltaTime, 0.0f, 1.0f / 30.0f);
-    const bool patrolOnly = isMarioMapa4Environment(environment);
-
-    for (Enemy& enemy : m_enemies) {
-        if (!enemy.alive) {
-            continue;
-        }
-        enemy.attackCooldown = std::max(0.0f, enemy.attackCooldown - dt);
-        glm::vec3 toPlayer = playerPosition - enemy.position;
-        toPlayer.y = 0.0f;
-        const float distance = glm::length(toPlayer);
-
-        if (distance > 24.0f) {
-            // si el jugador está muy lejos se ahorra trabajo de ia
-            continue;
-        }
-
-        if (patrolOnly) {
-            glm::vec3 patrolTarget = enemy.patrolCenter;
-            const float oscillation = std::sin(timeSeconds * enemy.patrolSpeed + enemy.patrolPhase) * enemy.patrolRadius;
-            if (enemy.patrolOnX) {
-                patrolTarget.x += oscillation;
-            } else {
-                patrolTarget.z += oscillation;
-            }
-
-            glm::vec3 toPatrol = patrolTarget - enemy.position;
-            toPatrol.y = 0.0f;
-            const float patrolDistance = glm::length(toPatrol);
-            if (patrolDistance > 0.08f) {
-                const glm::vec3 direction = glm::normalize(toPatrol);
-                enemy.yaw = std::atan2(direction.x, direction.z);
-                const float patrolScale = distance > 16.0f ? 0.70f : 1.15f;
-                const glm::vec3 step = direction * (patrolScale * dt);
-                if (!tryMoveEnemy(enemy, environment, step)) {
-                    tryMoveEnemy(enemy, environment, {step.x, 0.0f, 0.0f});
-                    tryMoveEnemy(enemy, environment, {0.0f, 0.0f, step.z});
-                }
-            }
-
-            if (distance <= enemy.detectionRange && distance > 0.001f) {
-                enemy.yaw = std::atan2(toPlayer.x, toPlayer.z);
-                if (distance <= enemy.attackRange && enemy.attackCooldown <= 0.0f) {
-                    const glm::vec3 shotDirection = glm::normalize(glm::vec3(toPlayer.x, 0.0f, toPlayer.z));
-                    projectiles.push_back({
-                        enemy.position + glm::vec3(shotDirection.x * 0.45f, 0.62f, shotDirection.z * 0.45f),
-                        shotDirection * Map4EnemyProjectileSpeed,
-                        Map4ProjectileLifetime,
-                        1,
-                        true
-                    });
-                    enemy.attackCooldown = Map4EnemyProjectileCooldown;
-                }
-            }
-        } else {
-            if (distance > 0.001f) {
-                enemy.yaw = std::atan2(toPlayer.x, toPlayer.z);
-            }
-
-            if (distance < 8.5f && distance > 0.85f) {
-                const glm::vec3 direction = glm::normalize(toPlayer);
-                const glm::vec3 step = direction * (1.35f * dt);
-                if (!tryMoveEnemy(enemy, environment, step)) {
-                    tryMoveEnemy(enemy, environment, {step.x, 0.0f, 0.0f});
-                    tryMoveEnemy(enemy, environment, {0.0f, 0.0f, step.z});
+                    positions[weight.mVertexId] += (finalTransform * source->mVertices[weight.mVertexId]) * weight.mWeight;
+                    const aiVector3D sourceNormal = source->HasNormals()
+                        ? source->mNormals[weight.mVertexId]
+                        : aiVector3D(0.0f, 1.0f, 0.0f);
+                    normals[weight.mVertexId] += transformNormal(finalTransform, sourceNormal) * weight.mWeight;
+                    weights[weight.mVertexId] += weight.mWeight;
                 }
             }
         }
 
-        if (map4BoundsIntersect(playerBounds, enemyBounds(enemy)) && enemy.attackCooldown <= 0.0f) {
-            enemy.attackCooldown = 1.15f;
-            damagedPlayer = true;
+        std::vector<Vertex> vertices;
+        std::vector<unsigned int> indices;
+        vertices.reserve(source->mNumVertices);
+
+        for (unsigned int i = 0; i < source->mNumVertices; ++i) {
+            aiVector3D position;
+            aiVector3D normal;
+            if (weights[i] > 0.0001f) {
+                position = positions[i] / weights[i];
+                normal = normals[i];
+                if (normal.SquareLength() > 0.000001f) {
+                    normal.Normalize();
+                }
+                else {
+                    normal = aiVector3D(0.0f, 1.0f, 0.0f);
+                }
+            }
+            else {
+                position = meshNodeTransform * source->mVertices[i];
+                const aiVector3D sourceNormal = source->HasNormals()
+                    ? source->mNormals[i]
+                    : aiVector3D(0.0f, 1.0f, 0.0f);
+                normal = transformNormal(meshNodeTransform, sourceNormal);
+            }
+
+            Vertex vertex{};
+            vertex.position = toGlmVector(position);
+            vertex.normal = toGlmVector(normal);
+            vertex.uv = source->HasTextureCoords(0)
+                ? glm::vec2(source->mTextureCoords[0][i].x, source->mTextureCoords[0][i].y)
+                : glm::vec2(0.0f);
+            vertex.color = source->HasVertexColors(0)
+                ? toGlmColor(source->mColors[0][i])
+                : glm::vec4(1.0f);
+
+            loaded.minBounds = glm::min(loaded.minBounds, vertex.position);
+            loaded.maxBounds = glm::max(loaded.maxBounds, vertex.position);
+            vertices.push_back(vertex);
         }
-    }
-    return damagedPlayer;
-}
 
-void SimpleEnemyManager::render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const {
-    // deja fuera del render a los enemigos lejanos para cuidar rendimiento
-    shader.use();
-    shader.setFloat("uTime", timeSeconds);
-    for (const Enemy& enemy : m_enemies) {
-        if (!enemy.alive || glm::length(enemy.position - cameraPosition) > 24.0f) {
-            continue;
+        for (unsigned int faceIndex = 0; faceIndex < source->mNumFaces; ++faceIndex) {
+            const aiFace& face = source->mFaces[faceIndex];
+            if (face.mNumIndices != 3) {
+                continue;
+            }
+            indices.push_back(face.mIndices[0]);
+            indices.push_back(face.mIndices[1]);
+            indices.push_back(face.mIndices[2]);
         }
-        const EnemyModel& modelData = m_models[std::clamp(enemy.modelIndex, 0, static_cast<int>(m_models.size() - 1))];
-        const glm::mat4 model = enemyModelMatrix(enemy, timeSeconds);
-        for (const MissionRenderablePart& part : modelData.parts) {
-            shader.setMat4("uModel", model * localPartMatrix(part));
-            bindSceneMaterial(shader, part.material);
-            part.mesh.draw();
+
+        if (vertices.empty()) {
+            loaded.minBounds = glm::vec3(0.0f);
+            loaded.maxBounds = glm::vec3(0.0f);
         }
-    }
-}
-
-bool SimpleEnemyManager::loadEnemyModel(const std::string& path, const glm::vec3& fallbackColor, EnemyModel& modelData) {
-    // intenta usar el modelo real y si falla deja uno simple para no romper el mapa
-    LoadedModel model = ModelLoader::loadModel(path);
-    if (model.meshes.empty()) {
-        buildFallbackModel(fallbackColor, modelData);
-        return false;
-    }
-
-    modelData.parts.clear();
-    modelData.modelMin = model.minBounds;
-    modelData.modelMax = model.maxBounds;
-    modelData.modelCenter = (modelData.modelMin + modelData.modelMax) * 0.5f;
-    modelData.color = fallbackColor;
-    const glm::vec3 size = modelData.modelMax - modelData.modelMin;
-    const float height = std::max(size.y, 0.001f);
-    modelData.modelScale = 0.72f / height;
-
-    const bool enemy01 = path.find("enemigo-01") != std::string::npos;
-    const std::vector<std::string> fallbackTextures = enemy01
-        ? std::vector<std::string>{"assets/characters/enemigo-01/textures/enemigo-01_1001_AlbedoTransparency.png"}
-        : std::vector<std::string>{"assets/characters/enemigo-02/textures/enemigo-02_1001_AlbedoTransparency.png"};
-
-    for (LoadedMesh& mesh : model.meshes) {
-        MissionRenderablePart part;
-        if (mesh.materialIndex < model.materials.size()) {
-            const LoadedMaterial& material = model.materials[mesh.materialIndex];
-            part.material.baseColor = material.diffuseColor;
-            part.material.opacity = material.opacity;
-            part.material.texture = loadEnemyTexture(material.diffuseTexturePath);
-        } else {
-            part.material.baseColor = fallbackColor;
-        }
-        // estos fbx a veces no traen bien la ruta de textura y aquí se corrige con fallback
-        if (!part.material.texture) {
-            part.material.texture = loadFirstEnemyTexture(fallbackTextures);
-        }
-        part.material.roughness = 0.72f;
-        part.material.fogAmount = 0.24f;
-        part.mesh = std::move(mesh.mesh);
-        modelData.parts.push_back(std::move(part));
-    }
-    return true;
-}
-
-std::shared_ptr<Texture2D> SimpleEnemyManager::loadFirstEnemyTexture(const std::vector<std::string>& paths) {
-    for (const std::string& path : paths) {
-        auto texture = loadEnemyTexture(path);
-        if (texture && texture->valid()) {
-            return texture;
-        }
-    }
-    return nullptr;
-}
-
-std::shared_ptr<Texture2D> SimpleEnemyManager::loadEnemyTexture(const std::string& path) {
-    if (path.empty()) {
-        return nullptr;
+        loaded.mesh.upload(vertices, indices);
+        return loaded;
     }
 
-    const std::filesystem::path original(path);
-    const std::filesystem::path fileName = original.filename();
-    const std::filesystem::path candidates[] = {
-        original,
-        std::filesystem::path("assets") / "mapa 4" / "enemigo-01" / "textures" / fileName,
-        std::filesystem::path("assets") / "mapa 4" / "enemigo-02" / "textures" / fileName,
-        std::filesystem::path("assets") / "characters" / "enemigo-01" / "textures" / fileName,
-        std::filesystem::path("assets") / "characters" / "enemigo-02" / "textures" / fileName,
-        std::filesystem::path("..") / ".." / "assets" / "mapa 4" / "enemigo-01" / "textures" / fileName,
-        std::filesystem::path("..") / ".." / "assets" / "mapa 4" / "enemigo-02" / "textures" / fileName,
-        std::filesystem::path("..") / ".." / "assets" / "characters" / "enemigo-01" / "textures" / fileName,
-        std::filesystem::path("..") / ".." / "assets" / "characters" / "enemigo-02" / "textures" / fileName
-    };
+    void appendSampledNodeMeshes(
+        const aiScene* scene,
+        const aiNode* node,
+        const aiMatrix4x4& rootInverseTransform,
+        const std::unordered_map<std::string, aiMatrix4x4>& nodeTransforms,
+        LoadedModel& model) {
+        if (scene == nullptr || node == nullptr) {
+            return;
+        }
 
-    std::filesystem::path resolved = original;
-    for (const auto& candidate : candidates) {
-        if (!candidate.empty() && std::filesystem::exists(candidate)) {
-            resolved = std::filesystem::weakly_canonical(candidate);
-            break;
+        const auto nodeTransform = nodeTransforms.find(node->mName.C_Str());
+        const aiMatrix4x4 meshNodeTransform = nodeTransform != nodeTransforms.end()
+            ? nodeTransform->second
+            : aiMatrix4x4();
+        const aiMatrix4x4 meshModelTransform = rootInverseTransform * meshNodeTransform;
+
+        for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
+            const unsigned int meshIndex = node->mMeshes[i];
+            if (meshIndex >= scene->mNumMeshes) {
+                continue;
+            }
+
+            LoadedMesh mesh = buildSampledMesh(
+                scene->mMeshes[meshIndex],
+                meshModelTransform,
+                rootInverseTransform,
+                nodeTransforms);
+            model.minBounds = glm::min(model.minBounds, mesh.minBounds);
+            model.maxBounds = glm::max(model.maxBounds, mesh.maxBounds);
+            model.meshes.push_back(std::move(mesh));
+        }
+
+        for (unsigned int i = 0; i < node->mNumChildren; ++i) {
+            appendSampledNodeMeshes(scene, node->mChildren[i], rootInverseTransform, nodeTransforms, model);
         }
     }
 
-    const std::string normalized = resolved.string();
-    for (const auto& texture : m_textures) {
-        if (texture && texture->sourcePath() == normalized) {
-            return texture;
-        }
-    }
+    AnimatedRuntimeModel bakeAnimatedRuntimeModel(const std::string& path, const std::vector<MapMaterial>& materials) {
+        AnimatedRuntimeModel result;
+        result.minBounds = glm::vec3(std::numeric_limits<float>::max());
+        result.maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
 
-    auto texture = std::make_shared<Texture2D>();
-    if (!texture->loadFromFile(normalized, false)) {
-        return nullptr;
-    }
-    m_textures.push_back(texture);
-    return texture;
-}
+        Assimp::Importer importer;
+        const aiScene* scene = importer.ReadFile(
+            path,
+            aiProcess_Triangulate |
+            aiProcess_GenNormals |
+            aiProcess_JoinIdenticalVertices |
+            aiProcess_ImproveCacheLocality |
+            aiProcess_RemoveRedundantMaterials |
+            aiProcess_FindInvalidData |
+            aiProcess_LimitBoneWeights);
 
-glm::vec3 SimpleEnemyManager::findSpawnPosition(const Environment& environment, const glm::vec3& playerSpawn, const glm::vec2& anchor) const {
-    // busca plataformas amplias para repartir enemigos sin pegarlos al jugador
-    glm::vec3 best = playerSpawn + glm::vec3(anchor.x >= 0.0f ? 4.0f : -4.0f, 0.0f, anchor.y >= 0.0f ? 4.0f : -4.0f);
-    float bestScore = std::numeric_limits<float>::max();
-
-    for (const Bounds& collider : environment.collisionPreview()) {
-        const float top = collider.center.y + collider.halfExtent.y;
-        const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
-        const bool floorLike = collider.halfExtent.y <= 0.30f && area > 0.35f;
-        if (!floorLike) {
-            continue;
-        }
-        if (isMarioMapa4Environment(environment) && top < environment.worldMin().y + 0.55f) {
-            continue;
+        if (scene == nullptr || scene->mRootNode == nullptr) {
+            std::cerr << "Map 4 BangBoo animation could not be loaded: " << path
+                << " - " << importer.GetErrorString() << std::endl;
+            return result;
         }
 
-        const glm::vec3 candidate{collider.center.x, top + 0.04f, collider.center.z};
-        const float playerDistance = glm::length(glm::vec2(candidate.x - playerSpawn.x, candidate.z - playerSpawn.z));
-        if (playerDistance < 3.0f) {
-            // evita que un enemigo aparezca demasiado cerca del jugador
-            continue;
+        const aiAnimation* animation = selectWalkAnimation(scene);
+        const double ticksPerSecond = animation != nullptr && animation->mTicksPerSecond > 0.0
+            ? animation->mTicksPerSecond
+            : 25.0;
+        const double durationTicks = animation != nullptr
+            ? std::max(animation->mDuration, 1.0)
+            : 0.0;
+        const double durationSeconds = durationTicks > 0.0 ? durationTicks / ticksPerSecond : 0.0;
+        const int frameCount = animation != nullptr
+            ? std::clamp(
+                static_cast<int>(std::ceil(durationSeconds * static_cast<double>(BangbooWalkSampleRate))),
+                BangbooMinimumWalkFrames,
+                BangbooMaximumWalkFrames)
+            : 1;
+        result.framesPerSecond = durationSeconds > 0.001
+            ? static_cast<float>(static_cast<double>(frameCount) / durationSeconds)
+            : BangbooWalkSampleRate;
+
+        std::unordered_map<std::string, const aiNodeAnim*> channels;
+        collectAnimationChannels(animation, channels);
+
+        aiMatrix4x4 rootInverseTransform = scene->mRootNode->mTransformation;
+        rootInverseTransform.Inverse();
+
+        result.frames.reserve(static_cast<size_t>(frameCount));
+        for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
+            const double animationTick = animation != nullptr && frameCount > 0
+                ? durationTicks * static_cast<double>(frameIndex) / static_cast<double>(frameCount)
+                : 0.0;
+
+            std::unordered_map<std::string, aiMatrix4x4> nodeTransforms;
+            nodeTransforms.reserve(128);
+            collectNodeTransforms(scene->mRootNode, aiMatrix4x4(), animationTick, channels, nodeTransforms);
+
+            WorldModel frame;
+            frame.materials = materials;
+            frame.model.sourcePath = path;
+            frame.model.minBounds = glm::vec3(std::numeric_limits<float>::max());
+            frame.model.maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
+            appendSampledNodeMeshes(scene, scene->mRootNode, rootInverseTransform, nodeTransforms, frame.model);
+
+            if (frame.model.meshes.empty()) {
+                continue;
+            }
+
+            result.minBounds = glm::min(result.minBounds, frame.model.minBounds);
+            result.maxBounds = glm::max(result.maxBounds, frame.model.maxBounds);
+            result.frames.push_back(std::move(frame));
         }
 
-        const float score = glm::length(glm::vec2(candidate.x, candidate.z) - anchor);
-        if (score < bestScore) {
-            bestScore = score;
-            best = candidate;
+        if (result.frames.empty()) {
+            result.minBounds = glm::vec3(0.0f);
+            result.maxBounds = glm::vec3(0.0f);
         }
+        return result;
     }
-    return best;
-}
 
-bool SimpleEnemyManager::tryMoveEnemy(Enemy& enemy, const Environment& environment, const glm::vec3& step) const {
-    // prueba un paso del enemigo y corrige altura para que siga sobre un piso válido
-    glm::vec3 candidate = enemy.position + step;
-    const glm::vec3 worldMin = environment.worldMin();
-    const glm::vec3 worldMax = environment.worldMax();
-    if (worldMax.x <= worldMin.x || worldMax.z <= worldMin.z) {
-        return false;
+    std::string resolveAssetPath(const std::string& path) {
+        const std::filesystem::path requested(path);
+        const std::filesystem::path candidates[] = {
+            requested,
+            std::filesystem::path("..") / ".." / requested
+        };
+
+        for (const auto& candidate : candidates) {
+            if (std::filesystem::exists(candidate)) {
+                return candidate.lexically_normal().string();
+            }
+        }
+        return path;
     }
-    candidate.x = std::clamp(candidate.x, worldMin.x + 0.45f, worldMax.x - 0.45f);
-    candidate.z = std::clamp(candidate.z, worldMin.z + 0.45f, worldMax.z - 0.45f);
 
-    float floorY = candidate.y;
-    if (!findFloorAt(environment, candidate.x, candidate.z, enemy.position.y, floorY)) {
-        // si no hay piso debajo no se mueve para no salirse del mapa
-        return false;
+    std::string resolveTextureAssetPath(const std::string& path) {
+        const std::filesystem::path requested(path);
+        const std::filesystem::path fileName = requested.filename();
+        const std::filesystem::path bangbooTexturePath =
+            std::filesystem::path("assets") / "mapa1" / "player" / "bangboo" / "textures" / fileName;
+        const std::filesystem::path requestedSiblingTexturePath =
+            requested.has_parent_path()
+            ? requested.parent_path().parent_path() / "textures" / fileName
+            : std::filesystem::path();
+
+        const std::filesystem::path candidates[] = {
+            requested,
+            std::filesystem::path("..") / ".." / requested,
+            requestedSiblingTexturePath,
+            bangbooTexturePath,
+            std::filesystem::path("..") / ".." / bangbooTexturePath
+        };
+
+        for (const auto& candidate : candidates) {
+            if (!candidate.empty() && std::filesystem::exists(candidate)) {
+                return candidate.lexically_normal().string();
+            }
+        }
+
+        return resolveAssetPath(path);
     }
-    candidate.y = floorY + 0.04f;
 
-    const Bounds candidateBounds{candidate + glm::vec3(0.0f, 0.55f, 0.0f), {0.32f, 0.55f, 0.32f}};
-    for (const Bounds& collider : environment.collisionPreview()) {
-        const float top = collider.center.y + collider.halfExtent.y;
-        const bool floorUnderEnemy = top <= candidate.y + 0.06f;
-        if (!floorUnderEnemy && map4BoundsIntersect(candidateBounds, collider)) {
+    Vertex makeVertex(const glm::vec3& position, const glm::vec2& uv) {
+        return { position, {0.0f, 0.0f, 1.0f}, uv, glm::vec4(1.0f) };
+    }
+
+    Mesh createPlayerMesh() {
+        const std::vector<Vertex> vertices = {
+            makeVertex({0.42f, 1.15f, 0.0f}, {1.0f, 1.0f}),
+            makeVertex({0.42f, 0.00f, 0.0f}, {1.0f, 0.0f}),
+            makeVertex({-0.42f, 0.00f, 0.0f}, {0.0f, 0.0f}),
+            makeVertex({-0.42f, 1.15f, 0.0f}, {0.0f, 1.0f})
+        };
+        const std::vector<unsigned int> indices = { 0, 1, 2, 0, 2, 3 };
+
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
+    }
+
+    Mesh createSpriteMesh(const AtlasFrame& frame, float width, float height, int atlasWidth, int atlasHeight) {
+        constexpr float inset = 0.18f;
+        const float u0 = (static_cast<float>(frame.x) + inset) / static_cast<float>(atlasWidth);
+        const float u1 = (static_cast<float>(frame.x + frame.width) - inset) / static_cast<float>(atlasWidth);
+        const float vTop = 1.0f - (static_cast<float>(frame.y) + inset) / static_cast<float>(atlasHeight);
+        const float vBottom = 1.0f - (static_cast<float>(frame.y + frame.height) - inset) / static_cast<float>(atlasHeight);
+        const float halfWidth = width * 0.5f;
+        const std::vector<Vertex> vertices = {
+            makeVertex({halfWidth, height, 0.0f}, {u1, vTop}),
+            makeVertex({halfWidth, 0.0f, 0.0f}, {u1, vBottom}),
+            makeVertex({-halfWidth, 0.0f, 0.0f}, {u0, vBottom}),
+            makeVertex({-halfWidth, height, 0.0f}, {u0, vTop})
+        };
+        const std::vector<unsigned int> indices = { 0, 1, 2, 0, 2, 3 };
+
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
+    }
+
+    Mesh createPlayerSpriteMesh(const AtlasFrame& frame, int atlasWidth, int atlasHeight) {
+        const float aspect = static_cast<float>(frame.width) / static_cast<float>(std::max(frame.height, 1));
+        return createSpriteMesh(frame, PlayerSpriteHeight * aspect, PlayerSpriteHeight, atlasWidth, atlasHeight);
+    }
+
+    float animationDuration(const std::vector<Mesh>& frames, float framesPerSecond) {
+        if (frames.empty() || framesPerSecond <= 0.0f) {
+            return 0.0f;
+        }
+        return static_cast<float>(frames.size()) / framesPerSecond;
+    }
+
+    const Mesh* animationFrame(const std::vector<Mesh>& frames, float time, float framesPerSecond, bool loop) {
+        if (frames.empty()) {
+            return nullptr;
+        }
+
+        size_t frameIndex = static_cast<size_t>(std::max(0.0f, time) * framesPerSecond);
+        frameIndex = loop
+            ? frameIndex % frames.size()
+            : std::min(frameIndex, frames.size() - 1);
+        return &frames[frameIndex];
+    }
+
+    size_t animationFrameIndex(size_t frameCount, float time, float framesPerSecond, bool loop) {
+        if (frameCount == 0 || framesPerSecond <= 0.0f) {
+            return 0;
+        }
+
+        size_t frameIndex = static_cast<size_t>(std::max(0.0f, time) * framesPerSecond);
+        return loop
+            ? frameIndex % frameCount
+            : std::min(frameIndex, frameCount - 1);
+    }
+
+    int trailingNumber(const std::filesystem::path& path) {
+        const std::string text = path.stem().string();
+        int value = 0;
+        int multiplier = 1;
+        bool foundDigit = false;
+
+        for (auto it = text.rbegin(); it != text.rend(); ++it) {
+            if (!std::isdigit(static_cast<unsigned char>(*it))) {
+                if (foundDigit) {
+                    break;
+                }
+                continue;
+            }
+            foundDigit = true;
+            value += (*it - '0') * multiplier;
+            multiplier *= 10;
+        }
+
+        return foundDigit ? value : std::numeric_limits<int>::max();
+    }
+
+    Mesh createSkyboxMesh() {
+        constexpr float margin = 0.001f;
+        constexpr float u0 = 0.00f + margin;
+        constexpr float u1 = 0.25f - margin;
+        constexpr float u2 = 0.25f + margin;
+        constexpr float u3 = 0.50f - margin;
+        constexpr float u4 = 0.50f + margin;
+        constexpr float u5 = 0.75f - margin;
+        constexpr float u6 = 0.75f + margin;
+        constexpr float u7 = 1.00f - margin;
+        constexpr float vBottom0 = 0.00f + margin;
+        constexpr float vBottom1 = (1.0f / 3.0f) - margin;
+        constexpr float vMiddle0 = (1.0f / 3.0f) + margin;
+        constexpr float vMiddle1 = (2.0f / 3.0f) - margin;
+        constexpr float vTop0 = (2.0f / 3.0f) + margin;
+        constexpr float vTop1 = 1.00f - margin;
+
+        const std::vector<Vertex> vertices = {
+            makeVertex({-1.0f, 1.0f, -1.0f}, {u2, vMiddle1}),
+            makeVertex({1.0f, 1.0f, -1.0f}, {u3, vMiddle1}),
+            makeVertex({1.0f, -1.0f, -1.0f}, {u3, vMiddle0}),
+            makeVertex({-1.0f, -1.0f, -1.0f}, {u2, vMiddle0}),
+            makeVertex({1.0f, 1.0f, -1.0f}, {u4, vMiddle1}),
+            makeVertex({1.0f, 1.0f, 1.0f}, {u5, vMiddle1}),
+            makeVertex({1.0f, -1.0f, 1.0f}, {u5, vMiddle0}),
+            makeVertex({1.0f, -1.0f, -1.0f}, {u4, vMiddle0}),
+            makeVertex({1.0f, 1.0f, 1.0f}, {u6, vMiddle1}),
+            makeVertex({-1.0f, 1.0f, 1.0f}, {u7, vMiddle1}),
+            makeVertex({-1.0f, -1.0f, 1.0f}, {u7, vMiddle0}),
+            makeVertex({1.0f, -1.0f, 1.0f}, {u6, vMiddle0}),
+            makeVertex({-1.0f, 1.0f, 1.0f}, {u0, vMiddle1}),
+            makeVertex({-1.0f, 1.0f, -1.0f}, {u1, vMiddle1}),
+            makeVertex({-1.0f, -1.0f, -1.0f}, {u1, vMiddle0}),
+            makeVertex({-1.0f, -1.0f, 1.0f}, {u0, vMiddle0}),
+            makeVertex({-1.0f, 1.0f, 1.0f}, {u2, vTop1}),
+            makeVertex({1.0f, 1.0f, 1.0f}, {u3, vTop1}),
+            makeVertex({1.0f, 1.0f, -1.0f}, {u3, vTop0}),
+            makeVertex({-1.0f, 1.0f, -1.0f}, {u2, vTop0}),
+            makeVertex({-1.0f, -1.0f, -1.0f}, {u2, vBottom1}),
+            makeVertex({1.0f, -1.0f, -1.0f}, {u3, vBottom1}),
+            makeVertex({1.0f, -1.0f, 1.0f}, {u3, vBottom0}),
+            makeVertex({-1.0f, -1.0f, 1.0f}, {u2, vBottom0})
+        };
+        const std::vector<unsigned int> indices = {
+            0, 1, 2, 2, 3, 0,
+            4, 5, 6, 6, 7, 4,
+            8, 9, 10, 10, 11, 8,
+            12, 13, 14, 14, 15, 12,
+            16, 17, 18, 18, 19, 16,
+            20, 21, 22, 22, 23, 20
+        };
+
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
+    }
+
+    Mesh createStarMesh() {
+        std::vector<Vertex> vertices;
+        std::vector<unsigned int> indices;
+        constexpr int points = 10;
+        constexpr float frontZ = 0.08f;
+        constexpr float backZ = -0.08f;
+
+        vertices.push_back({ {0.0f, 0.0f, frontZ}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}, glm::vec4(1.0f) });
+        vertices.push_back({ {0.0f, 0.0f, backZ}, {0.0f, 0.0f, -1.0f}, {0.5f, 0.5f}, glm::vec4(1.0f) });
+        for (int i = 0; i < points; ++i) {
+            const float radius = (i % 2 == 0) ? 0.72f : 0.33f;
+            const float angle = glm::half_pi<float>() + glm::two_pi<float>() * static_cast<float>(i) / static_cast<float>(points);
+            const float x = std::cos(angle) * radius;
+            const float y = std::sin(angle) * radius;
+            vertices.push_back({ {x, y, frontZ}, {0.0f, 0.0f, 1.0f}, {(x / 1.6f) + 0.5f, (y / 1.6f) + 0.5f}, glm::vec4(1.0f) });
+            vertices.push_back({ {x, y, backZ}, {0.0f, 0.0f, -1.0f}, {(x / 1.6f) + 0.5f, (y / 1.6f) + 0.5f}, glm::vec4(1.0f) });
+        }
+
+        for (int i = 0; i < points; ++i) {
+            const unsigned int frontA = 2u + static_cast<unsigned int>(i) * 2u;
+            const unsigned int backA = frontA + 1u;
+            const unsigned int frontB = 2u + static_cast<unsigned int>((i + 1) % points) * 2u;
+            const unsigned int backB = frontB + 1u;
+            indices.insert(indices.end(), { 0u, frontA, frontB });
+            indices.insert(indices.end(), { 1u, backB, backA });
+            indices.insert(indices.end(), { frontA, backA, backB, frontA, backB, frontB });
+        }
+
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
+    }
+
+    Mesh createParryRingMesh() {
+        std::vector<Vertex> vertices;
+        std::vector<unsigned int> indices;
+        constexpr int segments = 48;
+        constexpr float outerRadius = 0.66f;
+        constexpr float innerRadius = 0.52f;
+        vertices.reserve(static_cast<size_t>((segments + 1) * 2));
+        indices.reserve(static_cast<size_t>(segments * 6));
+
+        for (int index = 0; index <= segments; ++index) {
+            const float angle = glm::two_pi<float>() * static_cast<float>(index) / static_cast<float>(segments);
+            const glm::vec2 direction(std::cos(angle), std::sin(angle));
+            vertices.push_back(makeVertex({ direction.x * outerRadius, direction.y * outerRadius, 0.0f }, { 1.0f, 1.0f }));
+            vertices.push_back(makeVertex({ direction.x * innerRadius, direction.y * innerRadius, 0.0f }, { 0.0f, 0.0f }));
+        }
+
+        for (int index = 0; index < segments; ++index) {
+            const unsigned int outer = static_cast<unsigned int>(index * 2);
+            const unsigned int inner = outer + 1;
+            indices.insert(indices.end(), { outer, inner, outer + 2, inner, inner + 2, outer + 2 });
+        }
+
+        Mesh mesh;
+        mesh.upload(vertices, indices);
+        return mesh;
+    }
+
+    bool containsText(const std::string& text, const char* pattern) {
+        return text.find(pattern) != std::string::npos;
+    }
+
+    bool isWalkableMesh(const std::string& name) {
+        if (containsText(name, "Wave") ||
+            containsText(name, "SeaSide") ||
+            containsText(name, "IslandMat") ||
+            containsText(name, "Cloud") ||
+            containsText(name, "Shadow") ||
+            containsText(name, "GatePole")) {
             return false;
         }
+
+        return containsText(name, "Lawn") ||
+            containsText(name, "Grass") ||
+            containsText(name, "Flower") ||
+            containsText(name, "Road") ||
+            containsText(name, "SandMat") ||
+            containsText(name, "Bridge") ||
+            containsText(name, "Rock") ||
+            containsText(name, "WallBlock");
     }
 
-    enemy.position = candidate;
-    return true;
-}
-
-bool SimpleEnemyManager::findFloorAt(const Environment& environment, float x, float z, float preferredY, float& floorY) const {
-    bool found = false;
-    float bestScore = std::numeric_limits<float>::max();
-    for (const Bounds& collider : environment.collisionPreview()) {
-        const float top = collider.center.y + collider.halfExtent.y;
-        const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
-        const bool floorLike = collider.halfExtent.y <= 0.30f && area > 0.20f;
-        const bool inside =
-            x >= collider.center.x - collider.halfExtent.x - 0.18f &&
-            x <= collider.center.x + collider.halfExtent.x + 0.18f &&
-            z >= collider.center.z - collider.halfExtent.z - 0.18f &&
-            z <= collider.center.z + collider.halfExtent.z + 0.18f;
-        if (!floorLike || !inside) {
-            continue;
-        }
-
-        const float score = std::abs(top - preferredY);
-        if (score < bestScore && score < 1.25f) {
-            bestScore = score;
-            floorY = top;
-            found = true;
-        }
+    glm::vec3 transformMapPoint(const glm::vec3& point) {
+        return {
+            (point.x + MapCenter.x) * MapScale,
+            -1.0f + point.y * MapScale,
+            (point.z + MapCenter.z) * MapScale
+        };
     }
-    return found;
-}
 
-Bounds SimpleEnemyManager::enemyBounds(const Enemy& enemy) const {
-    return {enemy.position + glm::vec3(0.0f, 0.55f, 0.0f), {0.34f, 0.58f, 0.34f}};
-}
-
-glm::mat4 SimpleEnemyManager::enemyModelMatrix(const Enemy& enemy, float timeSeconds) const {
-    const EnemyModel& modelData = m_models[std::clamp(enemy.modelIndex, 0, static_cast<int>(m_models.size() - 1))];
-    const float bob = std::sin(timeSeconds * 4.2f + static_cast<float>(enemy.modelIndex)) * 0.025f;
-    glm::mat4 model(1.0f);
-    model = glm::translate(model, enemy.position + glm::vec3(0.0f, bob, 0.0f));
-    model = glm::rotate(model, enemy.yaw, glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::scale(model, glm::vec3(modelData.modelScale));
-    model = glm::translate(model, {-modelData.modelCenter.x, -modelData.modelMin.y, -modelData.modelCenter.z});
-    return model;
-}
-
-void SimpleEnemyManager::buildFallbackModel(const glm::vec3& color, EnemyModel& modelData) {
-    modelData.parts.clear();
-    MissionRenderablePart body;
-    body.mesh = Mesh::cube();
-    body.material.baseColor = color;
-    body.material.roughness = 0.82f;
-    body.localScale = {0.62f, 1.05f, 0.62f};
-    modelData.parts.push_back(std::move(body));
-    modelData.modelMin = {-0.5f, -0.5f, -0.5f};
-    modelData.modelMax = {0.5f, 0.5f, 0.5f};
-    modelData.modelCenter = {0.0f, 0.0f, 0.0f};
-    modelData.modelScale = 1.0f;
-    modelData.color = color;
-}
-
-bool SimpleEnemyManager::damageEnemyAt(const glm::vec3& position, float horizontalRadius, float verticalRadius, int damage) {
-    for (Enemy& enemy : m_enemies) {
-        if (!enemy.alive) {
-            continue;
+    bool heightInTriangle(const TerrainTriangle& triangle, float x, float z, float& height) {
+        if (x < triangle.minX - TriangleMargin || x > triangle.maxX + TriangleMargin ||
+            z < triangle.minZ - TriangleMargin || z > triangle.maxZ + TriangleMargin) {
+            return false;
         }
 
-        const glm::vec3 enemyCenter = enemy.position + glm::vec3(0.0f, 0.55f, 0.0f);
-        if (std::abs(enemyCenter.x - position.x) <= horizontalRadius &&
-            std::abs(enemyCenter.y - position.y) <= verticalRadius &&
-            std::abs(enemyCenter.z - position.z) <= horizontalRadius) {
-            enemy.health = std::max(0, enemy.health - damage);
-            if (enemy.health <= 0) {
-                enemy.alive = false;
-            }
-            return true;
+        const float denominator = (triangle.b.z - triangle.c.z) * (triangle.a.x - triangle.c.x) +
+            (triangle.c.x - triangle.b.x) * (triangle.a.z - triangle.c.z);
+        if (std::fabs(denominator) < 0.000001f) {
+            return false;
         }
-    }
-    return false;
-}
 
-int SimpleEnemyManager::aliveCount() const {
-    return static_cast<int>(std::count_if(m_enemies.begin(), m_enemies.end(), [](const Enemy& enemy) {
-        return enemy.alive;
-    }));
-}
+        const float weightA = ((triangle.b.z - triangle.c.z) * (x - triangle.c.x) +
+            (triangle.c.x - triangle.b.x) * (z - triangle.c.z)) / denominator;
+        const float weightB = ((triangle.c.z - triangle.a.z) * (x - triangle.c.x) +
+            (triangle.a.x - triangle.c.x) * (z - triangle.c.z)) / denominator;
+        const float weightC = 1.0f - weightA - weightB;
 
-bool Map4LightManager::initialize() {
-    // deja listo el modelo del sol y su material para usarlos como pickup de luz
-    if (m_initialized) {
+        if (weightA < -TriangleMargin || weightB < -TriangleMargin || weightC < -TriangleMargin) {
+            return false;
+        }
+
+        height = weightA * triangle.a.y + weightB * triangle.b.y + weightC * triangle.c.y;
         return true;
     }
 
-    m_fallbackMesh = Mesh::cube();
-    m_fallbackMaterial.baseColor = {1.0f, 0.86f, 0.18f};
-    m_fallbackMaterial.emissive = {1.20f, 0.84f, 0.18f};
-    m_fallbackMaterial.roughness = 0.24f;
-    m_fallbackMaterial.fogAmount = 0.04f;
-    loadSunModel();
-    m_initialized = true;
-    return true;
+    int terrainCellCoordinate(float value) {
+        return static_cast<int>(std::floor(value / TerrainCellSize));
+    }
+
+    std::uint64_t terrainCellKey(int x, int z) {
+        return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32u) |
+            static_cast<std::uint32_t>(z);
+    }
+
+    bool pointInPlatform(const ExtraPlatform& platform, float x, float z, bool projectDepth) {
+        if (platform.shape == PlatformShape::Rectangle) {
+            return x >= platform.minX && x <= platform.maxX &&
+                (projectDepth || (z >= platform.minZ && z <= platform.maxZ));
+        }
+
+        const float centerX = (platform.minX + platform.maxX) * 0.5f;
+        const float centerZ = (platform.minZ + platform.maxZ) * 0.5f;
+        const float radiusX = (platform.maxX - platform.minX) * 0.5f;
+        const float radiusZ = (platform.maxZ - platform.minZ) * 0.5f;
+        const float dx = (x - centerX) / radiusX;
+        const float dz = (z - centerZ) / radiusZ;
+        return dx * dx + dz * dz <= 1.0f;
+    }
+
+    glm::quat rotationBetweenVectors(glm::vec3 from, glm::vec3 to) {
+        from = glm::normalize(from);
+        to = glm::normalize(to);
+        const float cosine = glm::dot(from, to);
+        if (cosine < -0.9999f) {
+            glm::vec3 axis = glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), from);
+            if (glm::dot(axis, axis) < 0.0001f) {
+                axis = glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), from);
+            }
+            return glm::angleAxis(glm::pi<float>(), glm::normalize(axis));
+        }
+
+        const glm::vec3 axis = glm::cross(from, to);
+        const float scale = std::sqrt((1.0f + cosine) * 2.0f);
+        const float inverseScale = 1.0f / scale;
+        return glm::normalize(glm::quat(
+            scale * 0.5f,
+            axis.x * inverseScale,
+            axis.y * inverseScale,
+            axis.z * inverseScale));
+    }
 }
-//soles map 4
-void Map4LightManager::reset(const Environment& environment, const glm::vec3& playerSpawn) {
-    // reparte los soles en lugares alcanzables para obligar a explorar el mapa
-    m_pickups.clear();
-    struct SurfaceCandidate {
-        Bounds bounds;
-        float top{0.0f};
-        float area{0.0f};
+
+struct Mapa1::Impl {
+    Shader shader;
+    AudioPlayer backgroundMusic{ L"mapa1_background_music" };
+    AudioPlayer parrySound{ L"mapa1_parry_sound" };
+    std::vector<WorldModel> worldModels;
+    std::vector<std::string> deferredWorldModelPaths;
+    WorldModel vanModel;
+    WorldModel gemModel;
+    AnimatedRuntimeModel bangbooPlayer;
+    std::unordered_map<std::string, std::shared_ptr<Texture2D>> textureCache;
+    Texture2D playerAtlasTexture;
+    LoadedModel projectileSwordModel;
+    WorldModel projectileCornModel;
+    bool projectileCornLoaded{ false };
+    Texture2D skyboxTexture;
+    Texture2D coinIconTexture;
+    Texture2D platformSideTexture;
+    Texture2D platformTopTexture;
+    Texture2D enemyTexture;
+    Mesh playerIdleMesh;
+    Mesh playerGuardGroundMesh;
+    Mesh playerGuardAirMesh;
+    Mesh skyboxMesh;
+    Mesh pipeBodyMesh;
+    Mesh pipeRimMesh;
+    Mesh pipeOpeningMesh;
+    Mesh platformMesh;
+    Mesh coinMesh;
+    Mesh starMesh;
+    Mesh parryRingMesh;
+    std::vector<Mesh> playerJumpMeshes;
+    std::vector<Mesh> playerRunMeshes;
+    std::vector<Mesh> playerAttackMeshes;
+    std::vector<Mesh> playerBlockMeshes;
+    std::vector<Mesh> playerEntranceMeshes;
+    std::vector<Mesh> playerDeathMeshes;
+    std::vector<Mesh> playerTransitionMeshes;
+    std::vector<Texture2D> playerJumpTextures;
+    std::vector<Texture2D> playerRunTextures;
+    std::vector<Texture2D> playerAttackTextures;
+    std::vector<Texture2D> playerBlockTextures;
+    std::vector<Texture2D> playerDeathTextures;
+    std::vector<Mesh> enemyIdleMeshes;
+    std::vector<Mesh> enemyRunMeshes;
+    std::vector<Mesh> enemyAttackMeshes;
+    std::vector<Mesh> enemyHurtMeshes;
+    std::vector<Mesh> enemyDeathMeshes;
+    std::vector<TerrainTriangle> terrainTriangles;
+    std::unordered_map<std::uint64_t, std::vector<std::uint32_t>> terrainCells;
+    std::vector<ExtraPlatform> extraPlatforms = {
+        {PlatformShape::Ellipse, 0.60f, 1.40f, -0.40f, 0.40f, 0.18f, 0.24f, {0.36f, 0.72f, 0.32f, 1.0f}, "tuberia", false, false},
+        {PlatformShape::Rectangle, -10.50f, -9.15f, 4.00f, 5.35f, -0.18f, 0.24f, {0.30f, 0.72f, 0.42f, 1.0f}, "oeste_01", true, false},
+        {PlatformShape::Rectangle, -8.85f, -7.35f, 4.65f, 6.15f, 0.30f, 0.26f, {0.34f, 0.78f, 0.46f, 1.0f}, "oeste_02", true, false},
+        {PlatformShape::Rectangle, -3.55f, -2.20f, -6.30f, -4.95f, -0.16f, 0.24f, {0.32f, 0.70f, 0.40f, 1.0f}, "sur_01", true, false},
+        {PlatformShape::Rectangle, -1.90f, -0.40f, -5.70f, -4.20f, 0.34f, 0.26f, {0.38f, 0.80f, 0.48f, 1.0f}, "sur_02", true, false},
+        {PlatformShape::Rectangle, 5.00f, 6.35f, 4.40f, 5.75f, -0.14f, 0.24f, {0.30f, 0.72f, 0.42f, 1.0f}, "norte_01", true, false},
+        {PlatformShape::Rectangle, 6.70f, 8.20f, 5.00f, 6.50f, 0.38f, 0.26f, {0.38f, 0.82f, 0.50f, 1.0f}, "norte_02", true, false},
+        {PlatformShape::Rectangle, 11.30f, 12.85f, -8.40f, -6.90f, 0.95f, 0.28f, {0.42f, 0.72f, 0.84f, 1.0f}, "isla_entrada", true, true},
+        {PlatformShape::Rectangle, 13.05f, 14.25f, 5.75f, 7.05f, 1.45f, 0.24f, {0.28f, 0.64f, 0.92f, 1.0f}, "isla_salto_01", true, true},
+        {PlatformShape::Rectangle, 14.95f, 16.15f, -9.35f, -8.05f, 1.95f, 0.24f, {0.30f, 0.72f, 0.98f, 1.0f}, "isla_salto_02", true, true},
+        {PlatformShape::Rectangle, 16.75f, 18.05f, 8.10f, 9.45f, 2.45f, 0.24f, {0.36f, 0.78f, 1.00f, 1.0f}, "isla_salto_03", true, true},
+        {PlatformShape::Rectangle, 18.70f, 20.20f, -10.50f, -8.90f, 2.90f, 0.28f, {0.46f, 0.84f, 1.00f, 1.0f}, "isla_ancla_01", true, true},
+        {PlatformShape::Rectangle, 23.65f, 25.25f, 7.90f, 9.55f, 3.05f, 0.28f, {0.18f, 0.68f, 1.00f, 1.0f}, "isla_espectral_01", true, true},
+        {PlatformShape::Rectangle, 31.80f, 34.20f, -12.20f, -10.10f, 3.22f, 0.30f, {0.70f, 0.88f, 1.00f, 1.0f}, "isla_espectral_final", true, true},
+        {PlatformShape::Rectangle, -37.00f, -31.90f, -1.40f, 1.60f, 0.42f, 0.22f, {0.36f, 0.64f, 0.42f, 1.0f}, "van_camino_mapa", true, true},
+        {PlatformShape::Rectangle, -40.80f, -38.00f, -1.50f, 1.50f, 0.58f, 0.22f, {0.40f, 0.68f, 0.48f, 1.0f}, "van_camino_01", true, true},
+        {PlatformShape::Rectangle, -44.60f, -41.80f, -1.50f, 1.50f, 0.76f, 0.22f, {0.44f, 0.72f, 0.54f, 1.0f}, "van_camino_02", true, true},
+        {PlatformShape::Rectangle, -48.40f, -45.60f, -1.50f, 1.50f, 0.94f, 0.22f, {0.48f, 0.76f, 0.60f, 1.0f}, "van_camino_03", true, true},
+        {PlatformShape::Rectangle, -56.25f, -49.25f, -3.60f, 3.60f, 1.10f, 0.30f, {0.58f, 0.78f, 0.62f, 1.0f}, "isla_camioneta", true, true}
     };
+    std::vector<Coin> coins;
+    Star star;
+    std::vector<SpectralAnchor> spectralAnchors;
+    std::vector<DemonEnemy> enemies;
+    std::vector<Projectile> projectiles;
+    std::vector<DroppedGem> droppedGems;
 
-    std::vector<SurfaceCandidate> surfaces;
-    for (const Bounds& collider : environment.collisionPreview()) {
-        const float top = collider.center.y + collider.halfExtent.y;
-        const float area = (collider.halfExtent.x * 2.0f) * (collider.halfExtent.z * 2.0f);
-        const bool floorLike = collider.halfExtent.y <= 0.32f && area >= 0.85f && collider.halfExtent.x >= 0.38f && collider.halfExtent.z >= 0.38f;
-        const bool reachableHeight = top >= playerSpawn.y - 0.25f && top <= playerSpawn.y + 1.25f;
-        if (floorLike && reachableHeight) {
-            surfaces.push_back({collider, top, area});
+    bool initialized{ false };
+    bool vanModelLoaded{ false };
+    bool vanModelLoadAttempted{ false };
+    bool gemModelLoaded{ false };
+    bool backgroundMusicOpen{ false };
+    bool backgroundMusicPlaying{ false };
+    bool parrySoundOpen{ false };
+    bool mode3D{ false };
+    bool tabPressed{ false };
+    bool mouseAttackPressed{ false };
+    bool chargingPlayerAttack{ false };
+    bool parryPressed{ false };
+    bool interactPressed{ false };
+    bool shopTogglePressed{ false };
+    bool resetEnemiesRequested{ false };
+    bool clearProjectilesRequested{ false };
+    bool levelIntroActive{ false };
+    float posX{ 0.0f };
+    float posY{ 0.0f };
+    float posZ{ 0.0f };
+    float velocityY{ 0.0f };
+    bool grounded{ false };
+    float playerAngle{ 0.0f };
+    float cameraOffsetY{ 0.0f };
+    int lives{ StartingLives };
+    int playerHealth{ PlayerMaximumHealth };
+    float messageTime{ 0.0f };
+    std::string statusMessage;
+    float titleTime{ 0.0f };
+    int currentFrame{ 0 };
+    float animationTime{ 0.0f };
+    float playerJumpTime{ 0.0f };
+    float playerAttackTime{ 0.0f };
+    float playerGuardStartTime{ 0.0f };
+    float playerEntranceTime{ 0.0f };
+    float playerTransitionTime{ 0.0f };
+    float playerDeathTime{ 0.0f };
+    float playerGuardUntil{ 0.0f };
+    bool wasMoving{ false };
+    bool playerAttackPlaying{ false };
+    bool playerEntrancePlaying{ false };
+    bool playerTransitionPlaying{ false };
+    bool playerDeathPlaying{ false };
+    int collectedCoins{ 0 };
+    int coinMessageCount{ 0 };
+    float coinMessageUntil{ 0.0f };
+    float starMessageUntil{ 0.0f };
+    float combatHintUntil{ 0.0f };
+    float playerAttackCooldown{ 0.0f };
+    float playerChargeTime{ 0.0f };
+    float playerInvulnerability{ 0.0f };
+    float parryUntil{ 0.0f };
+    float parryEffectUntil{ 0.0f };
+    float spectralCooldown{ 0.0f };
+    float spectralLockedHintUntil{ 0.0f };
+    float spectralReadyHintUntil{ 0.0f };
+    float spectralUnlockHintUntil{ 0.0f };
+    float spectralEffectUntil{ 0.0f };
+    float levelIntroTime{ 0.0f };
+    glm::vec3 spectralEffectStart{ 0.0f };
+    glm::vec3 spectralEffectEnd{ 0.0f };
+    glm::vec3 playerAimDirection{ 1.0f, 0.0f, 0.0f };
+    int spectralGems{ 0 };
+    bool spectralStepUnlocked{ false };
+    bool damageParryPurchased{ false };
+    bool spectralKeyPressed{ false };
+    bool vanShopOpen{ false };
+    float vanPromptUntil{ 0.0f };
+    float vanShopUntil{ 0.0f };
+    bool completed{ false };
+    float deferredWorldLoadDelay{ 0.0f };
+
+    void initializeAudio() {
+        backgroundMusicOpen = backgroundMusic.open(resolveAssetPath("assets/audio/Blade_of_the_Hidden_Cove.mp3"));
+        if (backgroundMusicOpen) {
+            backgroundMusicPlaying = backgroundMusic.playLoop();
+        }
+        else {
+            std::cerr << "Map 4 background music could not be started." << std::endl;
+        }
+
+        parrySoundOpen = parrySound.open(resolveAssetPath("assets/audio/royal-guard.mp3"));
+        if (!parrySoundOpen) {
+            std::cerr << "Map 4 parry sound could not be loaded." << std::endl;
         }
     }
 
-    if (surfaces.empty()) {
-        return;
+    void shutdownAudio() {
+        if (backgroundMusicOpen) {
+            backgroundMusic.close();
+        }
+        if (parrySoundOpen) {
+            parrySound.close();
+        }
+        backgroundMusicOpen = false;
+        backgroundMusicPlaying = false;
+        parrySoundOpen = false;
     }
 
-    std::sort(surfaces.begin(), surfaces.end(), [](const SurfaceCandidate& a, const SurfaceCandidate& b) {
-        if (a.bounds.center.x == b.bounds.center.x) {
-            return a.area > b.area;
-        }
-        return a.bounds.center.x < b.bounds.center.x;
-    });
-
-    const std::array<glm::vec2, 8> offsets = {
-        glm::vec2(0.0f, 0.0f), glm::vec2(-0.35f, 0.28f), glm::vec2(0.35f, -0.28f), glm::vec2(0.0f, 0.42f),
-        glm::vec2(-0.42f, 0.0f), glm::vec2(0.42f, 0.0f), glm::vec2(-0.22f, -0.36f), glm::vec2(0.22f, 0.36f)
-    };
-
-    auto tryAddPickup = [&](const SurfaceCandidate& surface, const glm::vec2& bias) {
-        if (m_pickups.size() >= Map4SunPickupTotal) {
-            return;
+    std::shared_ptr<Texture2D> textureFor(const std::string& path) {
+        if (path.empty() || path.find('*') != std::string::npos) {
+            return {};
         }
 
-        const float safeX = std::max(surface.bounds.halfExtent.x - 0.48f, 0.0f);
-        const float safeZ = std::max(surface.bounds.halfExtent.z - 0.48f, 0.0f);
-        SunPickup pickup;
-        pickup.position = {
-            surface.bounds.center.x + safeX * bias.x,
-            surface.top + 0.64f,
-            surface.bounds.center.z + safeZ * bias.y
-        };
-        pickup.phase = static_cast<float>(m_pickups.size()) * 0.93f;
-
-        if (glm::length(glm::vec2(pickup.position.x - playerSpawn.x, pickup.position.z - playerSpawn.z)) < 4.4f) {
-            return;
+        const std::string resolved = resolveTextureAssetPath(path);
+        auto found = textureCache.find(resolved);
+        if (found != textureCache.end()) {
+            return found->second;
         }
 
-        const Bounds candidate = sunBounds(pickup);
-        for (const Bounds& collider : environment.collisionPreview()) {
-            if (map4BoundsIntersect(candidate, collider)) {
-                return;
-            }
+        auto texture = std::make_shared<Texture2D>();
+        if (!texture->loadFromFile(resolved)) {
+            std::cerr << "Map 4 texture could not be loaded: " << resolved << std::endl;
+            return {};
         }
-
-        for (const SunPickup& existing : m_pickups) {
-            if (glm::length(glm::vec2(existing.position.x - pickup.position.x, existing.position.z - pickup.position.z)) < 4.0f) {
-                return;
-            }
-        }
-
-        m_pickups.push_back(pickup);
-    };
-
-    for (size_t i = 0; i < surfaces.size() && m_pickups.size() < Map4SunPickupTotal; ++i) {
-        const size_t desiredCount = std::max<size_t>(1, Map4SunPickupTotal > 0 ? Map4SunPickupTotal - 1 : 1);
-        const size_t index = surfaces.size() > 1
-            ? std::min(surfaces.size() - 1, i * (surfaces.size() - 1) / desiredCount)
-            : 0;
-        for (const glm::vec2& offset : offsets) {
-            tryAddPickup(surfaces[index], offset);
-            if (m_pickups.size() >= Map4SunPickupTotal) {
-                break;
-            }
-        }
-    }
-
-    for (const SurfaceCandidate& surface : surfaces) {
-        if (m_pickups.size() >= Map4SunPickupTotal) {
-            break;
-        }
-        for (const glm::vec2& offset : offsets) {
-            tryAddPickup(surface, offset);
-            if (m_pickups.size() >= Map4SunPickupTotal) {
-                break;
-            }
-        }
-    }
-}
-
-bool Map4LightManager::update(Player& player, float timeSeconds, float deltaTime, float& energySeconds) {
-    // baja la energía con el tiempo y la rellena cuando el jugador toca un sol
-    bool collectedSun = false;
-    energySeconds = std::max(0.0f, energySeconds - deltaTime);
-    const Bounds playerBounds = player.bounds();
-    for (SunPickup& pickup : m_pickups) {
-        if (!pickup.available) {
-            if (timeSeconds >= pickup.respawnAt) {
-                pickup.available = true;
-            }
-            continue;
-        }
-
-        if (map4BoundsIntersect(playerBounds, sunBounds(pickup))) {
-            pickup.available = false;
-            pickup.respawnAt = timeSeconds + Map4LightRespawnTime;
-            // cada sol recarga bastante pero no deja pasar el máximo de energía
-            energySeconds = std::min(Map4LightEnergyMaximum, energySeconds + Map4LightEnergyMaximum);
-            collectedSun = true;
-        }
-    }
-    return collectedSun;
-}
-
-void Map4LightManager::render(const Shader& shader, float timeSeconds, const glm::vec3& cameraPosition) const {
-    shader.use();
-    shader.setFloat("uTime", timeSeconds);
-    for (const SunPickup& pickup : m_pickups) {
-        if (!pickup.available || glm::length(pickup.position - cameraPosition) > 24.0f) {
-            continue;
-        }
-
-        const glm::mat4 model = sunModelMatrix(pickup, timeSeconds);
-        if (!m_parts.empty()) {
-            for (const MissionRenderablePart& part : m_parts) {
-                shader.setMat4("uModel", model * localPartMatrix(part));
-                bindSceneMaterial(shader, part.material);
-                part.mesh.draw();
-            }
-        } else {
-            shader.setMat4("uModel", model);
-            bindSceneMaterial(shader, m_fallbackMaterial);
-            m_fallbackMesh.draw();
-        }
-    }
-}
-
-std::shared_ptr<Texture2D> Map4LightManager::loadSunTexture(const std::string& path) {
-    if (path.empty()) {
-        return {};
-    }
-
-    std::filesystem::path original(path);
-    const std::filesystem::path fileName = original.filename();
-    const std::filesystem::path candidates[] = {
-        original,
-        std::filesystem::path("assets") / "Items" / fileName,
-        std::filesystem::path("assets") / "items" / fileName,
-        std::filesystem::path("..") / ".." / original,
-        std::filesystem::path("..") / ".." / "assets" / "Items" / fileName,
-        std::filesystem::path("..") / ".." / "assets" / "items" / fileName
-    };
-
-    std::filesystem::path resolved = original;
-    for (const auto& candidate : candidates) {
-        if (!candidate.empty() && std::filesystem::exists(candidate)) {
-            resolved = std::filesystem::weakly_canonical(candidate);
-            break;
-        }
-    }
-
-    const std::string normalized = resolved.string();
-    for (const auto& texture : m_textures) {
-        if (texture && texture->sourcePath() == normalized) {
-            return texture;
-        }
-    }
-
-    auto texture = std::make_shared<Texture2D>();
-    if (!texture->loadFromFile(normalized, false)) {
-        return nullptr;
-    }
-    m_textures.push_back(texture);
-    return texture;
-}
-
-std::shared_ptr<Texture2D> Map4LightManager::loadSunTexture(const LoadedMaterial& material) {
-    auto texture = loadSunTexture(material.diffuseTexturePath);
-    if (texture && texture->valid()) {
+        textureCache.emplace(resolved, texture);
         return texture;
     }
 
-    if (material.embeddedTextureData.empty()) {
-        return nullptr;
-    }
-
-    auto embedded = std::make_shared<Texture2D>();
-    if (material.embeddedTextureCompressed) {
-        if (!embedded->loadFromMemory(material.embeddedTextureData.data(), static_cast<int>(material.embeddedTextureData.size()), false)) {
-            return nullptr;
+    std::vector<MapMaterial> runtimeMaterialsFor(const std::vector<LoadedMaterial>& materials) {
+        std::vector<MapMaterial> runtimeMaterials;
+        runtimeMaterials.reserve(materials.size());
+        for (const LoadedMaterial& material : materials) {
+            MapMaterial runtimeMaterial;
+            runtimeMaterial.color = glm::vec4(material.diffuseColor, material.opacity);
+            if (!material.embeddedTextureData.empty()) {
+                auto embedded = std::make_shared<Texture2D>();
+                bool loaded = false;
+                if (material.embeddedTextureCompressed) {
+                    loaded = embedded->loadFromMemory(
+                        material.embeddedTextureData.data(),
+                        static_cast<int>(material.embeddedTextureData.size()),
+                        false);
+                }
+                else if (material.embeddedTextureWidth > 0 && material.embeddedTextureHeight > 0) {
+                    embedded->createFromRGBA(
+                        material.embeddedTextureWidth,
+                        material.embeddedTextureHeight,
+                        material.embeddedTextureData.data(),
+                        false);
+                    loaded = embedded->valid();
+                }
+                if (loaded) {
+                    runtimeMaterial.texture = std::move(embedded);
+                }
+            }
+            else {
+                runtimeMaterial.texture = textureFor(material.diffuseTexturePath);
+            }
+            runtimeMaterials.push_back(std::move(runtimeMaterial));
         }
-    } else if (material.embeddedTextureWidth > 0 && material.embeddedTextureHeight > 0) {
-        embedded->createFromRGBA(material.embeddedTextureWidth, material.embeddedTextureHeight, material.embeddedTextureData.data(), false);
-    } else {
-        return nullptr;
+        return runtimeMaterials;
     }
 
-    m_textures.push_back(embedded);
-    return embedded;
-}
-
-bool Map4LightManager::loadSunModel() {
-    // carga el modelo del sol y lo deja con un material que destaque en la oscuridad
-    LoadedModel model = ModelLoader::loadModel(resolveAssetPath("assets/Items/sol.glb"));
-    if (model.meshes.empty()) {
-        model = ModelLoader::loadModel(resolveAssetPath("assets/items/sol.glb"));
-    }
-    if (model.meshes.empty()) {
-        std::cerr << "Map 4 sun model could not be loaded. Using procedural fallback sun." << std::endl;
-        return false;
-    }
-
-    m_modelMin = model.minBounds;
-    m_modelMax = model.maxBounds;
-    m_modelCenter = (m_modelMin + m_modelMax) * 0.5f;
-    const glm::vec3 size = m_modelMax - m_modelMin;
-    const float maxExtent = std::max({size.x, size.y, size.z, 0.001f});
-    m_modelScale = 0.42f / maxExtent;
-
-    m_parts.clear();
-    m_parts.reserve(model.meshes.size());
-    for (LoadedMesh& mesh : model.meshes) {
-        MissionRenderablePart part;
-        if (mesh.materialIndex < model.materials.size()) {
-            const LoadedMaterial& material = model.materials[mesh.materialIndex];
-            part.material.baseColor = material.diffuseColor;
-            part.material.opacity = material.opacity;
-            part.material.texture = loadSunTexture(material);
+    bool loadWorldModel(const std::string& path) {
+        WorldModel world;
+        world.model = ModelLoader::loadModel(resolveAssetPath(path));
+        if (world.model.meshes.empty()) {
+            return false;
         }
-        part.material.emissive = {2.10f, 1.55f, 0.34f};
-        part.material.roughness = 0.20f;
-        part.material.fogAmount = 0.0f;
-        if (!part.material.texture) {
-            part.material.baseColor = {1.0f, 0.90f, 0.22f};
+
+        world.materials = runtimeMaterialsFor(world.model.materials);
+
+        worldModels.push_back(std::move(world));
+        return true;
+    }
+
+    bool loadBangbooPlayerModel() {
+        const std::string path = resolveAssetPath("assets/mapa1/player/bangboo/source/BangBoo.fbx");
+        LoadedModel materialSource = ModelLoader::loadModel(path);
+        if (materialSource.meshes.empty()) {
+            std::cerr << "Map 4 BangBoo player model could not be loaded." << std::endl;
+            return false;
         }
-        part.mesh = std::move(mesh.mesh);
-        m_parts.push_back(std::move(part));
-    }
-    return true;
-}
 
-Bounds Map4LightManager::sunBounds(const SunPickup& pickup) const {
-    return {pickup.position, {0.42f, 0.48f, 0.42f}};
-}
-
-glm::mat4 Map4LightManager::sunModelMatrix(const SunPickup& pickup, float timeSeconds) const {
-    glm::mat4 model(1.0f);
-    const float bob = std::sin(timeSeconds * 1.9f + pickup.phase) * 0.10f;
-    model = glm::translate(model, pickup.position + glm::vec3(0.0f, bob, 0.0f));
-    model = glm::rotate(model, timeSeconds * 1.7f + pickup.phase, glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::scale(model, glm::vec3(m_modelScale));
-    model = glm::translate(model, -m_modelCenter);
-    return model;
-}
-
-void openMapa4Sfx(Mapa4Runtime& mapa4) {
-    if (!mapa4.sunSoundOpen) {
-        mapa4.sunSoundOpen = mapa4.sunSound.open(resolveFirstExistingAsset({
-            "assets/audio/sol.mp3",
-            "assets/audio/Sol.mp3"
-        }));
-        if (mapa4.sunSoundOpen) {
-            mapa4.sunSound.setVolume(920);
+        bangbooPlayer = bakeAnimatedRuntimeModel(path, runtimeMaterialsFor(materialSource.materials));
+        if (!bangbooPlayer.valid()) {
+            std::cerr << "Map 4 BangBoo player animation could not be prepared." << std::endl;
+            return false;
         }
+
+        return true;
     }
 
-    if (!mapa4.footstepSoundOpen) {
-        mapa4.footstepSoundOpen = mapa4.footstepSound.open(resolveFirstExistingAsset({
-            "assets/audio/pasos.mp3",
-            "assets/audio/Pasos.mp3"
-        }));
-        if (mapa4.footstepSoundOpen) {
-            mapa4.footstepSound.setVolume(360);
+    bool loadPlayerSpriteSequence(const std::string& folder, std::vector<Mesh>& meshes, std::vector<Texture2D>& textures) {
+        meshes.clear();
+        textures.clear();
+
+        const std::filesystem::path directory(resolveAssetPath("assets/mapa1/player/" + folder));
+        if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
+            std::cerr << "Map 4 player animation folder missing: " << directory.string() << std::endl;
+            return false;
         }
-    }
 
-    if (!mapa4.enemyShotSoundOpen) {
-        mapa4.enemyShotSoundOpen = mapa4.enemyShotSound.open(resolveFirstExistingAsset({
-            "assets/audio/disparo.mp3",
-            "assets/audio/Disparo.mp3"
-        }));
-        if (mapa4.enemyShotSoundOpen) {
-            mapa4.enemyShotSound.setVolume(360);
+        std::vector<std::filesystem::path> framePaths;
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(directory)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+
+            if (lowercase(entry.path().extension().string()) == ".png") {
+                framePaths.push_back(entry.path());
+            }
         }
-    }
 
-    if (!mapa4.gameOverSoundOpen) {
-        mapa4.gameOverSoundOpen = mapa4.gameOverSound.open(resolveFirstExistingAsset({
-            "assets/audio/game over.mp3",
-            "assets/audio/Game Over.mp3",
-            "assets/audio/gameover.mp3"
-        }));
-        if (mapa4.gameOverSoundOpen) {
-            mapa4.gameOverSound.setVolume(860);
+        std::sort(framePaths.begin(), framePaths.end(), [](const std::filesystem::path& left, const std::filesystem::path& right) {
+            const int leftNumber = trailingNumber(left);
+            const int rightNumber = trailingNumber(right);
+            if (leftNumber != rightNumber) {
+                return leftNumber < rightNumber;
+            }
+            return left.filename().string() < right.filename().string();
+            });
+
+        meshes.reserve(framePaths.size());
+        textures.reserve(framePaths.size());
+        for (const std::filesystem::path& framePath : framePaths) {
+            Texture2D texture;
+            if (!texture.loadFromFile(framePath.string())) {
+                std::cerr << "Map 4 player animation frame could not be loaded: " << framePath.string() << std::endl;
+                return false;
+            }
+
+            texture.bind();
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            meshes.push_back(createPlayerSpriteMesh({ 0, 0, texture.width(), texture.height() }, texture.width(), texture.height()));
+            textures.push_back(std::move(texture));
         }
-    }
 
-    if (!mapa4.levelWinSoundOpen) {
-        mapa4.levelWinSoundOpen = mapa4.levelWinSound.open(resolveFirstExistingAsset({
-            "assets/audio/level win.mp3",
-            "assets/audio/Level Win.mp3",
-            "assets/audio/levelwin.mp3"
-        }));
-        if (mapa4.levelWinSoundOpen) {
-            mapa4.levelWinSound.setVolume(880);
-        }
-    }
-}
-
-void stopMapa4BackgroundMusic(Mapa4Runtime& mapa4) {
-    if (mapa4.musicOpen && mapa4.musicPlaying) {
-        mapa4.music.stop();
-        mapa4.musicPlaying = false;
-    }
-}
-
-bool isMarioMapa4Environment(const Environment& environment) {
-    // revisa la ruta cargada para saber si se deben aplicar las reglas propias de mapa 4
-    const std::string source = environment.levelSource();
-    return source.find("mapamian") != std::string::npos ||
-        source.find("mapa verde") != std::string::npos ||
-        source.find("mapa 4") != std::string::npos;
-}
-
-bool iniciarMapa4(Mapa4Runtime& mapa4) {
-    // prepara o reactiva la sesión del mapa sin volver a cargar lo que ya existe en memoria
-    if (mapa4.initialized) {
-        if (!mapa4.sessionActive) {
-            const glm::vec3 spawnPoint = isMarioMapa4Environment(mapa4.environment)
-                ? findMarioMapa4Spawn(mapa4.environment)
-                : mapa4.environment.recommendedSpawnPoint();
-            mapa4.player.spawnAt(spawnPoint);
-            mapa4.mission.reset(mapa4.environment, spawnPoint);
-            mapa4.enemies.reset(mapa4.environment, spawnPoint);
-            mapa4.lightPickups.initialize();
-            mapa4.lightPickups.reset(mapa4.environment, spawnPoint);
-            mapa4.lastCollectedCount = 0;
-            mapa4.coinCollectDelay = 1.10f;
-            mapa4.health = mapa4.maxHealth;
-            mapa4.damageCooldown = 0.0f;
-            mapa4.pendingHits = 0;
-            mapa4.shieldActive = false;
-            mapa4.shieldTimer = 0.0f;
-            mapa4.lightEnergy = Map4LightEnergyMaximum;
-            mapa4.gameOver = false;
-            mapa4.startSequencePending = true;
-            mapa4.skipFirstUpdateFrame = true;
-            mapa4.projectiles.clear();
-            mapa4.projectileCooldown = 0.0f;
-            mapa4.secretCompleteKeyHeld = false;
-            mapa4.jumpBufferUntil = 0.0;
-            mapa4.nextFootstepSoundAt = 0.0;
-            mapa4.gameOverSoundPlayed = false;
-            mapa4.levelWinSoundPlayed = false;
-            mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
-            mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
-            openMapa4Sfx(mapa4);
-            currentMode = PlayMode::Mode2D;
-            locked2DDepth = spawnPoint.z;
-            cameraInitialized = false;
-            updateGameplayCamera(mapa4.player, mapa4.environment, mapa4.mission, static_cast<float>(glfwGetTime()), 0.0f);
-            beginLevelIntro(mapa4.environment, mapa4.player, static_cast<float>(glfwGetTime()));
-            mapa4.sessionActive = true;
+        if (meshes.empty()) {
+            std::cerr << "Map 4 player animation folder has no PNG frames: " << directory.string() << std::endl;
+            return false;
         }
         return true;
     }
 
-    const std::string levelPath = resolveFirstExistingAsset({
-        "assets/mapa 4/mapamian/World 1/World 1/CourseSelectW1.dae",
-        "assets/mapa 4/mapamian/World 1/World 1/CourseSelectW1A.dae",
-        "assets/mapa 4/mapa verde/World 1/World 1/CourseSelectW1.dae"
-    });
-    if (levelPath.empty()) {
-        return false;
+    bool loadPlayerSprites() {
+        return loadPlayerSpriteSequence("caminar", playerRunMeshes, playerRunTextures) &&
+            loadPlayerSpriteSequence("ataque", playerAttackMeshes, playerAttackTextures) &&
+            loadPlayerSpriteSequence("saltar", playerJumpMeshes, playerJumpTextures) &&
+            loadPlayerSpriteSequence("bloquear", playerBlockMeshes, playerBlockTextures) &&
+            loadPlayerSpriteSequence("morir", playerDeathMeshes, playerDeathTextures);
     }
 
-    mapa4.environment.create(levelPath, true);
-    if (!environmentUsable(mapa4.environment)) {
-        return false;
+    void streamDeferredWorldModels(float dt) {
+        if (deferredWorldModelPaths.empty()) {
+            return;
+        }
+
+        deferredWorldLoadDelay -= dt;
+        if (deferredWorldLoadDelay > 0.0f) {
+            return;
+        }
+
+        const std::string path = deferredWorldModelPaths.front();
+        deferredWorldModelPaths.erase(deferredWorldModelPaths.begin());
+        loadWorldModel(path);
+        deferredWorldLoadDelay = 0.18f;
     }
 
-    mapa4.coinSoundOpen = mapa4.coinSound.open(resolveFirstExistingAsset({
-        "assets/audio/coin.mp3",
-        "assets/audio/Coin.mp3",
-        "assets/mapa 4/coin sound.mp3",
-        "assets/mapa 4/Coin Sound.mp3",
-        "assets/audio/coin sound.mp3"
-    }));
-    if (mapa4.coinSoundOpen) {
-        mapa4.coinSound.setVolume(860);
-    }
-    openMapa4Sfx(mapa4);
-
-    loadWorldOnePlayerSprites(mapa4.player);
-    const glm::vec3 spawnPoint = isMarioMapa4Environment(mapa4.environment)
-        ? findMarioMapa4Spawn(mapa4.environment)
-        : mapa4.environment.recommendedSpawnPoint();
-    mapa4.player.spawnAt(spawnPoint);
-    mapa4.mission.initialize();
-    mapa4.mission.setCompleteOnAllCoins(true);
-    mapa4.mission.reset(mapa4.environment, spawnPoint);
-    mapa4.lightPickups.initialize();
-    mapa4.lightPickups.reset(mapa4.environment, spawnPoint);
-    mapa4.enemies.initialize();
-    mapa4.enemies.reset(mapa4.environment, spawnPoint);
-    mapa4.lastCollectedCount = 0;
-    mapa4.coinCollectDelay = 1.10f;
-    mapa4.health = mapa4.maxHealth;
-    mapa4.damageCooldown = 0.0f;
-    mapa4.pendingHits = 0;
-    mapa4.shieldActive = false;
-    mapa4.shieldTimer = 0.0f;
-    mapa4.lightEnergy = Map4LightEnergyMaximum;
-    mapa4.gameOver = false;
-    mapa4.startSequencePending = true;
-    mapa4.skipFirstUpdateFrame = true;
-    mapa4.projectiles.clear();
-    mapa4.projectileCooldown = 0.0f;
-    mapa4.secretCompleteKeyHeld = false;
-    mapa4.jumpBufferUntil = 0.0;
-    mapa4.nextFootstepSoundAt = 0.0;
-    mapa4.gameOverSoundPlayed = false;
-    mapa4.levelWinSoundPlayed = false;
-    mapa4.instructionBoxAvailableAt = glfwGetTime() + 5.0;
-    mapa4.instructionBoxHideAt = glfwGetTime() + 30.0;
-    currentMode = PlayMode::Mode2D;
-    locked2DDepth = spawnPoint.z;
-    cameraInitialized = false;
-    updateGameplayCamera(mapa4.player, mapa4.environment, mapa4.mission, static_cast<float>(glfwGetTime()), 0.0f);
-    beginLevelIntro(mapa4.environment, mapa4.player, static_cast<float>(glfwGetTime()));
-
-    std::cout << "Map 4 ready. Collision volumes: " << mapa4.environment.collisionPreview().size() << std::endl;
-
-    mapa4.initialized = true;
-    mapa4.sessionActive = true;
-    return true;
-}
-
-void volverAlMenu(Mapa4Runtime& mapa4) {
-    // limpia estados temporales del mapa antes de volver al menú principal
-    stopMapa4BackgroundMusic(mapa4);
-    mapa4.lastCollectedCount = 0;
-    mapa4.coinCollectDelay = 0.0f;
-    mapa4.projectiles.clear();
-    mapa4.projectileCooldown = 0.0f;
-    mapa4.nextFootstepSoundAt = 0.0;
-    mapa4.gameOverSoundPlayed = false;
-    mapa4.levelWinSoundPlayed = false;
-    mapa4.pendingHits = 0;
-    mapa4.shieldActive = false;
-    mapa4.shieldTimer = 0.0f;
-    mapa4.lightEnergy = Map4LightEnergyMaximum;
-    mapa4.startSequencePending = false;
-    mapa4.skipFirstUpdateFrame = false;
-    mapa4.secretCompleteKeyHeld = false;
-    mapa4.jumpBufferUntil = 0.0;
-    mapa4.instructionBoxAvailableAt = 0.0;
-    mapa4.instructionBoxHideAt = 0.0;
-    mapa4.sessionActive = false;
-}
-//funcion render map 4 
-void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneShader, const Shader& lavaShader, float now) {
-    // aquí corre todo lo importante del mapa en cada frame
-    if (mapa4.startSequencePending) {
-        // la música entra hasta que el mapa ya terminó de armarse
-        if (!mapa4.musicOpen) {
-            const std::string musicPath = resolveFirstExistingAsset({
-                "assets/audio/audio mapa 4.mp3",
-                "assets/mapa 4/audio 4.mp3",
-                "assets/audio/map4.mp3",
-                "assets/audio/Map4.mp3"
-            });
-            if (!musicPath.empty() && std::filesystem::exists(musicPath)) {
-                mapa4.musicOpen = mapa4.music.open(musicPath);
-            }
+    bool loadVanModel() {
+        vanModelLoadAttempted = true;
+        vanModel = {};
+        vanModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/cabina_telefonica (1).glb"));
+        if (vanModel.model.meshes.empty()) {
+            std::cerr << "Map 4 phone booth model could not be loaded." << std::endl;
+            vanModelLoaded = false;
+            return false;
         }
-        if (mapa4.musicOpen && !mapa4.musicPlaying) {
-            mapa4.music.playLoop();
-            mapa4.musicPlaying = true;
-        }
-        mapa4.startSequencePending = false;
+
+        vanModel.materials = runtimeMaterialsFor(vanModel.model.materials);
+        vanModelLoaded = true;
+        return true;
     }
 
-    const float frameDelta = mapa4.skipFirstUpdateFrame ? 0.0f : deltaTime;
-    mapa4.skipFirstUpdateFrame = false;
-    const bool introActive = levelIntroActive();
+    bool ensureVanModelLoaded() {
+        if (vanModelLoaded) {
+            return true;
+        }
+        if (vanModelLoadAttempted) {
+            return false;
+        }
+        return loadVanModel();
+    }
 
-    if (introActive) {
-        consumeLevelIntroInput(window);
-        mapa4.secretCompleteKeyHeld = glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS;
-        updateLevelIntroCamera(now);
-    } else if (!mapa4.gameOver && !mapa4.mission.levelComplete()) {
-        const bool secretCompleteDown = glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS;
-        const bool secretCompletePressed = secretCompleteDown && !mapa4.secretCompleteKeyHeld;
-        mapa4.secretCompleteKeyHeld = secretCompleteDown;
-        if (secretCompletePressed) {
-            mapa4.mission.forceComplete(now);
-        }
-
-        PlayerInput playerInput = buildPlayerInput(window, mapa4.player);
-        const bool shieldDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
-        const bool shieldPressed = shieldDown && !lastShieldKey;
-        lastShieldKey = shieldDown;
-        if (shieldPressed) {
-            if (mapa4.shieldActive) {
-                mapa4.shieldActive = false;
-                mapa4.shieldTimer = 0.0f;
-            } else {
-                mapa4.shieldActive = true;
-                mapa4.shieldTimer = 1.0f;
-            }
-        }
-        if (mapa4.shieldActive) {
-            mapa4.shieldTimer = std::max(0.0f, mapa4.shieldTimer - frameDelta);
-            if (mapa4.shieldTimer <= 0.0f) {
-                mapa4.shieldActive = false;
-            }
-        }
-        std::vector<Bounds> playerColliders = buildMapa4PlayerColliders(mapa4.environment, locked2DDepth, currentMode);
-        appendDimensionRestrictionColliders(playerColliders, mapa4.environment, locked2DDepth);
-        prepareMapa4Jump(mapa4, playerInput, playerColliders, now);
-        mapa4.player.update(playerInput, playerColliders, mapa4.environment.worldMin(), mapa4.environment.worldMax(), frameDelta);
-        if (mapa4.footstepSoundOpen && mapa4.player.grounded()) {
-            const glm::vec3 velocity = mapa4.player.velocity();
-            const float horizontalSpeed = glm::length(glm::vec2(velocity.x, velocity.z));
-            if (horizontalSpeed > 0.28f && now >= static_cast<float>(mapa4.nextFootstepSoundAt)) {
-                mapa4.footstepSound.playOnce();
-                mapa4.nextFootstepSoundAt = static_cast<double>(now) + 0.34;
-            }
+    bool loadGemModel() {
+        gemModel = {};
+        gemModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/extra/Untitled.glb"));
+        if (gemModel.model.meshes.empty()) {
+            std::cerr << "Map 4 red gem model could not be loaded." << std::endl;
+            gemModelLoaded = false;
+            return false;
         }
 
-        if (mapa4.lightPickups.update(mapa4.player, now, frameDelta, mapa4.lightEnergy) && mapa4.sunSoundOpen) {
-            mapa4.sunSound.playOnce();
+        gemModel.materials = runtimeMaterialsFor(gemModel.model.materials);
+        gemModelLoaded = true;
+        return true;
+    }
+
+    bool loadCornProjectileModel() {
+        projectileCornModel = {};
+        projectileCornModel.model = ModelLoader::loadModel(resolveAssetPath("assets/mapa1/choclo/scene.gltf"));
+        if (projectileCornModel.model.meshes.empty()) {
+            std::cerr << "Map 4 corn projectile model could not be loaded." << std::endl;
+            projectileCornLoaded = false;
+            return false;
         }
-        mapa4.coinCollectDelay = std::max(0.0f, mapa4.coinCollectDelay - frameDelta);
-        if (mapa4.coinCollectDelay <= 0.0f) {
-            mapa4.mission.update(mapa4.player, now);
+
+        projectileCornModel.materials = runtimeMaterialsFor(projectileCornModel.model.materials);
+        projectileCornLoaded = true;
+        return true;
+    }
+
+    std::string meshName(const WorldModel& model, const LoadedMesh& mesh) const {
+        std::string name = mesh.name;
+        if (mesh.materialIndex < model.model.materials.size()) {
+            name += "__";
+            name += model.model.materials[mesh.materialIndex].name;
         }
-        const int collectedCount = mapa4.mission.collectedCount();
-        if (mapa4.coinSoundOpen && collectedCount > mapa4.lastCollectedCount) {
-            mapa4.coinSound.playOnce();
-        }
-        mapa4.lastCollectedCount = collectedCount;
-        mapa4.damageCooldown = std::max(0.0f, mapa4.damageCooldown - frameDelta);
-        const size_t projectileCountBeforeEnemies = mapa4.projectiles.size();
-        const bool enemyTouchedPlayer = mapa4.enemies.update(mapa4.player, mapa4.environment, frameDelta, now, mapa4.projectiles);
-        if (mapa4.enemyShotSoundOpen) {
-            for (size_t index = projectileCountBeforeEnemies; index < mapa4.projectiles.size(); ++index) {
-                if (mapa4.projectiles[index].fromEnemy) {
-                    mapa4.enemyShotSound.playOnce();
-                    break;
+        return name;
+    }
+
+    void buildTerrainCollisions() {
+        terrainTriangles.clear();
+        terrainCells.clear();
+        terrainTriangles.reserve(50000);
+        glm::vec3 terrainMin(100000.0f);
+        glm::vec3 terrainMax(-100000.0f);
+
+        for (const WorldModel& model : worldModels) {
+            for (const LoadedMesh& mesh : model.model.meshes) {
+                const std::string name = meshName(model, mesh);
+                if (!isWalkableMesh(name)) {
+                    continue;
+                }
+
+                for (const LoadedMesh::CollisionBox& source : mesh.collisionBoxes) {
+                    const glm::vec3 a = transformMapPoint(source.a);
+                    const glm::vec3 b = transformMapPoint(source.b);
+                    const glm::vec3 c = transformMapPoint(source.c);
+                    const glm::vec3 normal = glm::cross(b - a, c - a);
+                    const float normalLength = glm::length(normal);
+                    if (normalLength < 0.000001f) {
+                        continue;
+                    }
+
+                    const float normalY = std::fabs(normal.y / normalLength);
+                    const float minY = std::min({ a.y, b.y, c.y });
+                    const float maxY = std::max({ a.y, b.y, c.y });
+                    if (normalY < MinimumWalkableNormal || maxY < MinimumWalkableHeight) {
+                        continue;
+                    }
+
+                    const float minX = std::min({ a.x, b.x, c.x });
+                    const float maxX = std::max({ a.x, b.x, c.x });
+                    const float minZ = std::min({ a.z, b.z, c.z });
+                    const float maxZ = std::max({ a.z, b.z, c.z });
+                    if (maxX - minX < 0.002f || maxZ - minZ < 0.002f) {
+                        continue;
+                    }
+
+                    terrainTriangles.push_back({ a, b, c, minX, maxX, minZ, maxZ, &mesh.name });
+                    terrainMin = glm::min(terrainMin, glm::min(glm::min(a, b), c));
+                    terrainMax = glm::max(terrainMax, glm::max(glm::max(a, b), c));
                 }
             }
         }
-        if (enemyTouchedPlayer && mapa4.damageCooldown <= 0.0f) {
-            if (!mapa4.shieldActive) {
-                ++mapa4.pendingHits;
-                mapa4.damageCooldown = 0.28f;
-                if (mapa4.pendingHits >= 2) {
-                    mapa4.pendingHits = 0;
-                    mapa4.health = std::max(0, mapa4.health - 1);
-                    if (mapa4.health <= 0) {
-                        mapa4.gameOver = true;
+
+        std::size_t maximumCellTriangles = 0;
+        std::size_t totalCellReferences = 0;
+        for (std::uint32_t index = 0; index < terrainTriangles.size(); ++index) {
+            const TerrainTriangle& triangle = terrainTriangles[index];
+            const int minCellX = terrainCellCoordinate(triangle.minX - TriangleMargin);
+            const int maxCellX = terrainCellCoordinate(triangle.maxX + TriangleMargin);
+            const int minCellZ = terrainCellCoordinate(triangle.minZ - TriangleMargin);
+            const int maxCellZ = terrainCellCoordinate(triangle.maxZ + TriangleMargin);
+
+            for (int cellX = minCellX; cellX <= maxCellX; ++cellX) {
+                for (int cellZ = minCellZ; cellZ <= maxCellZ; ++cellZ) {
+                    std::vector<std::uint32_t>& cell = terrainCells[terrainCellKey(cellX, cellZ)];
+                    cell.push_back(index);
+                    maximumCellTriangles = std::max(maximumCellTriangles, cell.size());
+                    ++totalCellReferences;
+                }
+            }
+        }
+
+        const float averageCellTriangles = terrainCells.empty()
+            ? 0.0f
+            : static_cast<float>(totalCellReferences) / static_cast<float>(terrainCells.size());
+        std::cout << "Map 4 ready. Walkable terrain triangles: " << terrainTriangles.size() << std::endl;
+        std::cout << "Map 4 terrain grid: " << terrainCells.size()
+            << " cells | average candidates: " << averageCellTriangles
+            << " | maximum candidates: " << maximumCellTriangles << std::endl;
+        std::cout << "Map 4 terrain bounds: X[" << terrainMin.x << ", " << terrainMax.x
+            << "] Z[" << terrainMin.z << ", " << terrainMax.z << "]" << std::endl;
+        std::cout << "Map 4 parkour platforms: " << extraPlatforms.size() - 1 << std::endl;
+        std::cout << "Map 4 controls: A/D and W jump in 2D, WASD and Space jump in 3D, mouse aims and shoots in 2D, hold mouse to charge, F parries, E interacts with the phone booth, B opens the remote shop, Q uses purchased Spectral Step near blue anchors, Tab switches view, Esc returns to menu." << std::endl;
+    }
+
+    const std::vector<std::uint32_t>& terrainCandidates(float x, float z) const {
+        static const std::vector<std::uint32_t> noCandidates;
+        const auto found = terrainCells.find(terrainCellKey(
+            terrainCellCoordinate(x),
+            terrainCellCoordinate(z)));
+        return found != terrainCells.end() ? found->second : noCandidates;
+    }
+
+    glm::vec3 platformTopCenter(size_t index) const {
+        const ExtraPlatform& platform = extraPlatforms[index];
+        return {
+            (platform.minX + platform.maxX) * 0.5f,
+            platform.height,
+            (platform.minZ + platform.maxZ) * 0.5f
+        };
+    }
+
+    float vanRouteCenterDepth() const {
+        return platformTopCenter(VanIslandPlatformIndex).z;
+    }
+
+    bool playerNearVanRoute() const {
+        const float maximumJumpHeight = (JumpSpeed * JumpSpeed) / (2.0f * Gravity);
+        for (size_t i = VanRouteFirstPlatformIndex; i <= VanIslandPlatformIndex; ++i) {
+            const ExtraPlatform& platform = extraPlatforms[i];
+            const bool insideRoute = pointInPlatform(platform, posX, posZ, platform.projectIn2D && !mode3D);
+            const bool closeHeight = posY >= platform.height - 0.55f &&
+                posY <= platform.height + maximumJumpHeight + 0.45f;
+            if (insideRoute && closeHeight) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    glm::vec3 spectralLandingPoint(size_t platformIndex) const {
+        glm::vec3 point = platformTopCenter(platformIndex);
+        point.y += 0.06f;
+        return point;
+    }
+
+    glm::vec3 vanWorldPosition() const {
+        return platformTopCenter(VanIslandPlatformIndex) + glm::vec3(0.0f, 0.10f, 0.0f);
+    }
+
+    glm::vec3 playerSpawnPosition() const {
+        const glm::vec3 van = vanWorldPosition();
+        return van + glm::vec3(PlayerSpawnDistanceFromVan, -0.10f, 0.0f);
+    }
+
+    void rebuildSpectralAnchors() {
+        spectralAnchors.clear();
+        if (extraPlatforms.size() <= FinalSpectralIslandIndex) {
+            return;
+        }
+
+        spectralAnchors.push_back({
+            platformTopCenter(SpectralAnchorPlatformIndex) + glm::vec3(0.0f, 0.70f, 0.0f),
+            spectralLandingPoint(FirstSpectralIslandIndex),
+            true,
+            0.0f
+            });
+        spectralAnchors.push_back({
+            platformTopCenter(FirstSpectralIslandIndex) + glm::vec3(0.0f, 0.70f, 0.0f),
+            spectralLandingPoint(FinalSpectralIslandIndex),
+            true,
+            1.35f
+            });
+    }
+
+    bool terrainHeight(float x, float z, float& height) const {
+        bool found = false;
+        height = -100.0f;
+        for (const std::uint32_t index : terrainCandidates(x, z)) {
+            const TerrainTriangle& triangle = terrainTriangles[index];
+            float triangleHeight = 0.0f;
+            if (heightInTriangle(triangle, x, z, triangleHeight) && triangleHeight >= height) {
+                found = true;
+                height = triangleHeight;
+            }
+        }
+        return found;
+    }
+
+    bool findTerrainCoinPosition(const glm::vec2& anchor, glm::vec3& position) const {
+        constexpr float step = 1.20f;
+        constexpr int maxRing = 7;
+        for (int ring = 0; ring <= maxRing; ++ring) {
+            for (int xStep = -ring; xStep <= ring; ++xStep) {
+                for (int zStep = -ring; zStep <= ring; ++zStep) {
+                    if (ring > 0 && std::abs(xStep) != ring && std::abs(zStep) != ring) {
+                        continue;
+                    }
+
+                    const float x = anchor.x + static_cast<float>(xStep) * step;
+                    const float z = anchor.y + static_cast<float>(zStep) * step;
+                    float height = -100.0f;
+                    if (terrainHeight(x, z, height)) {
+                        position = { x, height + 0.72f, z };
+                        return true;
                     }
                 }
             }
         }
+        return false;
     }
 
-    if (!introActive) {
-        updateGameplayCamera(mapa4.player, mapa4.environment, mapa4.mission, now, frameDelta);
+    bool findTerrainEnemyPosition(const glm::vec2& anchor, glm::vec3& position) const {
+        if (!findTerrainCoinPosition(anchor, position)) {
+            return false;
+        }
+
+        position.y -= 0.72f;
+        return true;
     }
 
-    int width = 0;
-    int height = 0;
-    glfwGetFramebufferSize(window, &width, &height);
-    const float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
-    const glm::mat4 view = glm::lookAt(gameplayCameraPosition, gameplayCameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-    const glm::mat4 projection = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 180.0f);
+    void resetEnemies() {
+        enemies.clear();
+        const std::array<glm::vec2, EnemySpawnCount> enemyAnchors = {
+            glm::vec2(-27.0f, -7.0f),
+            glm::vec2(-20.0f, 5.0f),
+            glm::vec2(-14.0f, -2.0f),
+            glm::vec2(-8.0f, 6.0f),
+            glm::vec2(0.0f, 8.0f),
+            glm::vec2(6.0f, -5.0f),
+            glm::vec2(11.0f, 6.0f),
+            glm::vec2(16.0f, -7.0f),
+            glm::vec2(22.0f, 5.0f),
+            glm::vec2(28.0f, -3.0f),
+            glm::vec2(35.0f, 7.0f)
+        };
 
-    if (!introActive) {
-        mapa4.projectileCooldown = std::max(0.0f, mapa4.projectileCooldown - frameDelta);
-    }
-    if (!introActive && !mapa4.gameOver && !mapa4.mission.levelComplete()) {
-        // en 2d se permite disparo continuo y en 3d se corta esa mecánica
-        if (currentMode == PlayMode::Mode2D) {
-            const bool attackDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-            if (attackDown && mapa4.projectileCooldown <= 0.0f) {
-                const float facing = std::sin(mapa4.player.facingYaw()) >= 0.0f ? 1.0f : -1.0f;
-                const glm::vec3 aimDirection(facing, 0.0f, 0.0f);
-                const glm::vec3 spawnPosition = mapa4.player.position() + glm::vec3(aimDirection.x * 0.52f, 0.60f, 0.0f);
-                mapa4.projectiles.push_back({
-                    spawnPosition,
-                    aimDirection * Map4ProjectileSpeed,
-                    Map4ProjectileLifetime,
-                    1
-                });
-                mapa4.projectileCooldown = Map4ProjectileCooldown;
+        for (size_t i = 0; i < enemyAnchors.size(); ++i) {
+            DemonEnemy enemy;
+            if (!findTerrainEnemyPosition(enemyAnchors[i], enemy.position)) {
+                std::cerr << "Map 4 could not place an enemy near X:" << enemyAnchors[i].x
+                    << " Z:" << enemyAnchors[i].y << "." << std::endl;
+                continue;
             }
-        } else {
-            mapa4.projectileCooldown = std::min(mapa4.projectileCooldown, Map4ProjectileCooldown * 0.4f);
+
+            enemy.spawnPosition = enemy.position;
+            enemy.shotCooldown = 0.55f + static_cast<float>(i) * 0.34f;
+            enemy.animationTime = static_cast<float>(i) * 0.17f;
+            enemies.push_back(enemy);
+        }
+
+        std::cout << "Map 4 Thalassa-style enemies: " << enemies.size() << std::endl;
+    }
+
+    void resetMission() {
+        coins.clear();
+        const std::array<size_t, 8> coinPlatforms = {
+            0,
+            2,
+            4,
+            6,
+            8,
+            10,
+            FirstSpectralIslandIndex,
+            FinalSpectralIslandIndex
+        };
+        for (size_t index : coinPlatforms) {
+            Coin coin;
+            coin.position = platformTopCenter(index) + glm::vec3(0.0f, 0.72f, 0.0f);
+            coin.projectIn2D = extraPlatforms[index].projectIn2D;
+            coin.phase = static_cast<float>(coins.size()) * 0.73f;
+            coins.push_back(coin);
+        }
+
+        const std::array<glm::vec2, 2> terrainAnchors = {
+            glm::vec2(-18.0f, -7.0f),
+            glm::vec2(3.0f, -9.0f)
+        };
+        for (const glm::vec2& anchor : terrainAnchors) {
+            Coin coin;
+            if (!findTerrainCoinPosition(anchor, coin.position)) {
+                std::cerr << "Map 4 could not place a terrain coin near X:" << anchor.x << " Z:" << anchor.y << "." << std::endl;
+                continue;
+            }
+            coin.phase = static_cast<float>(coins.size()) * 0.73f;
+            coins.push_back(coin);
+        }
+
+        star = {};
+        star.position = platformTopCenter(FinalSpectralIslandIndex) + glm::vec3(0.0f, 0.95f, 0.0f);
+        star.projectIn2D = true;
+        rebuildSpectralAnchors();
+        collectedCoins = 0;
+        coinMessageCount = 0;
+        coinMessageUntil = 0.0f;
+        starMessageUntil = 0.0f;
+        completed = false;
+    }
+
+    bool validateParkourMission() const {
+        if (coins.size() != TotalCoins) {
+            std::cerr << "Map 4 mission expected " << TotalCoins << " coins but created " << coins.size() << "." << std::endl;
+            return false;
+        }
+        if (extraPlatforms.size() <= VanIslandPlatformIndex || spectralAnchors.size() < 2) {
+            std::cerr << "Map 4 special routes are missing platforms or anchors." << std::endl;
+            return false;
+        }
+        for (size_t i = VanRouteFirstPlatformIndex; i <= VanIslandPlatformIndex; ++i) {
+            if (!extraPlatforms[i].visible || !extraPlatforms[i].projectIn2D) {
+                std::cerr << "Map 4 van route must stay visible and projected so it works in 2D and 3D." << std::endl;
+                return false;
+            }
+        }
+
+        const float maximumJumpHeight = (JumpSpeed * JumpSpeed) / (2.0f * Gravity);
+        const float maximumProjectedJumpDistance = MoveSpeed2D * (2.0f * JumpSpeed / Gravity);
+        float maximumPerspectiveRise = 0.0f;
+        float maximumProjectedGap = 0.0f;
+        float maximumPhysicalGap = 0.0f;
+        for (size_t i = NormalRouteFirstPlatformIndex; i <= SpectralAnchorPlatformIndex; ++i) {
+            const ExtraPlatform& previous = extraPlatforms[i - 1];
+            const ExtraPlatform& current = extraPlatforms[i];
+            maximumPerspectiveRise = std::max(maximumPerspectiveRise, current.height - previous.height);
+            maximumProjectedGap = std::max(maximumProjectedGap, current.minX - previous.maxX);
+            maximumPhysicalGap = std::max(maximumPhysicalGap, glm::length(glm::vec2(
+                (current.minX + current.maxX - previous.minX - previous.maxX) * 0.5f,
+                (current.minZ + current.maxZ - previous.minZ - previous.maxZ) * 0.5f)));
+        }
+
+        if (maximumPerspectiveRise > maximumJumpHeight - 0.08f ||
+            maximumProjectedGap > maximumProjectedJumpDistance - 0.08f) {
+            std::cerr << "Map 4 perspective route is unreachable after projection." << std::endl;
+            return false;
+        }
+
+        if (maximumPhysicalGap <= maximumProjectedJumpDistance + 1.0f) {
+            std::cerr << "Map 4 perspective route is not separated enough in 3D." << std::endl;
+            return false;
+        }
+
+        const ExtraPlatform& anchorIsland = extraPlatforms[SpectralAnchorPlatformIndex];
+        const ExtraPlatform& firstSpectralIsland = extraPlatforms[FirstSpectralIslandIndex];
+        const ExtraPlatform& finalSpectralIsland = extraPlatforms[FinalSpectralIslandIndex];
+        const float firstSpectralGap = firstSpectralIsland.minX - anchorIsland.maxX;
+        const float finalSpectralGap = finalSpectralIsland.minX - firstSpectralIsland.maxX;
+        if (firstSpectralGap <= maximumProjectedJumpDistance + 1.0f ||
+            finalSpectralGap <= maximumProjectedJumpDistance + 1.0f) {
+            std::cerr << "Map 4 spectral islands must stay out of normal jump range." << std::endl;
+            return false;
+        }
+
+        auto xRangeGap = [](const ExtraPlatform& a, const ExtraPlatform& b) {
+            return std::max(0.0f, std::max(a.minX, b.minX) - std::min(a.maxX, b.maxX));
+            };
+        auto horizontalPlatformGap = [](const ExtraPlatform& a, const ExtraPlatform& b) {
+            const float gapX = std::max(0.0f, std::max(a.minX, b.minX) - std::min(a.maxX, b.maxX));
+            const float gapZ = std::max(0.0f, std::max(a.minZ, b.minZ) - std::min(a.maxZ, b.maxZ));
+            return glm::length(glm::vec2(gapX, gapZ));
+            };
+
+        float maximumVanRouteRise = 0.0f;
+        float maximumVanRouteProjectedGap = 0.0f;
+        float maximumVanRoutePhysicalGap = 0.0f;
+        float minimumVanRouteProjectedGap = std::numeric_limits<float>::max();
+        float minimumVanRoutePhysicalGap = std::numeric_limits<float>::max();
+        for (size_t i = VanRouteFirstPlatformIndex + 1; i <= VanIslandPlatformIndex; ++i) {
+            const ExtraPlatform& previous = extraPlatforms[i - 1];
+            const ExtraPlatform& current = extraPlatforms[i];
+            const float projectedGap = xRangeGap(previous, current);
+            const float physicalGap = horizontalPlatformGap(previous, current);
+            maximumVanRouteRise = std::max(maximumVanRouteRise, current.height - previous.height);
+            maximumVanRouteProjectedGap = std::max(maximumVanRouteProjectedGap, projectedGap);
+            maximumVanRoutePhysicalGap = std::max(maximumVanRoutePhysicalGap, physicalGap);
+            minimumVanRouteProjectedGap = std::min(minimumVanRouteProjectedGap, projectedGap);
+            minimumVanRoutePhysicalGap = std::min(minimumVanRoutePhysicalGap, physicalGap);
+        }
+
+        if (maximumVanRouteRise > maximumJumpHeight - 0.08f ||
+            maximumVanRouteProjectedGap > maximumProjectedJumpDistance - 0.08f ||
+            maximumVanRoutePhysicalGap > maximumProjectedJumpDistance - 0.08f) {
+            std::cerr << "Map 4 van route is unreachable after 2D projection." << std::endl;
+            return false;
+        }
+
+        if (minimumVanRouteProjectedGap < 0.65f || minimumVanRoutePhysicalGap < 0.65f) {
+            std::cerr << "Map 4 van route platforms are too close together." << std::endl;
+            return false;
+        }
+
+        glm::vec2 coinMin(std::numeric_limits<float>::max());
+        glm::vec2 coinMax(std::numeric_limits<float>::lowest());
+        for (const Coin& coin : coins) {
+            coinMin = glm::min(coinMin, glm::vec2(coin.position.x, coin.position.z));
+            coinMax = glm::max(coinMax, glm::vec2(coin.position.x, coin.position.z));
+        }
+        const glm::vec2 coinSpread = coinMax - coinMin;
+        if (coinSpread.x < 24.0f || coinSpread.y < 12.0f) {
+            std::cerr << "Map 4 coins are not scattered widely enough across the map." << std::endl;
+            return false;
+        }
+
+        std::cout << "Map 4 mission coins: " << coins.size()
+            << " | jump height: " << maximumJumpHeight
+            << " | projected bridge gap: " << maximumProjectedGap
+            << " | physical bridge gap: " << maximumPhysicalGap
+            << " | spectral gaps: " << firstSpectralGap << ", " << finalSpectralGap
+            << " | van route gap: " << minimumVanRouteProjectedGap << "-" << maximumVanRouteProjectedGap
+            << "/" << minimumVanRoutePhysicalGap << "-" << maximumVanRoutePhysicalGap
+            << " | coin spread: X " << coinSpread.x << " Z " << coinSpread.y << std::endl;
+        return true;
+    }
+
+    bool touchesCollectible(const glm::vec3& position, float horizontalRadius, float verticalRadius, bool projectIn2D) const {
+        const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
+        return std::abs(playerCenter.x - position.x) <= horizontalRadius &&
+            std::abs(playerCenter.y - position.y) <= verticalRadius &&
+            ((projectIn2D && !mode3D) || std::abs(playerCenter.z - position.z) <= horizontalRadius);
+    }
+
+    void updateMission(float now) {
+        if (completed) {
+            return;
+        }
+
+        for (Coin& coin : coins) {
+            if (!coin.collected && touchesCollectible(coin.position, 0.56f, 0.72f, coin.projectIn2D)) {
+                coin.collected = true;
+                collectedCoins = std::min(collectedCoins + 1, TotalCoins);
+                coinMessageCount = collectedCoins;
+                coinMessageUntil = now + 2.6f;
+                showStatus("COIN " + std::to_string(collectedCoins) + "/" + std::to_string(TotalCoins));
+
+                if (collectedCoins >= TotalCoins) {
+                    star.active = true;
+                    starMessageUntil = now + 4.0f;
+                    showStatus("All coins ready - collect the star");
+                }
+                break;
+            }
+        }
+
+        if (star.active && touchesCollectible(star.position, 0.82f, 0.98f, star.projectIn2D)) {
+            star.active = false;
+            completed = true;
+            showStatus("LEVEL COMPLETE");
         }
     }
-    if (!introActive) {
-        updateMapa4Projectiles(mapa4, frameDelta);
-    }
 
-    if (mapa4.gameOver && !mapa4.gameOverSoundPlayed) {
-        stopMapa4BackgroundMusic(mapa4);
-        if (mapa4.gameOverSoundOpen) {
-            mapa4.gameOverSound.playOnce();
+    bool groundHeight(float x, float z, float& height, const char** zone = nullptr) const {
+        bool found = false;
+        height = -100.0f;
+
+        for (const std::uint32_t index : terrainCandidates(x, z)) {
+            const TerrainTriangle& triangle = terrainTriangles[index];
+            float triangleHeight = 0.0f;
+            if (heightInTriangle(triangle, x, z, triangleHeight) && triangleHeight >= height) {
+                found = true;
+                height = triangleHeight;
+                if (zone != nullptr) {
+                    *zone = triangle.name != nullptr ? triangle.name->c_str() : "mapa";
+                }
+            }
         }
-        mapa4.gameOverSoundPlayed = true;
-    } else if (mapa4.mission.levelComplete() && !mapa4.levelWinSoundPlayed) {
-        stopMapa4BackgroundMusic(mapa4);
-        if (mapa4.levelWinSoundOpen) {
-            mapa4.levelWinSound.playOnce();
+
+        for (const ExtraPlatform& platform : extraPlatforms) {
+            if (pointInPlatform(platform, x, z, platform.projectIn2D && !mode3D) && platform.height >= height) {
+                found = true;
+                height = platform.height;
+                if (zone != nullptr) {
+                    *zone = platform.name;
+                }
+            }
         }
-        mapa4.levelWinSoundPlayed = true;
+
+        if (!found && zone != nullptr) {
+            *zone = "hueco";
+        }
+        return found;
     }
 
-    glEnable(GL_DEPTH_TEST);
-    glClearColor(0.02f, 0.03f, 0.08f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    bool landingHeight(float x, float z, float maximumHeight, float& height) const {
+        bool found = false;
+        height = -100.0f;
 
-    // variable local flashlitgh armor 
-      const glm::vec3 flashlightAnchor = mapa4.player.position();
-    // la luz del jugador se manda al shader para iluminar solo la zona cercana
-    uploadCommonSceneUniforms(sceneShader, mapa4.environment, gameplayCameraPosition, view, projection, now, &flashlightAnchor, mapa4.lightEnergy / Map4LightEnergyMaximum, nullptr);
-    lavaShader.use();
-    lavaShader.setMat4("uView", view);
-    lavaShader.setMat4("uProjection", projection);
-    lavaShader.setFloat("uTime", now);
+        for (const std::uint32_t index : terrainCandidates(x, z)) {
+            const TerrainTriangle& triangle = terrainTriangles[index];
+            float triangleHeight = 0.0f;
+            if (heightInTriangle(triangle, x, z, triangleHeight) &&
+                triangleHeight <= maximumHeight &&
+                triangleHeight >= height) {
+                found = true;
+                height = triangleHeight;
+            }
+        }
 
-    renderMapa4Backdrop(sceneShader, mapa4.environment, gameplayCameraPosition, now);
-    mapa4.environment.render(sceneShader, lavaShader, now, gameplayCameraPosition);
-    mapa4.lightPickups.render(sceneShader, now, gameplayCameraPosition);
-    mapa4.mission.render(sceneShader, now, gameplayCameraPosition);
-    mapa4.enemies.render(sceneShader, now, gameplayCameraPosition);
-    renderMapa4Projectiles(sceneShader, mapa4.projectiles, gameplayCameraPosition, now);
-    if (mapa4.shieldActive) {
-        renderMapa4Shield(sceneShader, mapa4.player, now);
+        for (const ExtraPlatform& platform : extraPlatforms) {
+            if (pointInPlatform(platform, x, z, platform.projectIn2D && !mode3D) &&
+                platform.height <= maximumHeight &&
+                platform.height >= height) {
+                found = true;
+                height = platform.height;
+            }
+        }
+        return found;
     }
-    mapa4.player.render(sceneShader);
+
+    bool movementAllowed(float currentX, float currentZ, float nextX, float nextZ) const {
+        float destinationHeight = -100.0f;
+        const float reachableHeight = posY + StepHeightWithoutJump + LandingMargin;
+        if (!landingHeight(nextX, nextZ, reachableHeight, destinationHeight)) {
+            return true;
+        }
+
+        float currentHeight = -100.0f;
+        if (!landingHeight(currentX, currentZ, posY + LandingMargin, currentHeight)) {
+            currentHeight = posY;
+        }
+
+        const bool tallStep = destinationHeight - currentHeight > StepHeightWithoutJump;
+        const bool notHighEnough = posY + LandingMargin < destinationHeight;
+        return !(tallStep && notHighEnough);
+    }
+
+    void showStatus(const std::string& message) {
+        statusMessage = message;
+        messageTime = 2.5f;
+        std::cout << message << std::endl;
+    }
+
+    void resetSpectralProgress() {
+        spectralGems = 0;
+        spectralStepUnlocked = false;
+        damageParryPurchased = false;
+        spectralKeyPressed = false;
+        interactPressed = false;
+        shopTogglePressed = false;
+        vanShopOpen = false;
+        vanPromptUntil = 0.0f;
+        vanShopUntil = 0.0f;
+        droppedGems.clear();
+        spectralCooldown = 0.0f;
+        spectralLockedHintUntil = 0.0f;
+        spectralReadyHintUntil = 0.0f;
+        spectralUnlockHintUntil = 0.0f;
+        spectralEffectUntil = 0.0f;
+        spectralEffectStart = { 0.0f, 0.0f, 0.0f };
+        spectralEffectEnd = { 0.0f, 0.0f, 0.0f };
+    }
+
+    void unlockSpectralStep(float now) {
+        if (spectralStepUnlocked) {
+            return;
+        }
+
+        spectralStepUnlocked = true;
+        spectralUnlockHintUntil = now + 5.2f;
+        spectralLockedHintUntil = 0.0f;
+        showStatus("SPECTRAL STEP BOUGHT - use Q near a blue anchor");
+    }
+
+    void registerEnemyDefeat(const glm::vec3& position, float now) {
+        droppedGems.push_back({
+            position + glm::vec3(0.0f, 0.42f, 0.0f),
+            now * 1.73f + static_cast<float>(droppedGems.size()) * 0.91f,
+            true
+            });
+        showStatus("RED GEM RELEASED - move close to collect it");
+    }
+
+    void updateDroppedGems() {
+        for (size_t index = 0; index < droppedGems.size();) {
+            const DroppedGem& gem = droppedGems[index];
+            if (!touchesCollectible(gem.position, GemPickupRadius, GemPickupVerticalRange, gem.projectIn2D)) {
+                ++index;
+                continue;
+            }
+
+            spectralGems = std::min(MaximumStoredGems, spectralGems + 1);
+            droppedGems.erase(droppedGems.begin() + static_cast<std::ptrdiff_t>(index));
+            showStatus("RED GEM COLLECTED - balance: " + std::to_string(spectralGems));
+        }
+    }
+
+    bool purchaseSpectralStep() {
+        if (spectralStepUnlocked) {
+            showStatus("SPECTRAL STEP ALREADY OWNED");
+            return false;
+        }
+        if (spectralGems < SpectralGemRequirement) {
+            showStatus("NOT ENOUGH RED GEMS");
+            return false;
+        }
+
+        spectralGems -= SpectralGemRequirement;
+        unlockSpectralStep(static_cast<float>(glfwGetTime()));
+        return true;
+    }
+
+    bool purchaseDamageParry() {
+        if (damageParryPurchased) {
+            showStatus("ROYAL RETURN ALREADY OWNED");
+            return false;
+        }
+        if (spectralGems < DamageParryGemRequirement) {
+            showStatus("NOT ENOUGH RED GEMS");
+            return false;
+        }
+
+        spectralGems -= DamageParryGemRequirement;
+        damageParryPurchased = true;
+        showStatus("ROYAL RETURN BOUGHT - parry reflects damage");
+        return true;
+    }
+
+    bool nearVanShop() const {
+        const glm::vec3 van = vanWorldPosition() + glm::vec3(0.0f, 0.55f, 0.0f);
+        const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
+        const bool closeX = std::abs(playerCenter.x - van.x) <= VanPromptRange;
+        const bool closeY = std::abs(playerCenter.y - van.y) <= VanPromptVerticalRange;
+        const bool closeZ = !mode3D || std::abs(playerCenter.z - van.z) <= VanPromptRange;
+        return closeX && closeY && closeZ;
+    }
+
+    void handleVanShop(GLFWwindow* window, float now) {
+        const bool interactDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
+        const bool toggleDown = glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS;
+        const bool nearby = nearVanShop();
+        if (nearby) {
+            vanPromptUntil = std::max(vanPromptUntil, now + 0.20f);
+        }
+
+        if (toggleDown && !shopTogglePressed) {
+            vanShopOpen = !vanShopOpen;
+            stopChargingPlayerAttack();
+            showStatus(vanShopOpen ? "REMOTE SHOP OPEN" : "SHOP CLOSED");
+        }
+
+        if (interactDown && !interactPressed && nearby) {
+            vanShopOpen = true;
+            stopChargingPlayerAttack();
+            showStatus("PHONE BOOTH CONNECTION ESTABLISHED");
+        }
+        interactPressed = interactDown;
+        shopTogglePressed = toggleDown;
+    }
+
+    int nearestSpectralAnchorIndex() const {
+        const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
+        for (size_t index = 0; index < spectralAnchors.size(); ++index) {
+            const SpectralAnchor& anchor = spectralAnchors[index];
+            const bool closeX = std::abs(playerCenter.x - anchor.origin.x) <= SpectralAnchorPromptRange;
+            const bool closeY = std::abs(playerCenter.y - anchor.origin.y) <= SpectralAnchorVerticalRange;
+            const bool closeZ = (anchor.projectIn2D && !mode3D) ||
+                std::abs(playerCenter.z - anchor.origin.z) <= SpectralAnchorPromptRange;
+            if (closeX && closeY && closeZ) {
+                return static_cast<int>(index);
+            }
+        }
+        return -1;
+    }
+
+    void performSpectralStep(const SpectralAnchor& anchor, float now) {
+        stopChargingPlayerAttack();
+        spectralCooldown = SpectralStepCooldown;
+        spectralReadyHintUntil = 0.0f;
+        spectralEffectUntil = now + 0.46f;
+        spectralEffectStart = { posX, posY + 0.58f, posZ };
+        spectralEffectEnd = anchor.target + glm::vec3(0.0f, 0.58f, 0.0f);
+
+        const float previousX = posX;
+        posX = anchor.target.x;
+        posY = anchor.target.y;
+        posZ = anchor.target.z;
+        velocityY = 0.0f;
+        grounded = true;
+        playerAngle = anchor.target.x >= previousX ? 0.0f : 180.0f;
+        startModeTransitionAnimation();
+        showStatus("SPECTRAL STEP");
+    }
+
+    void handleSpectralStep(GLFWwindow* window, float now) {
+        const bool spectralDown = glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS;
+        const int anchorIndex = nearestSpectralAnchorIndex();
+        if (anchorIndex >= 0) {
+            if (spectralStepUnlocked) {
+                spectralReadyHintUntil = std::max(spectralReadyHintUntil, now + 0.20f);
+            }
+            else {
+                spectralLockedHintUntil = std::max(spectralLockedHintUntil, now + 0.20f);
+            }
+        }
+
+        if (spectralDown && !spectralKeyPressed && anchorIndex >= 0) {
+            if (!spectralStepUnlocked) {
+                spectralLockedHintUntil = std::max(spectralLockedHintUntil, now + SpectralHintTime);
+                showStatus("BUY SPECTRAL STEP IN THE SHOP WITH 5 GEMS");
+            }
+            else if (spectralCooldown <= 0.0f) {
+                performSpectralStep(spectralAnchors[static_cast<size_t>(anchorIndex)], now);
+            }
+        }
+
+        spectralKeyPressed = spectralDown;
+    }
+
+    void startEntranceAnimation() {
+        playerEntrancePlaying = true;
+        playerEntranceTime = 0.0f;
+        playerTransitionPlaying = false;
+        playerTransitionTime = 0.0f;
+        playerDeathPlaying = false;
+        playerDeathTime = 0.0f;
+        playerGuardUntil = 0.0f;
+        playerAttackPlaying = false;
+        playerAttackTime = 0.0f;
+        animationTime = 0.0f;
+    }
+
+    void startModeTransitionAnimation() {
+        playerTransitionPlaying = true;
+        playerTransitionTime = 0.0f;
+        playerEntrancePlaying = false;
+        playerGuardUntil = 0.0f;
+        playerAttackPlaying = false;
+        playerAttackTime = 0.0f;
+    }
+
+    void beginPlayerDeath(float now) {
+        if (playerDeathPlaying) {
+            return;
+        }
+
+        playerDeathPlaying = true;
+        playerDeathTime = 0.0f;
+        playerEntrancePlaying = false;
+        playerTransitionPlaying = false;
+        playerGuardUntil = 0.0f;
+        playerAttackPlaying = false;
+        playerAttackTime = 0.0f;
+        stopChargingPlayerAttack();
+        clearProjectilesRequested = true;
+        playerInvulnerability = std::max(playerInvulnerability, animationDuration(playerDeathMeshes, PlayerDeathFramesPerSecond));
+        showStatus("LETHAL DAMAGE");
+        if (mode3D) {
+            showCombatRestriction(now);
+        }
+    }
+
+    void finishPlayerDeath() {
+        playerDeathPlaying = false;
+        playerDeathTime = 0.0f;
+        loseLife();
+    }
+
+    void resetPlayer(bool resetMode) {
+        if (resetMode) {
+            mode3D = false;
+        }
+
+        const glm::vec3 spawn = playerSpawnPosition();
+        posX = spawn.x;
+        posZ = spawn.z;
+        velocityY = 0.0f;
+        cameraOffsetY = 0.0f;
+        playerAngle = 0.0f;
+
+        float initialHeight = spawn.y;
+        posY = groundHeight(posX, posZ, initialHeight) ? initialHeight : spawn.y;
+        grounded = true;
+        animationTime = 0.0f;
+        playerJumpTime = 0.0f;
+        playerAttackTime = 0.0f;
+        wasMoving = false;
+        playerAttackPlaying = false;
+        playerTransitionPlaying = false;
+        playerTransitionTime = 0.0f;
+        playerDeathPlaying = false;
+        playerDeathTime = 0.0f;
+        playerGuardUntil = 0.0f;
+        if (resetMode) {
+            startEntranceAnimation();
+        }
+    }
+
+    void startLevelIntro() {
+        levelIntroActive = true;
+        levelIntroTime = 0.0f;
+    }
+
+    float levelIntroProgress() const {
+        if (!levelIntroActive) {
+            return 1.0f;
+        }
+        const float zoomProgress = (levelIntroTime - LevelIntroFarHoldSeconds) / LevelIntroZoomSeconds;
+        const float t = std::clamp(zoomProgress, 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    float levelIntroFov(float normalFov) const {
+        if (!levelIntroActive) {
+            return normalFov;
+        }
+        return 64.0f + (normalFov - 64.0f) * levelIntroProgress();
+    }
+
+    glm::mat4 levelIntroViewMatrix() const {
+        const float progress = levelIntroProgress();
+        const glm::vec3 finalTarget(0.0f, cameraOffsetY, 0.0f);
+        const glm::vec3 finalPosition = mode3D
+            ? glm::vec3(-3.0f, cameraOffsetY + 0.55f, 0.0f)
+            : glm::vec3(0.0f, cameraOffsetY, 3.0f);
+        const glm::vec3 farTarget(0.0f, cameraOffsetY + 2.0f, 0.0f);
+        const glm::vec3 farPosition(-5.5f, cameraOffsetY + 10.0f, 22.0f);
+        return glm::lookAt(
+            glm::mix(farPosition, finalPosition, progress),
+            glm::mix(farTarget, finalTarget, progress),
+            { 0.0f, 1.0f, 0.0f });
+    }
+
+    void loseLife() {
+        playerInvulnerability = PlayerInvulnerabilityTime;
+        clearProjectilesRequested = true;
+        playerHealth = PlayerMaximumHealth;
+        --lives;
+        if (lives <= 0) {
+            lives = StartingLives;
+            resetPlayer(true);
+            resetMission();
+            resetSpectralProgress();
+            resetEnemiesRequested = true;
+            showStatus("GAME OVER - map restarted. Lives: 3");
+            return;
+        }
+
+        resetPlayer(false);
+        showStatus("YOU DIED - lives remaining: " + std::to_string(lives));
+    }
+
+    float gameplayDistance(const glm::vec3& from, const glm::vec3& to) const {
+        if (!mode3D) {
+            return std::abs(to.x - from.x);
+        }
+
+        return glm::length(glm::vec2(to.x - from.x, to.z - from.z));
+    }
+
+    bool touchesGameplayTarget(const glm::vec3& from, const glm::vec3& to, float horizontalRadius, float verticalRadius) const {
+        return gameplayDistance(from, to) <= horizontalRadius &&
+            std::abs(from.y - to.y) <= verticalRadius;
+    }
+
+    bool tryMoveEnemy(DemonEnemy& enemy, const glm::vec2& step) const {
+        if (glm::length(step) < 0.00001f) {
+            return false;
+        }
+
+        const float nextX = enemy.position.x + step.x;
+        const float nextZ = enemy.position.z + step.y;
+        float nextHeight = -100.0f;
+        if (!terrainHeight(nextX, nextZ, nextHeight) ||
+            std::abs(nextHeight - enemy.position.y) > EnemyMaximumStepHeight) {
+            return false;
+        }
+
+        enemy.position = { nextX, nextHeight, nextZ };
+        return true;
+    }
+
+    void showCombatRestriction(float now) {
+        combatHintUntil = std::max(combatHintUntil, now + 3.8f);
+        showStatus("SWITCH TO 2D WITH TAB TO STOP ENEMIES");
+    }
+
+    void spawnEnemyProjectile(const DemonEnemy& enemy, float now) {
+        glm::vec3 origin = enemy.position + glm::vec3(0.0f, 0.58f, 0.0f);
+        glm::vec3 target(posX, posY + 0.58f, posZ);
+        if (!mode3D) {
+            target.z = origin.z;
+        }
+
+        glm::vec3 direction = target - origin;
+        if (glm::length(direction) < 0.0001f) {
+            direction = { enemy.facingLeft ? -1.0f : 1.0f, 0.0f, 0.0f };
+        }
+        else {
+            direction = glm::normalize(direction);
+        }
+
+        projectiles.push_back({ origin, direction * EnemyShotSpeed, ProjectileLifetime, false });
+        if (mode3D) {
+            showCombatRestriction(now);
+        }
+    }
+
+    glm::vec3 mouseAimDirection(GLFWwindow* window) const {
+        int width = 0;
+        int height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+        if (width <= 0 || height <= 0) {
+            return playerAimDirection;
+        }
+
+        double mouseX = 0.0;
+        double mouseY = 0.0;
+        glfwGetCursorPos(window, &mouseX, &mouseY);
+        const float aspect = static_cast<float>(width) / static_cast<float>(height);
+        const glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
+        const glm::mat4 view = glm::translate(glm::mat4(1.0f), { 0.0f, -cameraOffsetY, -3.0f });
+        const glm::vec4 viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
+        const glm::vec3 nearPoint = glm::unProject(
+            glm::vec3(static_cast<float>(mouseX), static_cast<float>(height) - static_cast<float>(mouseY), 0.0f),
+            view,
+            projection,
+            viewport);
+        const glm::vec3 farPoint = glm::unProject(
+            glm::vec3(static_cast<float>(mouseX), static_cast<float>(height) - static_cast<float>(mouseY), 1.0f),
+            view,
+            projection,
+            viewport);
+        const glm::vec3 ray = farPoint - nearPoint;
+        const float planeZ = 0.22f;
+        const float amount = std::abs(ray.z) > 0.0001f ? (planeZ - nearPoint.z) / ray.z : 0.0f;
+        const glm::vec3 cursorPosition = nearPoint + ray * amount;
+        glm::vec3 direction = cursorPosition - glm::vec3(0.0f, posY + 0.62f, planeZ);
+        direction.z = 0.0f;
+        if (glm::length(direction) < 0.05f) {
+            return playerAimDirection;
+        }
+        return glm::normalize(direction);
+    }
+
+    void spawnPlayerProjectile(const glm::vec3& direction, bool charged) {
+        const float speed = charged ? ChargedPlayerShotSpeed : PlayerShotSpeed;
+        projectiles.push_back({
+            {posX + direction.x * 0.48f, posY + 0.62f + direction.y * 0.28f, posZ},
+            direction * speed,
+            ProjectileLifetime,
+            true,
+            charged ? EnemyMaximumHealth : 1,
+            charged,
+            true
+            });
+    }
+
+    void damagePlayer(float now) {
+        if (playerInvulnerability > 0.0f) {
+            return;
+        }
+
+        const bool wasMode3D = mode3D;
+        playerInvulnerability = PlayerInvulnerabilityTime;
+        playerHealth = std::max(0, playerHealth - 1);
+        if (playerHealth <= 0) {
+            beginPlayerDeath(now);
+        }
+        else {
+            showStatus("DAMAGE TAKEN - health: " + std::to_string(playerHealth) + "/" + std::to_string(PlayerMaximumHealth));
+            if (wasMode3D) {
+                showCombatRestriction(now);
+            }
+        }
+    }
+
+    void updateEnemies(float dt, float now) {
+        const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
+        for (DemonEnemy& enemy : enemies) {
+            enemy.animationTime += dt;
+            if (!enemy.alive) {
+                enemy.state = EnemyState::Dying;
+                continue;
+            }
+
+            enemy.shotCooldown = std::max(0.0f, enemy.shotCooldown - dt);
+            enemy.hurtTime = std::max(0.0f, enemy.hurtTime - dt);
+            const glm::vec3 enemyCenter = enemy.position + glm::vec3(0.0f, 0.48f, 0.0f);
+            const float distance = gameplayDistance(enemyCenter, playerCenter);
+            if (distance > EnemyDetectionRange) {
+                enemy.state = EnemyState::Idle;
+                continue;
+            }
+
+            const glm::vec2 rawDirection(
+                posX - enemy.position.x,
+                mode3D ? posZ - enemy.position.z : 0.0f);
+            if (glm::length(rawDirection) > 0.0001f) {
+                const glm::vec2 direction = glm::normalize(rawDirection);
+                enemy.facingLeft = direction.x < 0.0f;
+
+                if (distance > EnemyStopDistance) {
+                    const glm::vec2 step = direction * EnemyMoveSpeed * dt;
+                    if (!tryMoveEnemy(enemy, step)) {
+                        tryMoveEnemy(enemy, { step.x, 0.0f });
+                        if (mode3D) {
+                            tryMoveEnemy(enemy, { 0.0f, step.y });
+                        }
+                    }
+                }
+            }
+
+            enemy.state = enemy.hurtTime > 0.0f
+                ? EnemyState::Hurt
+                : (enemy.shotCooldown > EnemyShotCooldown - 0.55f
+                    ? EnemyState::Attack
+                    : EnemyState::Chase);
+            if (distance <= EnemyAttackRange && enemy.shotCooldown <= 0.0f) {
+                enemy.state = EnemyState::Attack;
+                enemy.animationTime = 0.0f;
+                enemy.shotCooldown = EnemyShotCooldown;
+                spawnEnemyProjectile(enemy, now);
+            }
+
+            const glm::vec3 movedEnemyCenter = enemy.position + glm::vec3(0.0f, 0.48f, 0.0f);
+            if (touchesGameplayTarget(movedEnemyCenter, playerCenter, 0.60f, 0.82f)) {
+                damagePlayer(now);
+            }
+        }
+    }
+
+    int remainingEnemyCount() const {
+        return static_cast<int>(std::count_if(enemies.begin(), enemies.end(), [](const DemonEnemy& enemy) {
+            return enemy.alive;
+            }));
+    }
+
+    bool parryEnemyProjectile(Projectile& projectile, float now) {
+        if (parryUntil <= 0.0f || now > parryUntil) {
+            return false;
+        }
+
+        parryUntil = 0.0f;
+        parryEffectUntil = now + ParryEffectTime;
+        playerGuardStartTime = now;
+        playerGuardUntil = now + std::max({
+            ParryEffectTime,
+            0.42f,
+            animationDuration(playerBlockMeshes, PlayerBlockFramesPerSecond)
+            });
+        if (parrySoundOpen) {
+            parrySound.playOnce();
+        }
+
+        if (damageParryPurchased) {
+            glm::vec3 targetDirection(playerAngle == 180.0f ? -1.0f : 1.0f, 0.0f, 0.0f);
+            float nearestDistance = std::numeric_limits<float>::max();
+            const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
+            for (const DemonEnemy& enemy : enemies) {
+                if (!enemy.alive) {
+                    continue;
+                }
+                const glm::vec3 enemyCenter = enemy.position + glm::vec3(0.0f, 0.48f, 0.0f);
+                const float distance = gameplayDistance(playerCenter, enemyCenter);
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    targetDirection = enemyCenter - playerCenter;
+                    if (!mode3D) {
+                        targetDirection.z = 0.0f;
+                    }
+                }
+            }
+            if (glm::length(targetDirection) < 0.001f) {
+                targetDirection = { playerAngle == 180.0f ? -1.0f : 1.0f, 0.0f, 0.0f };
+            }
+
+            targetDirection = glm::normalize(targetDirection);
+            projectile.fromPlayer = true;
+            projectile.damage = EnemyMaximumHealth;
+            projectile.charged = true;
+            projectile.velocity = targetDirection * ChargedPlayerShotSpeed;
+            projectile.position = playerCenter + targetDirection * 0.48f;
+            projectile.lifetime = 2.8f;
+            showStatus("ROYAL RETURN - DAMAGE REFLECTED");
+        }
+        else {
+            showStatus("ROYAL GUARD - PERFECT PARRY");
+        }
+        return true;
+    }
+
+    void updateProjectiles(float dt, float now) {
+        for (size_t i = 0; i < projectiles.size();) {
+            Projectile& projectile = projectiles[i];
+            projectile.position += projectile.velocity * dt;
+            projectile.lifetime -= dt;
+            bool remove = projectile.lifetime <= 0.0f;
+
+            float terrain = -100.0f;
+            if (!remove && terrainHeight(projectile.position.x, projectile.position.z, terrain) &&
+                projectile.position.y <= terrain + 0.08f) {
+                remove = true;
+            }
+
+            if (!remove && projectile.fromPlayer) {
+                for (DemonEnemy& enemy : enemies) {
+                    if (!enemy.alive) {
+                        continue;
+                    }
+
+                    const glm::vec3 enemyCenter = enemy.position + glm::vec3(0.0f, 0.48f, 0.0f);
+                    if (touchesGameplayTarget(projectile.position, enemyCenter, 0.58f, 0.72f)) {
+                        enemy.health = std::max(0, enemy.health - projectile.damage);
+                        enemy.animationTime = 0.0f;
+                        if (enemy.health <= 0) {
+                            enemy.alive = false;
+                            enemy.state = EnemyState::Dying;
+                            registerEnemyDefeat(enemy.position, now);
+                        }
+                        else {
+                            enemy.state = EnemyState::Hurt;
+                            enemy.hurtTime = 0.36f;
+                            showStatus("ENEMY HIT - stamina: " + std::to_string(enemy.health) + "/" + std::to_string(EnemyMaximumHealth));
+                        }
+                        remove = true;
+                        break;
+                    }
+                }
+            }
+            else if (!remove) {
+                const glm::vec3 playerCenter(posX, posY + 0.58f, posZ);
+                if (touchesGameplayTarget(projectile.position, playerCenter, 0.34f, 0.58f)) {
+                    const bool parried = parryEnemyProjectile(projectile, now);
+                    if (!parried) {
+                        damagePlayer(now);
+                    }
+                    remove = !parried || !projectile.fromPlayer;
+                }
+            }
+
+            if (remove) {
+                projectiles.erase(projectiles.begin() + static_cast<std::ptrdiff_t>(i));
+            }
+            else {
+                ++i;
+            }
+        }
+    }
+
+    void startPlayerAttackAnimation() {
+        playerAttackPlaying = true;
+        playerAttackTime = 0.0f;
+    }
+
+    void tryPlayerAttack(const glm::vec3& direction, bool charged, float now) {
+        playerAttackCooldown = PlayerAttackCooldown;
+        if (mode3D) {
+            showCombatRestriction(now);
+        }
+        else {
+            startPlayerAttackAnimation();
+            spawnPlayerProjectile(direction, charged);
+        }
+    }
+
+    void stopChargingPlayerAttack() {
+        chargingPlayerAttack = false;
+        playerChargeTime = 0.0f;
+    }
+
+    void handlePlayerAttack(GLFWwindow* window, float dt, float now) {
+        const bool attackDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+        if (!mode3D) {
+            playerAimDirection = mouseAimDirection(window);
+            if (playerAimDirection.x < -0.05f) {
+                playerAngle = 180.0f;
+            }
+            else if (playerAimDirection.x > 0.05f) {
+                playerAngle = 0.0f;
+            }
+        }
+
+        if (mode3D) {
+            if (attackDown && !mouseAttackPressed) {
+                showCombatRestriction(now);
+            }
+            stopChargingPlayerAttack();
+        }
+        else {
+            if (attackDown && !mouseAttackPressed && playerAttackCooldown <= 0.0f) {
+                chargingPlayerAttack = true;
+                playerChargeTime = 0.0f;
+            }
+            if (attackDown && chargingPlayerAttack) {
+                playerChargeTime = std::min(PlayerChargeTime, playerChargeTime + dt);
+            }
+            if (!attackDown && mouseAttackPressed && chargingPlayerAttack) {
+                tryPlayerAttack(playerAimDirection, playerChargeTime >= PlayerChargeTime, now);
+                stopChargingPlayerAttack();
+            }
+        }
+        mouseAttackPressed = attackDown;
+    }
+
+    void handleParry(GLFWwindow* window, float now) {
+        const bool parryDown = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
+        if (parryDown && !parryPressed) {
+            parryUntil = now + ParryWindow;
+        }
+        parryPressed = parryDown;
+    }
+
+    bool runCombatSmokeTest() {
+        if (enemies.size() < 3) {
+            std::cerr << "Map 4 combat smoke test needs at least 3 enemies." << std::endl;
+            return false;
+        }
+
+        const bool previousMode3D = mode3D;
+        const float previousPosY = posY;
+        const ExtraPlatform& overheadPlatform = extraPlatforms[FirstSpectralIslandIndex];
+        const float overheadTestZ = (overheadPlatform.minZ + overheadPlatform.maxZ) * 0.5f;
+        mode3D = false;
+        posY = overheadPlatform.height - PlayerSpriteHeight - 0.35f;
+        const bool overheadPlatformAllowsPassage = movementAllowed(
+            overheadPlatform.minX - 0.04f,
+            overheadTestZ,
+            overheadPlatform.minX + 0.04f,
+            overheadTestZ);
+        mode3D = previousMode3D;
+        posY = previousPosY;
+
+        glm::vec3 nearbyPosition;
+        if (!findTerrainEnemyPosition({ 2.0f, 0.0f }, nearbyPosition)) {
+            std::cerr << "Map 4 combat smoke test could not find nearby terrain." << std::endl;
+            return false;
+        }
+        auto placePlayerForCombatTest = [&]() {
+            posX = nearbyPosition.x - 2.0f;
+            posZ = nearbyPosition.z;
+            float playerTestHeight = nearbyPosition.y;
+            posY = groundHeight(posX, posZ, playerTestHeight) ? playerTestHeight : nearbyPosition.y;
+            velocityY = 0.0f;
+            grounded = true;
+            };
+        placePlayerForCombatTest();
+
+        mode3D = false;
+        projectiles.clear();
+        lives = StartingLives;
+        playerHealth = PlayerMaximumHealth;
+        playerInvulnerability = 0.0f;
+        enemies[0].position = nearbyPosition;
+        enemies[0].alive = true;
+        enemies[0].health = EnemyMaximumHealth;
+        enemies[0].shotCooldown = 0.0f;
+        updateEnemies(0.0f, 0.0f);
+        const bool enemyAttacksIn2D = std::any_of(projectiles.begin(), projectiles.end(), [](const Projectile& projectile) {
+            return !projectile.fromPlayer;
+            });
+
+        projectiles.clear();
+        playerHealth = PlayerMaximumHealth;
+        lives = StartingLives;
+        playerInvulnerability = 0.0f;
+        playerDeathPlaying = false;
+        playerDeathTime = 0.0f;
+        auto hitPlayer = [&](float now) {
+            playerInvulnerability = 0.0f;
+            projectiles.push_back({
+                {posX, posY + 0.58f, posZ},
+                {},
+                ProjectileLifetime,
+                false,
+                1,
+                false
+                });
+            updateProjectiles(0.0f, now);
+            };
+        hitPlayer(1.0f);
+        const int healthAfterFirstHit = playerHealth;
+        const int livesAfterFirstHit = lives;
+        const bool firstHitLeavesTwoHealth = healthAfterFirstHit == 2 && livesAfterFirstHit == StartingLives;
+        hitPlayer(2.0f);
+        const int healthAfterSecondHit = playerHealth;
+        const int livesAfterSecondHit = lives;
+        const bool secondHitLeavesOneHealth = healthAfterSecondHit == 1 && livesAfterSecondHit == StartingLives;
+        hitPlayer(3.0f);
+        const bool thirdHitStartsDeathAnimation =
+            playerHealth == 0 &&
+            playerDeathPlaying &&
+            lives == StartingLives;
+        finishPlayerDeath();
+        const bool thirdHitCostsOneLife =
+            playerHealth == PlayerMaximumHealth &&
+            lives == StartingLives - 1 &&
+            !playerDeathPlaying;
+        placePlayerForCombatTest();
+
+        projectiles.clear();
+        clearProjectilesRequested = false;
+        playerHealth = PlayerMaximumHealth;
+        parryUntil = 4.50f;
+        parryEffectUntil = 0.0f;
+        const bool parryActivationStaysQuiet = parryEffectUntil <= 0.0f;
+        hitPlayer(4.0f);
+        const bool perfectParryShowsEffect = parryEffectUntil > 4.0f;
+        const bool parryBlocksDamage =
+            playerHealth == PlayerMaximumHealth &&
+            parryUntil == 0.0f &&
+            parryActivationStaysQuiet &&
+            perfectParryShowsEffect;
+
+        projectiles.clear();
+        auto hitEnemy = [&](DemonEnemy& enemy, int damage, bool charged, float now) {
+            projectiles.push_back({
+                enemy.position + glm::vec3(0.0f, 0.48f, 0.0f),
+                {},
+                ProjectileLifetime,
+                true,
+                damage,
+                charged
+                });
+            updateProjectiles(0.0f, now);
+            };
+        enemies[0].position = nearbyPosition;
+        enemies[0].alive = true;
+        enemies[0].health = EnemyMaximumHealth;
+        hitEnemy(enemies[0], 1, false, 5.0f);
+        const bool enemySurvivesFirstNormalHit = enemies[0].alive && enemies[0].health == 2;
+        hitEnemy(enemies[0], 1, false, 5.1f);
+        const bool enemySurvivesSecondNormalHit = enemies[0].alive && enemies[0].health == 1;
+        hitEnemy(enemies[0], 1, false, 5.2f);
+        const bool thirdNormalHitDefeatsEnemy = !enemies[0].alive;
+
+        enemies[1].position = nearbyPosition;
+        enemies[1].alive = true;
+        enemies[1].health = EnemyMaximumHealth;
+        hitEnemy(enemies[1], EnemyMaximumHealth, true, 5.3f);
+        const bool chargedShotDefeatsEnemy = !enemies[1].alive;
+
+        mode3D = true;
+        projectiles.clear();
+        combatHintUntil = 0.0f;
+        playerAttackCooldown = 0.0f;
+        tryPlayerAttack({ 1.0f, 0.0f, 0.0f }, false, 6.0f);
+        const bool playerAttackBlockedIn3D = projectiles.empty() && combatHintUntil > 6.0f;
+
+        projectiles.clear();
+        combatHintUntil = 0.0f;
+        enemies[2].position = nearbyPosition;
+        enemies[2].alive = true;
+        enemies[2].health = EnemyMaximumHealth;
+        enemies[2].shotCooldown = 0.0f;
+        updateEnemies(0.0f, 7.0f);
+        const bool enemyStillAttacksIn3D =
+            combatHintUntil > 7.0f &&
+            std::any_of(projectiles.begin(), projectiles.end(), [](const Projectile& projectile) {
+            return !projectile.fromPlayer;
+                });
+
+        mode3D = false;
+        const size_t droppedBeforePickup = droppedGems.size();
+        const int gemsBeforePickup = spectralGems;
+        if (!droppedGems.empty()) {
+            posX = droppedGems.front().position.x;
+            posY = droppedGems.front().position.y - 0.42f;
+            posZ = droppedGems.front().position.z;
+            updateDroppedGems();
+        }
+        const bool defeatedEnemyDropsCollectibleGem =
+            droppedBeforePickup > 0 &&
+            droppedGems.size() < droppedBeforePickup &&
+            spectralGems > gemsBeforePickup;
+
+        spectralGems = SpectralGemRequirement + DamageParryGemRequirement;
+        spectralStepUnlocked = false;
+        damageParryPurchased = false;
+        const bool spectralPurchaseWorks = purchaseSpectralStep() &&
+            spectralStepUnlocked &&
+            spectralGems == DamageParryGemRequirement;
+        const bool parryPurchaseWorks = purchaseDamageParry() &&
+            damageParryPurchased &&
+            spectralGems == 0;
+
+        enemies[0].position = nearbyPosition;
+        enemies[0].alive = true;
+        enemies[0].health = EnemyMaximumHealth;
+        projectiles.clear();
+        placePlayerForCombatTest();
+        parryUntil = 9.5f;
+        projectiles.push_back({
+            {posX, posY + 0.58f, posZ},
+            {},
+            ProjectileLifetime,
+            false,
+            1,
+            false
+            });
+        updateProjectiles(0.0f, 9.0f);
+        const bool projectileReflected =
+            projectiles.size() == 1 &&
+            projectiles.front().fromPlayer &&
+            projectiles.front().damage == EnemyMaximumHealth;
+        if (projectileReflected) {
+            projectiles.front().position = enemies[0].position + glm::vec3(0.0f, 0.48f, 0.0f);
+            updateProjectiles(0.0f, 9.1f);
+        }
+        const bool reflectedParryDealsDamage = projectileReflected && !enemies[0].alive;
+
+        vanShopOpen = false;
+        vanShopOpen = true;
+        const bool remoteShopOpens = vanShopOpen;
+        vanShopOpen = false;
+
+        const bool passed =
+            overheadPlatformAllowsPassage &&
+            enemyAttacksIn2D &&
+            firstHitLeavesTwoHealth &&
+            secondHitLeavesOneHealth &&
+            thirdHitStartsDeathAnimation &&
+            thirdHitCostsOneLife &&
+            parryBlocksDamage &&
+            enemySurvivesFirstNormalHit &&
+            enemySurvivesSecondNormalHit &&
+            thirdNormalHitDefeatsEnemy &&
+            chargedShotDefeatsEnemy &&
+            playerAttackBlockedIn3D &&
+            enemyStillAttacksIn3D &&
+            defeatedEnemyDropsCollectibleGem &&
+            spectralPurchaseWorks &&
+            parryPurchaseWorks &&
+            reflectedParryDealsDamage &&
+            remoteShopOpens;
+        std::cout << "Map 4 combat smoke test: " << (passed ? "PASS" : "FAIL")
+            << " | enemy attacks 2D: " << enemyAttacksIn2D
+            << " | overhead passage: " << overheadPlatformAllowsPassage
+            << " | player health: " << (firstHitLeavesTwoHealth && secondHitLeavesOneHealth && thirdHitStartsDeathAnimation && thirdHitCostsOneLife)
+            << " (" << firstHitLeavesTwoHealth
+            << "=" << healthAfterFirstHit << "/" << livesAfterFirstHit
+            << "," << secondHitLeavesOneHealth
+            << "=" << healthAfterSecondHit << "/" << livesAfterSecondHit
+            << "," << thirdHitStartsDeathAnimation
+            << "," << thirdHitCostsOneLife << ")"
+            << " | parry: " << parryBlocksDamage
+            << " | perfect-only message: " << (parryActivationStaysQuiet && perfectParryShowsEffect)
+            << " | normal damage: " << (enemySurvivesFirstNormalHit && enemySurvivesSecondNormalHit && thirdNormalHitDefeatsEnemy)
+            << " | charged shot: " << chargedShotDefeatsEnemy
+            << " | player blocked 3D: " << playerAttackBlockedIn3D
+            << " | enemy attacks 3D: " << enemyStillAttacksIn3D
+            << " | gem pickup: " << defeatedEnemyDropsCollectibleGem
+            << " | shop purchases: " << (spectralPurchaseWorks && parryPurchaseWorks)
+            << " | reflected damage: " << reflectedParryDealsDamage
+            << " | remote shop: " << remoteShopOpens << std::endl;
+        return passed;
+    }
+
+    bool isMoving(GLFWwindow* window) const {
+        if (!mode3D) {
+            return glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ||
+                glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+        }
+
+        return glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+    }
+
+    void updateTitle(GLFWwindow* window, float deltaTime) {
+        titleTime += deltaTime;
+        if (titleTime < 0.5f && messageTime <= 0.0f) {
+            return;
+        }
+
+        std::ostringstream title;
+        title << std::fixed << std::setprecision(2);
+        if (messageTime > 0.0f && !statusMessage.empty()) {
+            title << statusMessage << " | ";
+        }
+        title << (mode3D ? "Paper Mario 3D" : "Paper Mario 2D")
+            << " | Lives:" << lives
+            << " | Health:" << playerHealth << "/" << PlayerMaximumHealth
+            << " | Coins:" << collectedCoins << "/" << TotalCoins
+            << " | Gems:" << spectralGems
+            << " | Step:" << (spectralStepUnlocked
+                ? std::string("READY")
+                : std::string("NO"))
+            << " | Return:" << (damageParryPurchased ? "READY" : "NO")
+            << " | X:" << posX
+            << " Y:" << posY;
+        if (mode3D) {
+            title << " Z:" << posZ;
+        }
+        glfwSetWindowTitle(window, title.str().c_str());
+        titleTime = 0.0f;
+    }
+
+    void update(GLFWwindow* window, float deltaTime) {
+        const float dt = std::clamp(deltaTime, 0.0f, 0.05f);
+        const float now = static_cast<float>(glfwGetTime());
+        streamDeferredWorldModels(dt);
+        if (messageTime > 0.0f) {
+            messageTime = std::max(0.0f, messageTime - dt);
+            if (messageTime <= 0.0f) {
+                statusMessage.clear();
+            }
+        }
+        playerAttackCooldown = std::max(0.0f, playerAttackCooldown - dt);
+        playerInvulnerability = std::max(0.0f, playerInvulnerability - dt);
+        spectralCooldown = std::max(0.0f, spectralCooldown - dt);
+        if (playerAttackPlaying) {
+            playerAttackTime += dt;
+            if (playerAttackTime >= animationDuration(playerAttackMeshes, PlayerAttackFramesPerSecond)) {
+                playerAttackPlaying = false;
+                playerAttackTime = 0.0f;
+            }
+        }
+        if (playerEntrancePlaying) {
+            playerEntranceTime += dt;
+            if (playerEntranceTime >= animationDuration(playerEntranceMeshes, PlayerEntranceFramesPerSecond)) {
+                playerEntrancePlaying = false;
+                playerEntranceTime = 0.0f;
+            }
+        }
+        if (playerTransitionPlaying) {
+            playerTransitionTime += dt;
+            if (playerTransitionTime >= animationDuration(playerTransitionMeshes, PlayerTransitionFramesPerSecond)) {
+                playerTransitionPlaying = false;
+                playerTransitionTime = 0.0f;
+            }
+        }
+        updateTitle(window, dt);
+        if (levelIntroActive) {
+            levelIntroTime += dt;
+            if (levelIntroTime >= LevelIntroFarHoldSeconds + LevelIntroZoomSeconds) {
+                levelIntroActive = false;
+                levelIntroTime = LevelIntroFarHoldSeconds + LevelIntroZoomSeconds;
+            }
+            cameraOffsetY = posY + CameraPlayerCenterOffset;
+            tabPressed = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
+            mouseAttackPressed = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+            parryPressed = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
+            interactPressed = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
+            shopTogglePressed = glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS;
+            stopChargingPlayerAttack();
+            wasMoving = false;
+            return;
+        }
+        handleVanShop(window, now);
+        if (vanShopOpen) {
+            stopChargingPlayerAttack();
+            wasMoving = false;
+            return;
+        }
+        if (playerDeathPlaying) {
+            playerDeathTime += dt;
+            if (playerDeathTime >= animationDuration(playerDeathMeshes, PlayerDeathFramesPerSecond)) {
+                finishPlayerDeath();
+            }
+            return;
+        }
+        if (completed) {
+            return;
+        }
+        if (playerEntrancePlaying) {
+            return;
+        }
+
+        const bool tabDown = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
+        if (tabDown && !tabPressed) {
+            const bool keepVanRouteCentered = playerNearVanRoute();
+            mode3D = !mode3D;
+            stopChargingPlayerAttack();
+            startModeTransitionAnimation();
+            if (!mode3D) {
+                posZ = keepVanRouteCentered ? vanRouteCenterDepth() : 0.0f;
+                playerAngle = 0.0f;
+            }
+            else {
+                if (keepVanRouteCentered) {
+                    posZ = vanRouteCenterDepth();
+                }
+                playerAngle = 90.0f;
+            }
+            std::cout << "Map 4 view changed to " << (mode3D ? "3D." : "2D.") << std::endl;
+        }
+        tabPressed = tabDown;
+        handlePlayerAttack(window, dt, now);
+        handleParry(window, now);
+        handleSpectralStep(window, now);
+
+        const bool movingNow = isMoving(window);
+        if (movingNow || !grounded) {
+            animationTime += dt;
+        }
+        else {
+            currentFrame = 0;
+            animationTime = 0.0f;
+        }
+        if (!grounded) {
+            playerJumpTime += dt;
+        }
+        else {
+            playerJumpTime = 0.0f;
+        }
+        wasMoving = movingNow && grounded;
+
+        float nextX = posX;
+        float nextZ = posZ;
+        if (!mode3D) {
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+                nextX -= MoveSpeed2D * dt;
+                playerAngle = 180.0f;
+            }
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+                nextX += MoveSpeed2D * dt;
+                playerAngle = 0.0f;
+            }
+        }
+        else {
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+                nextX += MoveSpeed3D * dt;
+                playerAngle = 90.0f;
+            }
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+                nextX -= MoveSpeed3D * dt;
+                playerAngle = 270.0f;
+            }
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+                nextZ -= MoveSpeed3D * dt;
+                playerAngle = 90.0f;
+            }
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+                nextZ += MoveSpeed3D * dt;
+                playerAngle = 270.0f;
+            }
+        }
+
+        if (movementAllowed(posX, posZ, nextX, posZ)) {
+            posX = nextX;
+        }
+        if (movementAllowed(posX, posZ, posX, nextZ)) {
+            posZ = nextZ;
+        }
+
+        const bool jumpDown = (!mode3D && glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) ||
+            (mode3D && glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
+        if (jumpDown && grounded) {
+            velocityY = JumpSpeed;
+            grounded = false;
+            playerJumpTime = 0.0f;
+        }
+
+        velocityY -= Gravity * dt;
+        posY += velocityY * dt;
+
+        float floorHeight = -1.0f;
+        const float floorSearchHeight = posY + LandingMargin +
+            (grounded && velocityY <= 0.0f ? StepHeightWithoutJump : 0.0f);
+        const bool hasFloor = landingHeight(posX, posZ, floorSearchHeight, floorHeight);
+        if (hasFloor && velocityY <= 0.0f && posY <= floorHeight + LandingMargin) {
+            posY = floorHeight;
+            velocityY = 0.0f;
+            grounded = true;
+            playerJumpTime = 0.0f;
+        }
+        else {
+            grounded = false;
+        }
+
+        if (posY <= DeathHeight) {
+            loseLife();
+        }
+
+        updateEnemies(dt, now);
+        updateProjectiles(dt, now);
+        updateDroppedGems();
+        if (resetEnemiesRequested) {
+            resetEnemies();
+            resetEnemiesRequested = false;
+        }
+        if (clearProjectilesRequested) {
+            projectiles.clear();
+            clearProjectilesRequested = false;
+        }
+        updateMission(now);
+
+        cameraOffsetY = posY + CameraPlayerCenterOffset;
+    }
+
+    void drawSkybox(const glm::mat4& view, const glm::mat4& projection) {
+        glDepthMask(GL_FALSE);
+        shader.setMat4("view", glm::mat4(glm::mat3(view)));
+        shader.setMat4("projection", projection);
+        shader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(60.0f)));
+        shader.setInt("modoRender", 0);
+        shader.setInt("tex0", 0);
+        skyboxTexture.bind();
+        skyboxMesh.draw();
+        glDepthMask(GL_TRUE);
+        shader.setMat4("view", view);
+    }
+
+    void drawColoredMesh(const Mesh& mesh, const glm::mat4& model, const glm::vec4& color) {
+        shader.setMat4("model", model);
+        shader.setInt("modoRender", 2);
+        shader.setVec4("colorMaterial", color);
+        mesh.draw();
+    }
+
+    void drawTexturedMesh(const Mesh& mesh, const glm::mat4& model, const Texture2D& texture, const glm::vec4& fallbackColor) {
+        if (!texture.valid()) {
+            drawColoredMesh(mesh, model, fallbackColor);
+            return;
+        }
+
+        shader.setMat4("model", model);
+        shader.setInt("modoRender", 0);
+        shader.setInt("tex0", 0);
+        texture.bind();
+        mesh.draw();
+    }
+
+    glm::mat4 normalizedSwordMatrix(const glm::vec3& position, const glm::vec3& velocity, float length) const {
+        const glm::vec3 extents = projectileSwordModel.maxBounds - projectileSwordModel.minBounds;
+        const float maximumExtent = std::max({ extents.x, extents.y, extents.z, 0.001f });
+        const glm::vec3 center = (projectileSwordModel.minBounds + projectileSwordModel.maxBounds) * 0.5f;
+
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
+        if (glm::length(velocity) > 0.0001f) {
+            model *= glm::mat4_cast(rotationBetweenVectors(glm::vec3(0.0f, -1.0f, 0.0f), velocity));
+        }
+        model = glm::scale(model, glm::vec3(length / maximumExtent));
+        model = glm::translate(model, -center);
+        return model;
+    }
+
+    glm::mat4 normalizedCornMatrix(const glm::vec3& position, const glm::vec3& velocity, float length) const {
+        const glm::vec3 extents = projectileCornModel.model.maxBounds - projectileCornModel.model.minBounds;
+        const float maximumExtent = std::max({ extents.x, extents.y, extents.z, 0.001f });
+        const glm::vec3 center = (projectileCornModel.model.minBounds + projectileCornModel.model.maxBounds) * 0.5f;
+
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
+        if (glm::length(velocity) > 0.0001f) {
+            model *= glm::mat4_cast(rotationBetweenVectors(glm::vec3(1.0f, 0.0f, 0.0f), velocity));
+        }
+        model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(length / maximumExtent));
+        model = glm::translate(model, -center);
+        return model;
+    }
+
+    void drawSwordModel(const glm::mat4& model, const glm::vec4& color) {
+        for (const LoadedMesh& mesh : projectileSwordModel.meshes) {
+            drawColoredMesh(mesh.mesh, model, color);
+        }
+    }
+
+    void drawCornProjectile(const glm::mat4& model) {
+        if (projectileCornLoaded) {
+            drawRuntimeModel(projectileCornModel, model, { 0.96f, 0.78f, 0.22f, 1.0f });
+        }
+        else {
+            drawSwordModel(model, { 0.18f, 0.66f, 1.00f, 1.0f });
+        }
+    }
+
+    float renderedDepth(float depth, bool projectIn2D) const {
+        return projectIn2D && !mode3D ? posZ : depth;
+    }
+
+    void drawPipe() {
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), { 1.0f - posX, -0.44f, -posZ });
+        model = glm::scale(model, { 0.28f, 0.95f, 0.28f });
+        drawColoredMesh(pipeBodyMesh, model, { 0.36f, 0.72f, 0.32f, 1.0f });
+
+        model = glm::translate(glm::mat4(1.0f), { 1.0f - posX, 0.03f, -posZ });
+        model = glm::scale(model, { 0.40f, 0.22f, 0.40f });
+        drawColoredMesh(pipeRimMesh, model, { 0.48f, 0.82f, 0.38f, 1.0f });
+
+        model = glm::translate(glm::mat4(1.0f), { 1.0f - posX, 0.15f, -posZ });
+        model = glm::scale(model, { 0.30f, 0.025f, 0.30f });
+        drawColoredMesh(pipeOpeningMesh, model, { 0.02f, 0.10f, 0.08f, 1.0f });
+    }
+
+    void drawParkourPlatforms() {
+        for (const ExtraPlatform& platform : extraPlatforms) {
+            if (!platform.visible) {
+                continue;
+            }
+
+            const float width = platform.maxX - platform.minX;
+            const float depth = platform.maxZ - platform.minZ;
+            const float centerX = (platform.minX + platform.maxX) * 0.5f - posX;
+            const float centerZ = renderedDepth((platform.minZ + platform.maxZ) * 0.5f, platform.projectIn2D) - posZ;
+
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), { centerX, platform.height - platform.thickness * 0.5f, centerZ });
+            model = glm::scale(model, { width, platform.thickness, depth });
+            drawTexturedMesh(platformMesh, model, platformSideTexture, platform.color);
+
+            model = glm::translate(glm::mat4(1.0f), { centerX, platform.height - platform.thickness + 0.028f, centerZ });
+            model = glm::scale(model, { width * 1.035f, 0.055f, depth * 1.035f });
+            drawColoredMesh(platformMesh, model, platform.color);
+
+            model = glm::translate(glm::mat4(1.0f), { centerX, platform.height + 0.014f, centerZ });
+            model = glm::scale(model, { width * 0.96f, 0.028f, depth * 0.96f });
+            drawTexturedMesh(platformMesh, model, platformTopTexture, { 0.48f, 0.82f, 0.42f, 1.0f });
+        }
+    }
+
+    void drawMissionItems(float now) {
+        for (const Coin& coin : coins) {
+            if (coin.collected) {
+                continue;
+            }
+
+            const float bob = std::sin(now * 2.4f + coin.phase) * 0.10f;
+            glm::mat4 model = glm::translate(
+                glm::mat4(1.0f),
+                { coin.position.x - posX, coin.position.y + bob, renderedDepth(coin.position.z, coin.projectIn2D) - posZ });
+            model = glm::rotate(model, now * 5.2f + coin.phase, { 0.0f, 1.0f, 0.0f });
+            model = glm::rotate(model, glm::half_pi<float>(), { 1.0f, 0.0f, 0.0f });
+            drawColoredMesh(coinMesh, model, { 1.0f, 0.74f, 0.08f, 1.0f });
+        }
+
+        if (star.active) {
+            const float bob = std::sin(now * 2.8f) * 0.14f;
+            glm::mat4 model = glm::translate(
+                glm::mat4(1.0f),
+                { star.position.x - posX, star.position.y + bob, renderedDepth(star.position.z, star.projectIn2D) - posZ });
+            model = glm::rotate(model, now * 2.8f, { 0.0f, 1.0f, 0.0f });
+            model = glm::scale(model, glm::vec3(0.88f));
+            drawColoredMesh(starMesh, model, { 1.0f, 0.86f, 0.12f, 1.0f });
+        }
+    }
+
+    void drawEnemies() {
+        for (const DemonEnemy& enemy : enemies) {
+            const std::vector<Mesh>* frames = &enemyIdleMeshes;
+            float framesPerSecond = 8.0f;
+            bool clampLastFrame = false;
+            if (!enemy.alive) {
+                if (enemy.animationTime > 1.05f) {
+                    continue;
+                }
+                frames = &enemyDeathMeshes;
+                framesPerSecond = 9.0f;
+                clampLastFrame = true;
+            }
+            else if (enemy.state == EnemyState::Attack) {
+                frames = &enemyAttackMeshes;
+                framesPerSecond = 9.0f;
+                clampLastFrame = true;
+            }
+            else if (enemy.state == EnemyState::Hurt) {
+                frames = &enemyHurtMeshes;
+                framesPerSecond = 9.0f;
+                clampLastFrame = true;
+            }
+            else if (enemy.state == EnemyState::Chase) {
+                frames = &enemyRunMeshes;
+                framesPerSecond = 9.0f;
+            }
+
+            if (frames->empty()) {
+                continue;
+            }
+
+            size_t frameIndex = static_cast<size_t>(enemy.animationTime * framesPerSecond);
+            frameIndex = clampLastFrame
+                ? std::min(frameIndex, frames->size() - 1)
+                : frameIndex % frames->size();
+
+            const float renderZ = renderedDepth(enemy.position.z, true) - posZ + (!mode3D ? 0.16f : 0.0f);
+            glm::mat4 model = glm::translate(
+                glm::mat4(1.0f),
+                { enemy.position.x - posX, enemy.position.y, renderZ });
+            const float angle = mode3D
+                ? (enemy.facingLeft ? 270.0f : 90.0f)
+                : (enemy.facingLeft ? 180.0f : 0.0f);
+            model = glm::rotate(model, glm::radians(angle), { 0.0f, 1.0f, 0.0f });
+            drawTexturedMesh((*frames)[frameIndex], model, enemyTexture, { 0.92f, 0.16f, 0.12f, 1.0f });
+        }
+    }
+
+    void drawDroppedGems(float now) {
+        for (const DroppedGem& gem : droppedGems) {
+            const float bob = std::sin(now * 3.8f + gem.phase) * 0.09f;
+            const float pulse = 1.0f + std::sin(now * 6.4f + gem.phase) * 0.06f;
+            const float renderZ = renderedDepth(gem.position.z, gem.projectIn2D) - posZ + (!mode3D ? 0.34f : 0.0f);
+            const glm::vec3 renderPosition(gem.position.x - posX, gem.position.y + bob, renderZ);
+
+            if (gemModelLoaded) {
+                const glm::vec3 extents = gemModel.model.maxBounds - gemModel.model.minBounds;
+                const float maximumExtent = std::max({ extents.x, extents.y, extents.z, 0.001f });
+                const float scale = (GemModelDisplaySize / maximumExtent) * pulse;
+                const glm::vec3 center = (gemModel.model.minBounds + gemModel.model.maxBounds) * 0.5f;
+                glm::mat4 model = glm::translate(glm::mat4(1.0f), renderPosition);
+                model = glm::rotate(model, now * 2.6f + gem.phase, { 0.0f, 1.0f, 0.0f });
+                model = glm::rotate(model, glm::radians(12.0f), { 0.0f, 0.0f, 1.0f });
+                model = glm::scale(model, glm::vec3(scale));
+                model = glm::translate(model, -center);
+                drawRuntimeModel(gemModel, model, { 0.95f, 0.03f, 0.06f, 1.0f });
+            }
+            else {
+                glm::mat4 model = glm::translate(glm::mat4(1.0f), renderPosition);
+                model = glm::rotate(model, now * 2.8f + gem.phase, { 0.0f, 1.0f, 0.0f });
+                model = glm::scale(model, glm::vec3(0.34f * pulse));
+                drawColoredMesh(starMesh, model, { 0.95f, 0.03f, 0.06f, 1.0f });
+            }
+
+            glm::mat4 glow = glm::translate(glm::mat4(1.0f), renderPosition);
+            glow = glm::scale(glow, glm::vec3(0.48f * pulse));
+            drawColoredMesh(parryRingMesh, glow, { 1.0f, 0.08f, 0.12f, 0.55f });
+        }
+    }
+
+    void drawProjectiles() {
+        for (const Projectile& projectile : projectiles) {
+            const float renderZ = renderedDepth(projectile.position.z, true) - posZ + (!mode3D ? 0.28f : 0.0f);
+            const glm::vec3 renderPosition{ projectile.position.x - posX, projectile.position.y, renderZ };
+            if (projectile.cornVisual && projectileCornLoaded) {
+                const float length = CornProjectileLength * (projectile.charged ? 1.45f : 1.0f);
+                drawCornProjectile(normalizedCornMatrix(renderPosition, projectile.velocity, length));
+            }
+            else {
+                const float length = ProjectileSwordLength * (projectile.charged ? 1.55f : 1.0f);
+                const glm::mat4 model = normalizedSwordMatrix(renderPosition, projectile.velocity, length);
+                drawSwordModel(
+                    model,
+                    projectile.fromPlayer
+                    ? glm::vec4(0.18f, 0.66f, 1.00f, 1.0f)
+                    : glm::vec4(1.00f, 0.16f, 0.10f, 1.0f));
+            }
+        }
+    }
+
+    void drawSpectralAnchors(float now) {
+        for (const SpectralAnchor& anchor : spectralAnchors) {
+            const float bob = std::sin(now * 3.0f + anchor.phase) * 0.07f;
+            const float pulse = 1.0f + std::sin(now * 5.4f + anchor.phase) * 0.08f;
+            const float renderZ = renderedDepth(anchor.origin.z, anchor.projectIn2D) - posZ + (!mode3D ? 0.30f : 0.0f);
+            const glm::vec3 renderPosition(anchor.origin.x - posX, anchor.origin.y + bob, renderZ);
+            const glm::vec4 anchorColor = spectralStepUnlocked
+                ? glm::vec4(0.18f, 0.72f, 1.00f, 1.0f)
+                : glm::vec4(0.18f, 0.32f, 0.46f, 1.0f);
+            const glm::vec4 ringColor = spectralStepUnlocked
+                ? glm::vec4(0.22f, 0.95f, 1.00f, 1.0f)
+                : glm::vec4(0.12f, 0.42f, 0.58f, 1.0f);
+
+            glm::mat4 ring = glm::translate(glm::mat4(1.0f), renderPosition);
+            ring = glm::scale(ring, glm::vec3(0.70f * pulse));
+            drawColoredMesh(parryRingMesh, ring, ringColor);
+
+            const glm::mat4 sword = normalizedSwordMatrix(
+                renderPosition + glm::vec3(0.0f, 0.10f, 0.0f),
+                glm::vec3(0.0f, -1.0f, 0.0f),
+                0.78f * pulse);
+            drawSwordModel(sword, anchorColor);
+        }
+    }
+
+    void drawCombatEffects(float now) {
+        if (chargingPlayerAttack && !mode3D) {
+            const float ratio = std::clamp(playerChargeTime / PlayerChargeTime, 0.0f, 1.0f);
+            const float previewLength = ProjectileSwordLength * (0.42f + ratio * 1.13f);
+            const glm::vec3 offset = playerAimDirection * (0.42f + previewLength * 0.34f);
+            const glm::vec3 previewPosition{ offset.x, posY + 0.62f + offset.y, 0.36f };
+            if (projectileCornLoaded) {
+                drawCornProjectile(normalizedCornMatrix(previewPosition, playerAimDirection, CornProjectileLength * (0.55f + ratio * 0.95f)));
+            }
+            else {
+                drawSwordModel(normalizedSwordMatrix(previewPosition, playerAimDirection, previewLength), { 0.18f, 0.66f, 1.00f, 1.0f });
+            }
+        }
+
+        if (now <= spectralEffectUntil) {
+            const float ratio = std::clamp((spectralEffectUntil - now) / 0.46f, 0.0f, 1.0f);
+            const float pulse = 1.0f + (1.0f - ratio) * 0.85f;
+            glm::mat4 model = glm::translate(
+                glm::mat4(1.0f),
+                mode3D ? glm::vec3(-0.08f, posY + 0.58f, 0.0f) : glm::vec3(0.0f, posY + 0.58f, 0.38f));
+            if (mode3D) {
+                model = glm::rotate(model, glm::half_pi<float>(), { 0.0f, 1.0f, 0.0f });
+            }
+            model = glm::scale(model, glm::vec3(pulse));
+            drawColoredMesh(parryRingMesh, model, { 0.18f, 0.72f, 1.00f, 1.0f });
+        }
+
+    }
+
+    void drawWorld() {
+        glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), { -posX, -1.0f, -posZ });
+        modelMatrix = glm::scale(modelMatrix, glm::vec3(MapScale));
+        modelMatrix = glm::translate(modelMatrix, MapCenter);
+        shader.setMat4("model", modelMatrix);
+
+        for (const WorldModel& world : worldModels) {
+            for (const LoadedMesh& mesh : world.model.meshes) {
+                const MapMaterial* material = mesh.materialIndex < world.materials.size()
+                    ? &world.materials[mesh.materialIndex]
+                    : nullptr;
+
+                if (material != nullptr && material->texture != nullptr && material->texture->valid()) {
+                    shader.setInt("modoRender", 0);
+                    shader.setInt("tex0", 0);
+                    material->texture->bind();
+                }
+                else {
+                    shader.setInt("modoRender", 2);
+                    shader.setVec4("colorMaterial", material != nullptr ? material->color : glm::vec4(1.0f));
+                }
+                mesh.mesh.draw();
+            }
+        }
+    }
+
+    void drawRuntimeModel(const WorldModel& modelData, const glm::mat4& modelMatrix, const glm::vec4& fallbackColor) {
+        shader.setMat4("model", modelMatrix);
+        for (const LoadedMesh& mesh : modelData.model.meshes) {
+            const MapMaterial* material = mesh.materialIndex < modelData.materials.size()
+                ? &modelData.materials[mesh.materialIndex]
+                : nullptr;
+
+            if (material != nullptr && material->texture != nullptr && material->texture->valid()) {
+                shader.setInt("modoRender", 0);
+                shader.setInt("tex0", 0);
+                material->texture->bind();
+            }
+            else {
+                shader.setInt("modoRender", 2);
+                shader.setVec4("colorMaterial", material != nullptr ? material->color : fallbackColor);
+            }
+            mesh.mesh.draw();
+        }
+    }
+
+    void drawVanShop(float now) {
+        const glm::vec3 van = vanWorldPosition();
+        const float renderZ = renderedDepth(van.z, true) - posZ;
+        if (std::abs(van.x - posX) > VanRenderRangeX || (mode3D && std::abs(van.z - posZ) > VanRenderRangeZ)) {
+            return;
+        }
+
+        const glm::vec3 renderPosition(van.x - posX, van.y, renderZ);
+        float vanMarkerHeight = 1.45f;
+
+        if (ensureVanModelLoaded()) {
+            const glm::vec3 extents = vanModel.model.maxBounds - vanModel.model.minBounds;
+            const float maximumExtent = std::max({ extents.x, extents.y, extents.z, 0.001f });
+            const float vanScale = VanModelDisplaySize / maximumExtent;
+            const float scaledHeight = extents.y * vanScale;
+            const glm::vec3 center = (vanModel.model.minBounds + vanModel.model.maxBounds) * 0.5f;
+            const glm::vec3 vanModelPosition = renderPosition + glm::vec3(0.0f, scaledHeight * 0.5f, 0.0f);
+            vanMarkerHeight = scaledHeight + 0.35f;
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), vanModelPosition);
+            model = glm::rotate(model, glm::radians(mode3D ? -25.0f : 0.0f), { 0.0f, 1.0f, 0.0f });
+            model = glm::scale(model, glm::vec3(vanScale));
+            model = glm::translate(model, -center);
+            drawRuntimeModel(vanModel, model, { 0.72f, 0.78f, 0.86f, 1.0f });
+        }
+        else {
+            glm::mat4 body = glm::translate(glm::mat4(1.0f), renderPosition + glm::vec3(0.0f, 0.95f, 0.0f));
+            body = glm::scale(body, { 0.72f, 1.90f, 0.72f });
+            drawColoredMesh(platformMesh, body, { 0.74f, 0.04f, 0.05f, 1.0f });
+        }
+
+        const float pulse = 1.0f + std::sin(now * 4.0f) * 0.06f;
+        glm::mat4 marker = glm::translate(glm::mat4(1.0f), renderPosition + glm::vec3(0.0f, vanMarkerHeight, 0.0f));
+        marker = glm::scale(marker, glm::vec3(0.48f * pulse));
+        drawColoredMesh(parryRingMesh, marker, spectralStepUnlocked
+            ? glm::vec4(1.0f, 0.82f, 0.18f, 1.0f)
+            : glm::vec4(0.18f, 0.72f, 1.0f, 1.0f));
+    }
+
+    void drawBangbooPlayer(float bounce, bool lockedAction) {
+        if (!bangbooPlayer.valid()) {
+            return;
+        }
+
+        size_t frameIndex = 0;
+        if (wasMoving && !lockedAction && bangbooPlayer.frames.size() > 1) {
+            frameIndex = static_cast<size_t>(animationTime * bangbooPlayer.framesPerSecond) % bangbooPlayer.frames.size();
+        }
+
+        const glm::vec3 extents = bangbooPlayer.maxBounds - bangbooPlayer.minBounds;
+        const float modelHeight = std::max(extents.y, 0.001f);
+        const float modelScale = BangbooPlayerHeight / modelHeight;
+        const glm::vec3 modelCenter = (bangbooPlayer.minBounds + bangbooPlayer.maxBounds) * 0.5f;
+        const float renderZ = mode3D ? 0.0f : 0.22f;
+
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), { 0.0f, posY + bounce, renderZ });
+        const float yawOffset = mode3D ? 0.0f : BangbooYawOffsetDegrees;
+        model = glm::rotate(model, glm::radians(playerAngle + yawOffset), { 0.0f, 1.0f, 0.0f });
+        model = glm::scale(model, glm::vec3(modelScale));
+        model = glm::translate(model, { -modelCenter.x, -bangbooPlayer.minBounds.y, -modelCenter.z });
+        drawRuntimeModel(bangbooPlayer.frames[frameIndex], model, { 1.0f, 1.0f, 1.0f, 1.0f });
+    }
+
+    void drawPlayer() {
+        const float now = static_cast<float>(glfwGetTime());
+        const bool airborne = !grounded;
+        const bool guardActive = playerGuardUntil > 0.0f && now <= playerGuardUntil;
+        const bool attackActive = playerAttackPlaying && !playerAttackMeshes.empty();
+        const bool lockedAction = playerDeathPlaying || playerEntrancePlaying || playerTransitionPlaying || guardActive || attackActive;
+        const float step = wasMoving && !lockedAction ? std::sin(now * 14.0f) : 0.0f;
+        const float bounce = wasMoving && !lockedAction ? std::fabs(step) * 0.035f : 0.0f;
+        const float jumpStrength = airborne ? std::clamp(std::abs(velocityY) / JumpSpeed, 0.0f, 1.0f) : 0.0f;
+        const float walkTilt = wasMoving && !lockedAction ? step * 4.0f : 0.0f;
+        const bool jumpPoseActive = airborne && !lockedAction;
+        const float jumpTilt = jumpPoseActive ? (velocityY >= 0.0f ? -10.0f : 8.0f) * jumpStrength : 0.0f;
+        const glm::vec3 jumpScale = jumpPoseActive
+            ? glm::vec3(1.0f - jumpStrength * 0.06f, 1.0f + jumpStrength * 0.10f, 1.0f)
+            : glm::vec3(1.0f);
+
+        const Mesh* selectedMesh = playerRunMeshes.empty() ? nullptr : &playerRunMeshes.front();
+        const Texture2D* selectedTexture = playerRunTextures.empty() ? nullptr : &playerRunTextures.front();
+        auto selectPlayerFrame = [&](const std::vector<Mesh>& meshes, const std::vector<Texture2D>& textures, float time, float framesPerSecond, bool loop) {
+            const size_t frameCount = std::min(meshes.size(), textures.size());
+            if (frameCount == 0) {
+                return false;
+            }
+
+            const size_t frameIndex = animationFrameIndex(frameCount, time, framesPerSecond, loop);
+            selectedMesh = &meshes[frameIndex];
+            selectedTexture = &textures[frameIndex];
+            return true;
+            };
+
+        if (playerDeathPlaying) {
+            selectPlayerFrame(playerDeathMeshes, playerDeathTextures, playerDeathTime, PlayerDeathFramesPerSecond, false);
+        }
+        else if (guardActive) {
+            selectPlayerFrame(playerBlockMeshes, playerBlockTextures, now - playerGuardStartTime, PlayerBlockFramesPerSecond, false);
+        }
+        else if (attackActive) {
+            selectPlayerFrame(playerAttackMeshes, playerAttackTextures, playerAttackTime, PlayerAttackFramesPerSecond, false);
+        }
+        else if (airborne) {
+            selectPlayerFrame(playerJumpMeshes, playerJumpTextures, playerJumpTime, PlayerJumpFramesPerSecond, false);
+        }
+        else if (wasMoving) {
+            selectPlayerFrame(playerRunMeshes, playerRunTextures, animationTime, PlayerRunFramesPerSecond, true);
+        }
+        if (selectedMesh == nullptr || selectedTexture == nullptr) {
+            return;
+        }
+
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), { 0.0f, posY + bounce, 0.22f });
+        model = glm::rotate(model, glm::radians(playerAngle), { 0.0f, 1.0f, 0.0f });
+        model = glm::rotate(model, glm::radians(walkTilt + jumpTilt), { 0.0f, 0.0f, 1.0f });
+        model = glm::scale(model, jumpScale);
+        drawTexturedMesh(*selectedMesh, model, *selectedTexture, { 1.0f, 1.0f, 1.0f, 1.0f });
+    }
+
+    bool initialize(bool enableAudio) {
+        if (initialized) {
+            return true;
+        }
+
+        if (!shader.load(resolveAssetPath("shaders/mapa1.vert"), resolveAssetPath("shaders/mapa1.frag"))) {
+            return false;
+        }
+
+        if (!loadBangbooPlayerModel()) {
+            return false;
+        }
+
+        if (!loadPlayerSprites()) {
+            return false;
+        }
+
+        projectileSwordModel = ModelLoader::loadModel(resolveAssetPath("assets/items/vergil_summoned_sword/scene.gltf"));
+        if (projectileSwordModel.meshes.empty()) {
+            std::cerr << "Map 4 summoned sword projectile could not be loaded." << std::endl;
+            return false;
+        }
+        loadCornProjectileModel();
+
+        if (!skyboxTexture.loadFromFile(resolveAssetPath("assets/mapa1/skybox/R.jpg"))) {
+            std::cerr << "Map 4 skybox could not be loaded." << std::endl;
+            return false;
+        }
+        coinIconTexture.loadFromFile(resolveAssetPath("assets/images/coin_spin.png"));
+        if (!platformSideTexture.loadFromFile(resolveAssetPath("assets/mapa1/world1/W1WallBlock_DM_alb.png")) ||
+            !platformTopTexture.loadFromFile(resolveAssetPath("assets/mapa1/world1/Grass01_YD_alb.png"))) {
+            std::cerr << "Map 4 parkour textures could not be loaded." << std::endl;
+            return false;
+        }
+        if (!enemyTexture.loadFromFile(resolveAssetPath("assets/mapa1/enemies/Demon_Spritesheet.png"))) {
+            std::cerr << "Map 4 enemy texture could not be loaded." << std::endl;
+            return false;
+        }
+        skyboxTexture.bind();
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        enemyTexture.bind();
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        const std::string worldBase = "assets/mapa1/world1/";
+        if (!loadWorldModel(worldBase + "CourseSelectW1.dae")) {
+            std::cerr << "Map 4 world models could not be loaded." << std::endl;
+            return false;
+        }
+        deferredWorldModelPaths = {
+            worldBase + "CourseSelectWallW1.dae",
+            worldBase + "CourseSelectWaveW1.dae",
+            worldBase + "CourseSelectDecorationW1A.dae"
+        };
+        deferredWorldLoadDelay = 0.45f;
+        vanModelLoadAttempted = false;
+        loadGemModel();
+
+        skyboxMesh = createSkyboxMesh();
+        pipeBodyMesh = Mesh::cylinder(8);
+        pipeRimMesh = Mesh::cylinder(8);
+        pipeOpeningMesh = Mesh::cylinder(8);
+        platformMesh = Mesh::cube();
+        coinMesh = Mesh::cylinder(32, 0.14f, 0.42f);
+        starMesh = createStarMesh();
+        parryRingMesh = createParryRingMesh();
+
+        const std::array<AtlasFrame, 7> enemyIdleFrames = {
+            AtlasFrame{7, 19, 15, 13}, AtlasFrame{39, 19, 15, 13}, AtlasFrame{71, 19, 15, 13},
+            AtlasFrame{103, 19, 15, 13}, AtlasFrame{135, 19, 15, 13}, AtlasFrame{167, 19, 15, 13},
+            AtlasFrame{199, 19, 15, 13}
+        };
+        const std::array<AtlasFrame, 7> enemyRunFrames = {
+            AtlasFrame{7, 49, 15, 14}, AtlasFrame{39, 49, 15, 14}, AtlasFrame{71, 49, 15, 14},
+            AtlasFrame{103, 50, 15, 14}, AtlasFrame{135, 49, 15, 14}, AtlasFrame{167, 49, 15, 14},
+            AtlasFrame{199, 49, 15, 14}
+        };
+        const std::array<AtlasFrame, 6> enemyAttackFrames = {
+            AtlasFrame{8, 83, 16, 13}, AtlasFrame{40, 83, 16, 13}, AtlasFrame{71, 83, 16, 13},
+            AtlasFrame{103, 83, 16, 13}, AtlasFrame{135, 83, 16, 13}, AtlasFrame{167, 83, 16, 13}
+        };
+        const std::array<AtlasFrame, 4> enemyHurtFrames = {
+            AtlasFrame{8, 115, 15, 13}, AtlasFrame{40, 115, 15, 13},
+            AtlasFrame{72, 115, 15, 13}, AtlasFrame{104, 115, 15, 13}
+        };
+        const std::array<AtlasFrame, 9> enemyDeathFrames = {
+            AtlasFrame{8, 147, 15, 13}, AtlasFrame{40, 147, 15, 13}, AtlasFrame{72, 147, 15, 13},
+            AtlasFrame{104, 147, 15, 13}, AtlasFrame{135, 147, 15, 13}, AtlasFrame{167, 147, 15, 13},
+            AtlasFrame{194, 147, 15, 13}, AtlasFrame{218, 147, 15, 13}, AtlasFrame{239, 147, 15, 13}
+        };
+        auto buildEnemyMeshes = [](const auto& frames, std::vector<Mesh>& meshes) {
+            meshes.clear();
+            meshes.reserve(frames.size());
+            for (const AtlasFrame& frame : frames) {
+                meshes.push_back(createSpriteMesh(frame, 0.88f, 0.82f, 256, 192));
+            }
+            };
+        buildEnemyMeshes(enemyIdleFrames, enemyIdleMeshes);
+        buildEnemyMeshes(enemyRunFrames, enemyRunMeshes);
+        buildEnemyMeshes(enemyAttackFrames, enemyAttackMeshes);
+        buildEnemyMeshes(enemyHurtFrames, enemyHurtMeshes);
+        buildEnemyMeshes(enemyDeathFrames, enemyDeathMeshes);
+
+        buildTerrainCollisions();
+        if (terrainTriangles.empty()) {
+            std::cerr << "Map 4 did not generate walkable terrain." << std::endl;
+            return false;
+        }
+
+        lives = StartingLives;
+        statusMessage.clear();
+        messageTime = 0.0f;
+        titleTime = 0.0f;
+        currentFrame = 0;
+        animationTime = 0.0f;
+        playerJumpTime = 0.0f;
+        playerAttackTime = 0.0f;
+        playerGuardStartTime = 0.0f;
+        playerEntranceTime = 0.0f;
+        playerTransitionTime = 0.0f;
+        playerDeathTime = 0.0f;
+        playerGuardUntil = 0.0f;
+        wasMoving = false;
+        playerAttackPlaying = false;
+        playerEntrancePlaying = false;
+        playerTransitionPlaying = false;
+        playerDeathPlaying = false;
+        tabPressed = false;
+        mouseAttackPressed = false;
+        chargingPlayerAttack = false;
+        parryPressed = false;
+        resetEnemiesRequested = false;
+        clearProjectilesRequested = false;
+        levelIntroActive = false;
+        levelIntroTime = 0.0f;
+        combatHintUntil = 0.0f;
+        playerAttackCooldown = 0.0f;
+        playerChargeTime = 0.0f;
+        playerInvulnerability = 0.0f;
+        parryUntil = 0.0f;
+        parryEffectUntil = 0.0f;
+        resetSpectralProgress();
+        playerAimDirection = { 1.0f, 0.0f, 0.0f };
+        playerHealth = PlayerMaximumHealth;
+        projectiles.clear();
+        resetPlayer(true);
+        resetMission();
+        resetEnemies();
+        if (enemies.size() != EnemySpawnCount) {
+            std::cerr << "Map 4 expected " << EnemySpawnCount << " enemies but created " << enemies.size() << "." << std::endl;
+            return false;
+        }
+        if (!validateParkourMission()) {
+            return false;
+        }
+        if (enableAudio) {
+            initializeAudio();
+        }
+        startLevelIntro();
+        initialized = true;
+        return true;
+    }
+
+    void render(GLFWwindow* window, float deltaTime) {
+        update(window, deltaTime);
+
+        int width = 0;
+        int height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+        const float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
+        const float normalFov = mode3D ? 60.0f : 45.0f;
+        const glm::mat4 projection = glm::perspective(glm::radians(levelIntroFov(normalFov)), aspect, 0.1f, 100.0f);
+
+        glm::mat4 view(1.0f);
+        if (levelIntroActive) {
+            view = levelIntroViewMatrix();
+        }
+        else if (!mode3D) {
+            view = glm::translate(view, { 0.0f, -cameraOffsetY, -3.0f });
+        }
+        else {
+            const glm::vec3 cameraPosition(-3.0f, cameraOffsetY + 0.55f, 0.0f);
+            const glm::vec3 cameraTarget(0.0f, cameraOffsetY, 0.0f);
+            view = glm::lookAt(cameraPosition, cameraTarget, { 0.0f, 1.0f, 0.0f });
+        }
+
+        glEnable(GL_DEPTH_TEST);
+        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        shader.use();
+        shader.setMat4("view", view);
+        shader.setMat4("projection", projection);
+        drawSkybox(view, projection);
+        drawPipe();
+        drawWorld();
+        drawParkourPlatforms();
+        drawVanShop(static_cast<float>(glfwGetTime()));
+        drawMissionItems(static_cast<float>(glfwGetTime()));
+        drawSpectralAnchors(static_cast<float>(glfwGetTime()));
+        drawEnemies();
+        drawDroppedGems(static_cast<float>(glfwGetTime()));
+        drawProjectiles();
+        drawCombatEffects(static_cast<float>(glfwGetTime()));
+        drawPlayer();
+    }
+
+    void shutdown() {
+        shutdownAudio();
+        terrainTriangles.clear();
+        terrainCells.clear();
+        worldModels.clear();
+        deferredWorldModelPaths.clear();
+        vanModel = {};
+        vanModelLoaded = false;
+        vanModelLoadAttempted = false;
+        gemModel = {};
+        gemModelLoaded = false;
+        projectileCornModel = {};
+        projectileCornLoaded = false;
+        bangbooPlayer = {};
+        deferredWorldLoadDelay = 0.0f;
+        textureCache.clear();
+        playerAtlasTexture = Texture2D{};
+        projectileSwordModel = {};
+        skyboxTexture = Texture2D{};
+        coinIconTexture = Texture2D{};
+        platformSideTexture = Texture2D{};
+        platformTopTexture = Texture2D{};
+        enemyTexture = Texture2D{};
+        playerIdleMesh = Mesh{};
+        playerGuardGroundMesh = Mesh{};
+        playerGuardAirMesh = Mesh{};
+        skyboxMesh = Mesh{};
+        pipeBodyMesh = Mesh{};
+        pipeRimMesh = Mesh{};
+        pipeOpeningMesh = Mesh{};
+        platformMesh = Mesh{};
+        coinMesh = Mesh{};
+        starMesh = Mesh{};
+        parryRingMesh = Mesh{};
+        playerJumpMeshes.clear();
+        playerRunMeshes.clear();
+        playerAttackMeshes.clear();
+        playerBlockMeshes.clear();
+        playerEntranceMeshes.clear();
+        playerDeathMeshes.clear();
+        playerTransitionMeshes.clear();
+        playerJumpTextures.clear();
+        playerRunTextures.clear();
+        playerAttackTextures.clear();
+        playerBlockTextures.clear();
+        playerDeathTextures.clear();
+        enemyIdleMeshes.clear();
+        enemyRunMeshes.clear();
+        enemyAttackMeshes.clear();
+        enemyHurtMeshes.clear();
+        enemyDeathMeshes.clear();
+        coins.clear();
+        star = {};
+        enemies.clear();
+        projectiles.clear();
+        droppedGems.clear();
+        shader = Shader{};
+        initialized = false;
+    }
+
+    void pauseBackgroundMusic() {
+        if (backgroundMusicOpen && backgroundMusicPlaying) {
+            backgroundMusic.stop();
+            backgroundMusicPlaying = false;
+        }
+    }
+
+    void resumeBackgroundMusic() {
+        if (backgroundMusicOpen && !backgroundMusicPlaying) {
+            backgroundMusicPlaying = backgroundMusic.playLoop();
+        }
+    }
+};
+
+Mapa1::Mapa1()
+    : m_impl(std::make_unique<Impl>()) {
 }
 
-void renderMapa4Hud(MenuContext& menu, const Mapa4Runtime& mapa4, int width, int height, float now) {
-    // hud propio del mapa con barra de luz e instrucciones temporales
-    const Rect lightPanel{22.0f, 106.0f, 282.0f, 72.0f};
-    drawRect(menu, {lightPanel.x + 6.0f, lightPanel.y + 7.0f, lightPanel.width, lightPanel.height}, {0.01f, 0.02f, 0.05f, 0.48f});
-    drawRect(menu, lightPanel, {0.06f, 0.12f, 0.24f, 0.94f});
-    drawText(menu, menu.luzJugador, lightPanel.x + 14.0f, lightPanel.y + 10.0f, glm::vec4(1.0f));
-    const float ratio = std::clamp(mapa4.lightEnergy / Map4LightEnergyMaximum, 0.0f, 1.0f);
-    drawRect(menu, {lightPanel.x + 14.0f, lightPanel.y + 44.0f, 224.0f, 16.0f}, {0.14f, 0.17f, 0.22f, 0.95f});
-    drawRect(menu, {lightPanel.x + 14.0f, lightPanel.y + 44.0f, 224.0f * ratio, 16.0f}, {0.99f, 0.82f, 0.22f, 1.0f});
+Mapa1::~Mapa1() = default;
 
-    if (now >= mapa4.instructionBoxAvailableAt
-        && now <= mapa4.instructionBoxHideAt
-        && !mapa4.gameOver
-        && !mapa4.mission.levelComplete()) {
-        const float panelWidth = std::min(520.0f, static_cast<float>(width) - 44.0f);
-        const float panelHeight = std::max(132.0f, menu.mapa4Instructions.size.y + 30.0f);
-        const Rect instructionPanel{
-            static_cast<float>(width) - panelWidth - 22.0f,
-            static_cast<float>(height) - panelHeight - 28.0f,
-            panelWidth,
-            panelHeight
-        };
-        drawRect(
-            menu,
-            {instructionPanel.x + 6.0f, instructionPanel.y + 7.0f, instructionPanel.width, instructionPanel.height},
-            {0.01f, 0.02f, 0.05f, 0.38f});
-        drawRect(menu, instructionPanel, {0.08f, 0.14f, 0.26f, 0.88f});
-        drawText(
-            menu,
-            menu.mapa4Instructions,
-            instructionPanel.x + 16.0f,
-            instructionPanel.y + (instructionPanel.height - menu.mapa4Instructions.size.y) * 0.5f,
-            glm::vec4(1.0f, 0.95f, 0.84f, 0.98f));
+bool Mapa1::initialize(bool enableAudio) {
+    return m_impl->initialize(enableAudio);
+}
+
+bool Mapa1::runCombatSmokeTest() {
+    return m_impl->runCombatSmokeTest();
+}
+
+void Mapa1::render(GLFWwindow* window, float deltaTime) {
+    m_impl->render(window, deltaTime);
+}
+
+void Mapa1::shutdown() {
+    m_impl->shutdown();
+}
+
+void Mapa1::pauseBackgroundMusic() {
+    m_impl->pauseBackgroundMusic();
+}
+
+void Mapa1::resumeBackgroundMusic() {
+    m_impl->resumeBackgroundMusic();
+}
+
+int Mapa1::collectedCount() const {
+    return m_impl->collectedCoins;
+}
+
+int Mapa1::messageCount() const {
+    return m_impl->coinMessageCount;
+}
+
+bool Mapa1::showCoinMessage(float timeSeconds) const {
+    return timeSeconds <= m_impl->coinMessageUntil;
+}
+
+bool Mapa1::showStarMessage(float timeSeconds) const {
+    return timeSeconds <= m_impl->starMessageUntil;
+}
+
+bool Mapa1::showCombatHint(float timeSeconds) const {
+    return timeSeconds <= m_impl->combatHintUntil;
+}
+
+bool Mapa1::showSpectralLockedHint(float timeSeconds) const {
+    return timeSeconds <= m_impl->spectralLockedHintUntil;
+}
+
+bool Mapa1::showSpectralReadyHint(float timeSeconds) const {
+    return timeSeconds <= m_impl->spectralReadyHintUntil;
+}
+
+bool Mapa1::showSpectralUnlockHint(float timeSeconds) const {
+    return timeSeconds <= m_impl->spectralUnlockHintUntil;
+}
+
+bool Mapa1::levelComplete() const {
+    return m_impl->completed;
+}
+
+int Mapa1::remainingEnemyCount() const {
+    return m_impl->remainingEnemyCount();
+}
+
+int Mapa1::spectralGemCount() const {
+    return m_impl->spectralGems;
+}
+
+int Mapa1::spectralGemRequirement() const {
+    return SpectralGemRequirement;
+}
+
+bool Mapa1::spectralUnlocked() const {
+    return m_impl->spectralStepUnlocked;
+}
+
+bool Mapa1::damageParryUnlocked() const {
+    return m_impl->damageParryPurchased;
+}
+
+int Mapa1::damageParryCost() const {
+    return DamageParryGemRequirement;
+}
+
+bool Mapa1::shopOpen() const {
+    return m_impl->vanShopOpen;
+}
+
+void Mapa1::openShop() {
+    m_impl->vanShopOpen = true;
+    m_impl->stopChargingPlayerAttack();
+}
+
+void Mapa1::closeShop() {
+    m_impl->vanShopOpen = false;
+}
+
+bool Mapa1::purchaseSpectralStep() {
+    return m_impl->purchaseSpectralStep();
+}
+
+bool Mapa1::purchaseDamageParry() {
+    return m_impl->purchaseDamageParry();
+}
+
+bool Mapa1::showVanPrompt(float timeSeconds) const {
+    return timeSeconds <= m_impl->vanPromptUntil;
+}
+
+bool Mapa1::showVanShopCards(float timeSeconds) const {
+    (void)timeSeconds;
+    return m_impl->vanShopOpen;
+}
+
+int Mapa1::currentHealth() const {
+    return m_impl->playerHealth;
+}
+
+int Mapa1::maximumHealth() const {
+    return PlayerMaximumHealth;
+}
+
+float Mapa1::chargeRatio() const {
+    return std::clamp(m_impl->playerChargeTime / PlayerChargeTime, 0.0f, 1.0f);
+}
+
+bool Mapa1::chargingAttack() const {
+    return m_impl->chargingPlayerAttack;
+}
+
+bool Mapa1::parryActive(float timeSeconds) const {
+    return timeSeconds <= m_impl->parryEffectUntil;
+}
+
+const Texture2D& Mapa1::coinIconTexture() const {
+    return m_impl->coinIconTexture;
+}
+
+const Texture2D& Mapa1::gemIconTexture() const {
+    if (!m_impl->gemModel.materials.empty()) {
+        const MapMaterial& material = m_impl->gemModel.materials.front();
+        if (material.texture && material.texture->valid()) {
+            return *material.texture;
+        }
     }
+    return m_impl->coinIconTexture;
 }

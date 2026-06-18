@@ -8,10 +8,10 @@
 #include "GameRuntime.h"
 #include "GameSystems.h"
 #include "GameUI.h"
+#include "Map1.h"
 #include "Map2.h"
 #include "Map3.h"
 #include "Map4.h"
-#include "Mapa1.h"
 #include "Player.h"
 #include "Shader.h"
 
@@ -1021,7 +1021,7 @@ void MissionManager::generarMonedas(const Environment& environment, const glm::v
 
         m_star.position = m_coins.empty() ? playerSpawn + glm::vec3(2.2f, 1.2f, 0.0f) : m_coins.back().position + glm::vec3(0.0f, 0.18f, 0.0f);
         m_star.active = false;
-        std::cout << "Map 4 generated coins: " << m_coins.size() << " (visible " << visibleCount << ", hidden " << hiddenCount << ")" << std::endl;
+        std::cout << "Map 3 generated coins: " << m_coins.size() << " (visible " << visibleCount << ", hidden " << hiddenCount << ")" << std::endl;
         return;
     }
 
@@ -2074,7 +2074,7 @@ void drawLevelCompleteHud(MenuContext& menu, int width, int height) {
     drawText(menu, menu.juegoTerminadoContinuar, panel.x + (panel.width - menu.juegoTerminadoContinuar.size.x) * 0.5f, panel.y + 198.0f, {0.94f, 0.96f, 1.0f, 0.96f});
 }
 
-void drawMundo2VictoryHud(MenuContext& menu, int width, int height) {
+void drawMundo1VictoryHud(MenuContext& menu, int width, int height) {
     beginUiFrame(menu, width, height);
     drawRect(menu, {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)}, {0.01f, 0.02f, 0.06f, 0.58f});
     const float timeSeconds = static_cast<float>(glfwGetTime());
@@ -2088,8 +2088,8 @@ void drawMundo2VictoryHud(MenuContext& menu, int width, int height) {
     const Rect ribbon = centeredRect(width * 0.5f, panel.y + 22.0f, 320.0f, 40.0f);
     drawRect(menu, ribbon, {0.92f, 0.18f, 0.16f, 0.96f});
     drawText(menu, menu.estrellaLista, ribbon.x + (ribbon.width - menu.estrellaLista.size.x) * 0.5f, ribbon.y + (ribbon.height - menu.estrellaLista.size.y) * 0.5f, {1.0f, 0.92f, 0.24f, 1.0f});
-    drawText(menu, menu.mundo2Victoria, panel.x + (panel.width - menu.mundo2Victoria.size.x) * 0.5f, panel.y + 78.0f);
-    drawText(menu, menu.mundo2VictoriaDetalle, panel.x + (panel.width - menu.mundo2VictoriaDetalle.size.x) * 0.5f, panel.y + 146.0f, {0.94f, 0.96f, 1.0f, 0.98f});
+    drawText(menu, menu.mundo1Victoria, panel.x + (panel.width - menu.mundo1Victoria.size.x) * 0.5f, panel.y + 78.0f);
+    drawText(menu, menu.mundo1VictoriaDetalle, panel.x + (panel.width - menu.mundo1VictoriaDetalle.size.x) * 0.5f, panel.y + 146.0f, {0.94f, 0.96f, 1.0f, 0.98f});
     drawText(menu, menu.juegoTerminadoContinuar, panel.x + (panel.width - menu.juegoTerminadoContinuar.size.x) * 0.5f, panel.y + 198.0f, {0.94f, 0.96f, 1.0f, 0.96f});
 }
 
@@ -2305,7 +2305,7 @@ void scrollCallback(GLFWwindow*, double, double yOffset) {
 
 void mouseCallback(GLFWwindow*, double x, double y) {
     // Solo actualiza deltas de mouse; la cámara decide después cómo usarlos.
-    if (appState != EstadoJuego::MUNDO_2 && appState != EstadoJuego::MUNDO_3 && appState != EstadoJuego::MUNDO_4) {
+    if (appState != EstadoJuego::MUNDO_1 && appState != EstadoJuego::MUNDO_2 && appState != EstadoJuego::MUNDO_3) {
         // Fuera de gameplay solo se resetea el mouse para no arrastrar deltas viejos.
         lastMouseX = x;
         lastMouseY = y;
@@ -2325,7 +2325,7 @@ void mouseCallback(GLFWwindow*, double x, double y) {
     if (currentMode == PlayMode::Mode3D) {
         cameraYawDegrees -= deltaX * 0.10f;
         cameraPitchDegrees += deltaY * 0.08f;
-        cameraPitchDegrees = std::clamp(cameraPitchDegrees, appState == EstadoJuego::MUNDO_4 ? 8.0f : 10.0f, appState == EstadoJuego::MUNDO_4 ? 42.0f : 34.0f);
+        cameraPitchDegrees = std::clamp(cameraPitchDegrees, appState == EstadoJuego::MUNDO_3 ? 8.0f : 10.0f, appState == EstadoJuego::MUNDO_3 ? 42.0f : 34.0f);
     }
 }
 
@@ -2335,7 +2335,7 @@ void updateCursorMode(GLFWwindow* window) {
         return;
     }
 
-    if (appState == EstadoJuego::MUNDO_2 || appState == EstadoJuego::MUNDO_3 || appState == EstadoJuego::MUNDO_4) {
+    if (appState == EstadoJuego::MUNDO_1 || appState == EstadoJuego::MUNDO_2 || appState == EstadoJuego::MUNDO_3) {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         firstMouse = true;
     } else {
@@ -2391,17 +2391,17 @@ int runRaylibMainMenuForWindow(GLFWwindow* window) {
 void cerrarMundoActual(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
     switch (currentState) {
     case EstadoJuego::MUNDO_1:
-        mapa1.shutdown();
-        glfwSetWindowTitle(window, "Paper Pinix");
-        break;
-    case EstadoJuego::MUNDO_2:
         volverAlMenu(mundo2);
         break;
-    case EstadoJuego::MUNDO_3:
+    case EstadoJuego::MUNDO_2:
         volverAlMenu(map3);
         break;
-    case EstadoJuego::MUNDO_4:
+    case EstadoJuego::MUNDO_3:
         volverAlMenu(mapa4);
+        break;
+    case EstadoJuego::MUNDO_4:
+        mapa1.shutdown();
+        glfwSetWindowTitle(window, "Paper Pinix");
         break;
     default:
         break;
@@ -2483,21 +2483,6 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
             appState = EstadoJuego::MENU_PRINCIPAL;
             break;
         case EstadoJuego::MUNDO_1:
-            if (mapa1.shopOpen()) {
-                mapa1.closeShop();
-            }
-            else {
-                const EstadoJuego pausedState = appState;
-                const bool resumeMusic = true;
-                mapa1.pauseBackgroundMusic();
-                const int pauseAction = runRaylibPauseMenuForWindow(window);
-                aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
-                if (appState == EstadoJuego::MUNDO_1 && (pauseAction == RaylibPauseResume || pauseAction <= 0) && resumeMusic) {
-                    mapa1.resumeBackgroundMusic();
-                }
-            }
-            break;
-        case EstadoJuego::MUNDO_2:
         {
             if (mundo2.mission.levelComplete()) {
                 break;
@@ -2506,12 +2491,12 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
             const bool resumeMusic = pausarMusicaMundo2(mundo2);
             const int pauseAction = runRaylibPauseMenuForWindow(window);
             aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
-            if (appState == EstadoJuego::MUNDO_2 && (pauseAction == RaylibPauseResume || pauseAction <= 0)) {
+            if (appState == EstadoJuego::MUNDO_1 && (pauseAction == RaylibPauseResume || pauseAction <= 0)) {
                 reanudarMusicaMundo2(mundo2, resumeMusic);
             }
             break;
         }
-        case EstadoJuego::MUNDO_3:
+        case EstadoJuego::MUNDO_2:
         {
             if (map3.gameOver || map3.mission.levelComplete()) {
                 break;
@@ -2520,15 +2505,15 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
             const bool resumeMusic = pausarMusicaMap3(map3);
             const int pauseAction = runRaylibPauseMenuForWindow(window);
             aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
-            if (appState == EstadoJuego::MUNDO_3 && (pauseAction == RaylibPauseResume || pauseAction <= 0)) {
+            if (appState == EstadoJuego::MUNDO_2 && (pauseAction == RaylibPauseResume || pauseAction <= 0)) {
                 reanudarMusicaMap3(map3, resumeMusic);
             }
             break;
         }
-        case EstadoJuego::MUNDO_4:
+        case EstadoJuego::MUNDO_3:
         {
             if (mapa4.gameOver || mapa4.mission.levelComplete()) {
-                volverAlMenuPrincipalDesdeMundo(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
+                volverAlMenuPrincipalDesdeMundo(window, EstadoJuego::MUNDO_3, mapa1, mundo2, map3, mapa4);
                 break;
             }
             const EstadoJuego pausedState = appState;
@@ -2539,11 +2524,26 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
             }
             const int pauseAction = runRaylibPauseMenuForWindow(window);
             aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
-            if (appState == EstadoJuego::MUNDO_4 && (pauseAction == RaylibPauseResume || pauseAction <= 0) && resumeMusic && mapa4.musicOpen) {
+            if (appState == EstadoJuego::MUNDO_3 && (pauseAction == RaylibPauseResume || pauseAction <= 0) && resumeMusic && mapa4.musicOpen) {
                 mapa4.musicPlaying = mapa4.music.playLoop();
             }
             break;
         }
+        case EstadoJuego::MUNDO_4:
+            if (mapa1.shopOpen()) {
+                mapa1.closeShop();
+            }
+            else {
+                const EstadoJuego pausedState = appState;
+                const bool resumeMusic = true;
+                mapa1.pauseBackgroundMusic();
+                const int pauseAction = runRaylibPauseMenuForWindow(window);
+                aplicarAccionPausaRaylib(window, pausedState, pauseAction, mapa1, mundo2, map3, mapa4);
+                if (appState == EstadoJuego::MUNDO_4 && (pauseAction == RaylibPauseResume || pauseAction <= 0) && resumeMusic) {
+                    mapa1.resumeBackgroundMusic();
+                }
+            }
+            break;
         }
     }
     lastEscapeKey = escapeDown;
@@ -2729,7 +2729,7 @@ bool initializeMenu(MenuContext& menu) {
     menu.textoComoJugar = createTextSprite(
         L"- Use the movement keys to control the character.\n"
         L"- Avoid obstacles and enemies.\n"
-        L"- World 1: aim and shoot with the mouse; hold it to charge.\n"
+        L"- World 4: aim and shoot with the mouse; hold it to charge.\n"
         L"- Press F right before impact to parry.\n"
         L"- Complete the level to win.\n"
         L"- Press ESC or the Back button to return to the menu.",
@@ -2739,7 +2739,7 @@ bool initializeMenu(MenuContext& menu) {
         L"Paper Pinix\n"
         L"Advanced project\n"
         L"Developed by: [Student name]\n"
-        L"World 2: [Student name]",
+        L"World 1: [Student name]",
         27, white, 610, true, false);
     menu.noDisponible = createTextSprite(L"This world is not available yet", 26, white, 510, false, true);
     menu.cargando = createTextSprite(L"Loading", 48, titleColor, 460, false, true);
@@ -2752,8 +2752,8 @@ bool initializeMenu(MenuContext& menu) {
     menu.estrellaLista = createTextSprite(L"STAR UNLOCKED!", 29, titleColor, 400, false, true);
     menu.nivelCompletado = createTextSprite(L"LEVEL COMPLETE", 42, titleColor, 540, true, true);
     menu.nivelCompletadoDetalle = createTextSprite(L"Objective complete", 27, white, 420, false, true);
-    menu.mundo2Victoria = createTextSprite(L"YOU WON!", 46, titleColor, 440, true, true);
-    menu.mundo2VictoriaDetalle = createTextSprite(L"You collected the star and completed World 2.", 25, white, 620, true, true);
+    menu.mundo1Victoria = createTextSprite(L"YOU WON!", 46, titleColor, 440, true, true);
+    menu.mundo1VictoriaDetalle = createTextSprite(L"You collected the star and completed World 1.", 25, white, 620, true, true);
     menu.juegoTerminado = createTextSprite(L"GAME OVER", 42, titleColor, 520, true, true);
     menu.juegoTerminadoContinuar = createTextSprite(L"PRESS ENTER TO CONTINUE", 27, white, 520, false, true);
     menu.mapa4FinalDetalleVictoria = createTextSprite(L"All 10 coins were collected successfully.", 22, white, 500, true, true);
@@ -2775,7 +2775,7 @@ bool initializeMenu(MenuContext& menu) {
     menu.parryActivo = createTextSprite(L"PARRY", 23, white, 150, false, true);
     menu.tiendaBoton = createTextSprite(L"SHOP  [B]", 23, white, 190, false, true);
     menu.tiendaTitulo = createTextSprite(L"SHOP", 38, white, 300, false, true);
-    menu.tiendaSubtitulo = createTextSprite(L"INSTRUCTIONS AND SKILLS // WORLD 01", 18, glm::vec3(0.78f), 520, false, false);
+    menu.tiendaSubtitulo = createTextSprite(L"INSTRUCTIONS AND SKILLS // WORLD 04", 18, glm::vec3(0.78f), 520, false, false);
     menu.tiendaCerrar = createTextSprite(L"CLOSE", 19, white, 120, false, true);
     menu.tiendaHabilidades = createTextSprite(L"SKILLS", 19, white, 175, false, true);
     menu.tiendaManual = createTextSprite(L"INSTRUCTIONS", 17, white, 185, false, true);
@@ -2830,16 +2830,16 @@ bool cargarMundoPendiente(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo
     bool loaded = false;
     switch (loadingTarget) {
     case EstadoJuego::MUNDO_1:
-        loaded = mapa1.initialize();
-        break;
-    case EstadoJuego::MUNDO_2:
         loaded = iniciarMundo2(mundo2);
         break;
-    case EstadoJuego::MUNDO_3:
+    case EstadoJuego::MUNDO_2:
         loaded = iniciarMap3(map3);
         break;
-    case EstadoJuego::MUNDO_4:
+    case EstadoJuego::MUNDO_3:
         loaded = iniciarMapa4(mapa4);
+        break;
+    case EstadoJuego::MUNDO_4:
+        loaded = mapa1.initialize();
         break;
     default:
         break;
@@ -2861,10 +2861,10 @@ bool cargarMundoPendiente(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo
 }
 
 int main(int argc, char** argv) {
-    const bool mapa1SmokeTest = argc > 1 && std::string(argv[1]) == "--smoke-mapa1";
-    const bool mapa1CombatSmokeTest = argc > 1 && std::string(argv[1]) == "--smoke-mapa1-combat";
+    const bool mapa4SmokeTest = argc > 1 && (std::string(argv[1]) == "--smoke-mapa4" || std::string(argv[1]) == "--smoke-mapa1");
+    const bool mapa4CombatSmokeTest = argc > 1 && (std::string(argv[1]) == "--smoke-mapa4-combat" || std::string(argv[1]) == "--smoke-mapa1-combat");
 
-    if (!mapa1SmokeTest && !mapa1CombatSmokeTest) {
+    if (!mapa4SmokeTest && !mapa4CombatSmokeTest) {
         const int selectedWorld = runRaylibWorldMenu();
         if (selectedWorld == 0) {
             return 0;
@@ -2892,7 +2892,7 @@ int main(int argc, char** argv) {
     }
 
     applyLastRaylibMenuWindowPosition(window);
-    if (!mapa1SmokeTest && !mapa1CombatSmokeTest) {
+    if (!mapa4SmokeTest && !mapa4CombatSmokeTest) {
         glfwShowWindow(window);
     }
 
@@ -2937,9 +2937,9 @@ int main(int argc, char** argv) {
     Map3Runtime map3;
     Mapa4Runtime mapa4;
 
-    if (mapa1SmokeTest || mapa1CombatSmokeTest) {
+    if (mapa4SmokeTest || mapa4CombatSmokeTest) {
         bool loaded = mapa1.initialize(false);
-        if (loaded && mapa1CombatSmokeTest) {
+        if (loaded && mapa4CombatSmokeTest) {
             loaded = mapa1.runCombatSmokeTest();
         } else if (loaded) {
             mapa1.render(window, 1.0f / 60.0f);
@@ -2976,6 +2976,61 @@ int main(int argc, char** argv) {
         glfwGetFramebufferSize(window, &width, &height);
 
         if (appState == EstadoJuego::MUNDO_1) {
+            if (!iniciarMundo2(mundo2)) {
+                glfwSetWindowShouldClose(window, GLFW_TRUE);
+            } else {
+                renderMundo2(window, mundo2, menu, sceneShader, lavaShader, now);
+                if (mundo2.mission.levelComplete()) {
+                    drawMundo1VictoryHud(menu, width, height);
+                    if (gameOverContinuePressed(window)) {
+                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_1, mapa1, mundo2, map3, mapa4);
+                    }
+                } else {
+                    drawModeSwitchUnavailableMessage(menu, width, height, now);
+                }
+            }
+        } else if (appState == EstadoJuego::MUNDO_2) {
+            if (!iniciarMap3(map3)) {
+                appState = EstadoJuego::MENU_MUNDOS;
+                menu.notificationUntil = 0.0;
+            } else {
+                renderMap3(window, map3, sceneShader, lavaShader, now);
+                drawSimpleHealthHud(menu, map3.health, map3.maxHealth, width, height);
+                drawMap3PositionHud(menu, map3, width, height);
+                if (map3.mission.levelComplete()) {
+                    drawLevelCompleteHud(menu, width, height);
+                    if (gameOverContinuePressed(window)) {
+                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_2, mapa1, mundo2, map3, mapa4);
+                    }
+                } else if (map3.gameOver) {
+                    drawGameOverHud(menu, width, height);
+                    if (gameOverContinuePressed(window)) {
+                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_2, mapa1, mundo2, map3, mapa4);
+                    }
+                } else {
+                    drawModeSwitchUnavailableMessage(menu, width, height, now);
+                }
+            }
+        } else if (appState == EstadoJuego::MUNDO_3) {
+            if (!iniciarMapa4(mapa4)) {
+                appState = EstadoJuego::MENU_MUNDOS;
+                menu.notificationUntil = glfwGetTime() + 2.3;
+            } else {
+                renderMapa4(window, mapa4, sceneShader, lavaShader, now);
+                if (mapa4.mission.levelComplete() || mapa4.gameOver) {
+                    drawMapa4EndHud(menu, mapa4.mission.levelComplete(), width, height);
+                    if (gameOverContinuePressed(window)) {
+                        volverAlMenuPrincipalDesdeMundo(window, EstadoJuego::MUNDO_3, mapa1, mundo2, map3, mapa4);
+                    }
+                } else {
+                    drawMissionHud(menu, mapa4.mission, width, height, now);
+                    drawSimpleHealthHud(menu, mapa4.health, mapa4.maxHealth, width, height);
+                    renderMapa4Hud(menu, mapa4, width, height, now);
+                    drawShieldHud(menu, width, height, mapa4.shieldActive);
+                    drawModeSwitchUnavailableMessage(menu, width, height, now);
+                }
+            }
+        } else if (appState == EstadoJuego::MUNDO_4) {
             if (!mapa1.initialize()) {
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
             } else {
@@ -2991,62 +3046,7 @@ int main(int argc, char** argv) {
                     clicked,
                     scrollY);
                 if (mapa1.levelComplete()) {
-                    volverASeleccionDeMundos(window, EstadoJuego::MUNDO_1, mapa1, mundo2, map3, mapa4);
-                }
-            }
-        } else if (appState == EstadoJuego::MUNDO_2) {
-            if (!iniciarMundo2(mundo2)) {
-                glfwSetWindowShouldClose(window, GLFW_TRUE);
-            } else {
-                renderMundo2(window, mundo2, menu, sceneShader, lavaShader, now);
-                if (mundo2.mission.levelComplete()) {
-                    drawMundo2VictoryHud(menu, width, height);
-                    if (gameOverContinuePressed(window)) {
-                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_2, mapa1, mundo2, map3, mapa4);
-                    }
-                } else {
-                    drawModeSwitchUnavailableMessage(menu, width, height, now);
-                }
-            }
-        } else if (appState == EstadoJuego::MUNDO_3) {
-            if (!iniciarMap3(map3)) {
-                appState = EstadoJuego::MENU_MUNDOS;
-                menu.notificationUntil = 0.0;
-            } else {
-                renderMap3(window, map3, sceneShader, lavaShader, now);
-                drawSimpleHealthHud(menu, map3.health, map3.maxHealth, width, height);
-                drawMap3PositionHud(menu, map3, width, height);
-                if (map3.mission.levelComplete()) {
-                    drawLevelCompleteHud(menu, width, height);
-                    if (gameOverContinuePressed(window)) {
-                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_3, mapa1, mundo2, map3, mapa4);
-                    }
-                } else if (map3.gameOver) {
-                    drawGameOverHud(menu, width, height);
-                    if (gameOverContinuePressed(window)) {
-                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_3, mapa1, mundo2, map3, mapa4);
-                    }
-                } else {
-                    drawModeSwitchUnavailableMessage(menu, width, height, now);
-                }
-            }
-        } else if (appState == EstadoJuego::MUNDO_4) {
-            if (!iniciarMapa4(mapa4)) {
-                appState = EstadoJuego::MENU_MUNDOS;
-                menu.notificationUntil = glfwGetTime() + 2.3;
-            } else {
-                renderMapa4(window, mapa4, sceneShader, lavaShader, now);
-                if (mapa4.mission.levelComplete() || mapa4.gameOver) {
-                    drawMapa4EndHud(menu, mapa4.mission.levelComplete(), width, height);
-                    if (gameOverContinuePressed(window)) {
-                        volverAlMenuPrincipalDesdeMundo(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
-                    }
-                } else {
-                    drawMissionHud(menu, mapa4.mission, width, height, now);
-                    drawSimpleHealthHud(menu, mapa4.health, mapa4.maxHealth, width, height);
-                    renderMapa4Hud(menu, mapa4, width, height, now);
-                    drawShieldHud(menu, width, height, mapa4.shieldActive);
-                    drawModeSwitchUnavailableMessage(menu, width, height, now);
+                    volverASeleccionDeMundos(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
                 }
             }
         } else {

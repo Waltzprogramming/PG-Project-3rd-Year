@@ -871,10 +871,10 @@ void writeWindowPosition(const char* path) {
 
 int main(int argc, char** argv) {
     const std::array<WorldEntry, WorldCount> worlds{{
-        {"WORLD 1", "ISLANDS OF THE FIRST JOURNEY", "Menu/RaylibMenu/generated/world1_preview.preview", PaperGreen, true, {0.0f, 0.02f, 0.0f}, 1.65f, {0.0f, 0.0f, 0.0f}},
-        {"WORLD 2", "FREEZEEZY PEAK", "Menu/RaylibMenu/generated/world2_preview.preview", PaperBlue, true, {0.0f, 0.02f, 0.0f}, 0.92f, {90.0f, 0.0f, 0.0f}},
-        {"WORLD 3", "THIRD WORLD ADVENTURE", "assets/mundo3/game_pirate_adventure_map/scene_map3.gltf", SignalRed, true, {0.0f, 0.02f, 0.0f}, 1.45f, {0.0f, 0.0f, 0.0f}},
-        {"WORLD 4", "FINAL CHALLENGE", "Menu/RaylibMenu/generated/world4_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.55f, {0.0f, 0.0f, 0.0f}}
+        {"WORLD 1", "FREEZEEZY PEAK", "Menu/RaylibMenu/generated/world2_preview.preview", PaperBlue, true, {0.0f, 0.02f, 0.0f}, 0.92f, {90.0f, 0.0f, 0.0f}},
+        {"WORLD 2", "THIRD WORLD ADVENTURE", "assets/mundo3/game_pirate_adventure_map/scene_map3.gltf", SignalRed, true, {0.0f, 0.02f, 0.0f}, 1.45f, {0.0f, 0.0f, 0.0f}},
+        {"WORLD 3", "FINAL CHALLENGE", "Menu/RaylibMenu/generated/world4_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.55f, {0.0f, 0.0f, 0.0f}},
+        {"WORLD 4", "ISLANDS OF THE FIRST JOURNEY", "Menu/RaylibMenu/generated/world1_preview.preview", PaperGreen, true, {0.0f, 0.02f, 0.0f}, 1.65f, {0.0f, 0.0f, 0.0f}}
     }};
 
     const bool pauseMode = hasArgument(argc, argv, "--pause");

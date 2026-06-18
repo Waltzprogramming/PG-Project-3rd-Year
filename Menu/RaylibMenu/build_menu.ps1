@@ -183,15 +183,15 @@ if ($python) {
         Invoke-PreviewConverter -Python $python -Converter $converter -InputPath $world1Source -OutputPath $world1Preview
         Invoke-PreviewConverter -Python $python -Converter $converter -InputPath $world2Source -OutputPath $world2Preview
         if (Test-Path $world3Source) {
-            Write-Host "World 3 uses the real GLTF directly in the menu preview."
+            Write-Host "World 2 uses the real GLTF directly in the menu preview."
         } else {
-            Write-Warning "The real World 3 GLTF was not found for the direct preview."
+            Write-Warning "The real World 2 GLTF was not found for the direct preview."
         }
         $existingWorld4Sources = @($world4Sources | Where-Object { Test-Path $_ })
         if ($existingWorld4Sources.Count -gt 0) {
             Invoke-PreviewConverter -Python $python -Converter $converter -InputPath $existingWorld4Sources -OutputPath $world4Preview
         } else {
-            Write-Host "World 4 uses the conceptual preview. No real Map 4 DAE files were found."
+            Write-Host "World 3 uses the conceptual preview. No real Map 3 DAE files were found."
         }
     } catch {
         Write-Warning "Could not generate previews from DAE. The menu will still compile without blocking the build. Detail: $($_.Exception.Message)"
