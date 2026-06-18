@@ -1609,6 +1609,8 @@ bool iniciarMap3(Map3Runtime& map3) {
             map3.gameOver = false;
             map3.skipFirstUpdateFrame = true;
             resetMap3ViewForEnvironment(map3.environment, map3.player);
+            updateMap3GameplayCamera(map3.player, map3.environment, map3.mission, static_cast<float>(glfwGetTime()), 0.0f);
+            beginLevelIntro(map3.environment, map3.player, static_cast<float>(glfwGetTime()));
             map3.sessionActive = true;
         }
         startMap3Music(map3);
@@ -1650,6 +1652,8 @@ bool iniciarMap3(Map3Runtime& map3) {
     map3.gameOver = false;
     map3.skipFirstUpdateFrame = true;
     resetMap3ViewForEnvironment(map3.environment, map3.player);
+    updateMap3GameplayCamera(map3.player, map3.environment, map3.mission, static_cast<float>(glfwGetTime()), 0.0f);
+    beginLevelIntro(map3.environment, map3.player, static_cast<float>(glfwGetTime()));
 
     std::cout << "World 3 ready. Collision volumes: " << map3ActiveColliders(map3).size() << std::endl;
     std::cout << "Controls: TAB cambia 2D/3D, E esquiva en 3D y hace parry en 2D." << std::endl;
@@ -1691,11 +1695,15 @@ void reanudarMusicaMap3(Map3Runtime& map3, bool shouldResume) {
 void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader, const Shader& lavaShader, float now) {
     const float frameDelta = map3.skipFirstUpdateFrame ? 0.0f : deltaTime;
     map3.skipFirstUpdateFrame = false;
+    const bool introActive = levelIntroActive();
 
     const bool parryActive = now <= map3.parryActiveUntil;
     const bool dodgeActive = now <= map3.dodgeActiveUntil;
 
-    if (!map3.gameOver && !map3.mission.levelComplete()) {
+    if (introActive) {
+        consumeLevelIntroInput(window);
+        updateLevelIntroCamera(now);
+    } else if (!map3.gameOver && !map3.mission.levelComplete()) {
         PlayerInput playerInput = buildMap3PlayerInput(window, map3.player, map3.mission.levelComplete());
         const bool actionDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
         const bool actionPressed = actionDown && !lastShieldKey;
@@ -1754,7 +1762,9 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
         }
     }
 
-    updateMap3GameplayCamera(map3.player, map3.environment, map3.mission, now, frameDelta);
+    if (!introActive) {
+        updateMap3GameplayCamera(map3.player, map3.environment, map3.mission, now, frameDelta);
+    }
 
     int width = 0;
     int height = 0;

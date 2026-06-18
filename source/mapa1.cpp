@@ -77,6 +77,8 @@ namespace {
     constexpr float PlayerEntranceFramesPerSecond = 11.0f;
     constexpr float PlayerDeathFramesPerSecond = 7.0f;
     constexpr float PlayerTransitionFramesPerSecond = 16.0f;
+    constexpr float LevelIntroFarHoldSeconds = 2.0f;
+    constexpr float LevelIntroZoomSeconds = 1.35f;
     constexpr float BangbooPlayerHeight = 1.12f;
     constexpr float BangbooWalkSampleRate = 18.0f;
     constexpr int BangbooMinimumWalkFrames = 8;
@@ -1085,6 +1087,7 @@ struct Mapa1::Impl {
     bool shopTogglePressed{ false };
     bool resetEnemiesRequested{ false };
     bool clearProjectilesRequested{ false };
+    bool levelIntroActive{ false };
     float posX{ 0.0f };
     float posY{ 0.0f };
     float posZ{ 0.0f };
@@ -1126,6 +1129,7 @@ struct Mapa1::Impl {
     float spectralReadyHintUntil{ 0.0f };
     float spectralUnlockHintUntil{ 0.0f };
     float spectralEffectUntil{ 0.0f };
+    float levelIntroTime{ 0.0f };
     glm::vec3 spectralEffectStart{ 0.0f };
     glm::vec3 spectralEffectEnd{ 0.0f };
     glm::vec3 playerAimDirection{ 1.0f, 0.0f, 0.0f };
@@ -2152,6 +2156,41 @@ struct Mapa1::Impl {
         }
     }
 
+    void startLevelIntro() {
+        levelIntroActive = true;
+        levelIntroTime = 0.0f;
+    }
+
+    float levelIntroProgress() const {
+        if (!levelIntroActive) {
+            return 1.0f;
+        }
+        const float zoomProgress = (levelIntroTime - LevelIntroFarHoldSeconds) / LevelIntroZoomSeconds;
+        const float t = std::clamp(zoomProgress, 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    float levelIntroFov(float normalFov) const {
+        if (!levelIntroActive) {
+            return normalFov;
+        }
+        return 64.0f + (normalFov - 64.0f) * levelIntroProgress();
+    }
+
+    glm::mat4 levelIntroViewMatrix() const {
+        const float progress = levelIntroProgress();
+        const glm::vec3 finalTarget(0.0f, cameraOffsetY, 0.0f);
+        const glm::vec3 finalPosition = mode3D
+            ? glm::vec3(-3.0f, cameraOffsetY + 0.55f, 0.0f)
+            : glm::vec3(0.0f, cameraOffsetY, 3.0f);
+        const glm::vec3 farTarget(0.0f, cameraOffsetY + 2.0f, 0.0f);
+        const glm::vec3 farPosition(-5.5f, cameraOffsetY + 10.0f, 22.0f);
+        return glm::lookAt(
+            glm::mix(farPosition, finalPosition, progress),
+            glm::mix(farTarget, finalTarget, progress),
+            { 0.0f, 1.0f, 0.0f });
+    }
+
     void loseLife() {
         playerInvulnerability = PlayerInvulnerabilityTime;
         clearProjectilesRequested = true;
@@ -2853,6 +2892,22 @@ struct Mapa1::Impl {
             }
         }
         updateTitle(window, dt);
+        if (levelIntroActive) {
+            levelIntroTime += dt;
+            if (levelIntroTime >= LevelIntroFarHoldSeconds + LevelIntroZoomSeconds) {
+                levelIntroActive = false;
+                levelIntroTime = LevelIntroFarHoldSeconds + LevelIntroZoomSeconds;
+            }
+            cameraOffsetY = posY + CameraPlayerCenterOffset;
+            tabPressed = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
+            mouseAttackPressed = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+            parryPressed = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
+            interactPressed = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
+            shopTogglePressed = glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS;
+            stopChargingPlayerAttack();
+            wasMoving = false;
+            return;
+        }
         handleVanShop(window, now);
         if (vanShopOpen) {
             stopChargingPlayerAttack();
@@ -3600,6 +3655,8 @@ struct Mapa1::Impl {
         parryPressed = false;
         resetEnemiesRequested = false;
         clearProjectilesRequested = false;
+        levelIntroActive = false;
+        levelIntroTime = 0.0f;
         combatHintUntil = 0.0f;
         playerAttackCooldown = 0.0f;
         playerChargeTime = 0.0f;
@@ -3623,6 +3680,7 @@ struct Mapa1::Impl {
         if (enableAudio) {
             initializeAudio();
         }
+        startLevelIntro();
         initialized = true;
         return true;
     }
@@ -3634,10 +3692,14 @@ struct Mapa1::Impl {
         int height = 0;
         glfwGetFramebufferSize(window, &width, &height);
         const float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
-        const glm::mat4 projection = glm::perspective(glm::radians(mode3D ? 60.0f : 45.0f), aspect, 0.1f, 100.0f);
+        const float normalFov = mode3D ? 60.0f : 45.0f;
+        const glm::mat4 projection = glm::perspective(glm::radians(levelIntroFov(normalFov)), aspect, 0.1f, 100.0f);
 
         glm::mat4 view(1.0f);
-        if (!mode3D) {
+        if (levelIntroActive) {
+            view = levelIntroViewMatrix();
+        }
+        else if (!mode3D) {
             view = glm::translate(view, { 0.0f, -cameraOffsetY, -3.0f });
         }
         else {

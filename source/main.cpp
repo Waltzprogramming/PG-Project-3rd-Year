@@ -44,6 +44,8 @@ constexpr float DefaultCamera2DDistance = 6.2f;
 constexpr float Map4Camera2DDistance = 3.35f;
 constexpr float DefaultCamera2DTargetHeight = 0.56f;
 constexpr float DefaultCamera2DHeight = 0.88f;
+constexpr float LevelIntroFarHoldSeconds = 2.0f;
+constexpr float LevelIntroZoomSeconds = 1.35f;
 constexpr int RaylibPauseResume = 10;
 constexpr int RaylibPauseExit = 11;
 
@@ -85,6 +87,17 @@ glm::vec3 gameplayCameraPosition{0.0f, 6.0f, 14.0f};
 glm::vec3 gameplayCameraTarget{0.0f, 2.0f, 0.0f};
 bool cameraInitialized = false;
 double modeSwitchUnavailableUntil = 0.0;
+
+struct LevelIntroCameraState {
+    bool active{false};
+    float startTime{0.0f};
+    glm::vec3 farPosition{0.0f};
+    glm::vec3 farTarget{0.0f};
+    glm::vec3 finalPosition{0.0f};
+    glm::vec3 finalTarget{0.0f};
+};
+
+LevelIntroCameraState levelIntroCamera;
 
 struct WindowPosition {
     int x{0};
@@ -2155,6 +2168,80 @@ void resetGameplayView(const Player& player) {
     cameraInitialized = false;
     firstMouse = true;
     locked2DDepth = player.position().z;
+}
+
+float smoothLevelIntroStep(float progress) {
+    const float t = std::clamp(progress, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+bool levelIntroActive() {
+    return levelIntroCamera.active;
+}
+
+void beginLevelIntro(const Environment& environment, const Player& player, float timeSeconds) {
+    const glm::vec3 finalPosition = gameplayCameraPosition;
+    const glm::vec3 finalTarget = gameplayCameraTarget;
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    const bool validBounds =
+        std::isfinite(worldMin.x) && std::isfinite(worldMin.y) && std::isfinite(worldMin.z) &&
+        std::isfinite(worldMax.x) && std::isfinite(worldMax.y) && std::isfinite(worldMax.z) &&
+        worldMax.x > worldMin.x &&
+        worldMax.y > worldMin.y &&
+        worldMax.z > worldMin.z;
+
+    glm::vec3 worldCenter = player.position();
+    glm::vec3 worldSize(10.0f, 4.0f, 10.0f);
+    if (validBounds) {
+        worldCenter = (worldMin + worldMax) * 0.5f;
+        worldSize = worldMax - worldMin;
+    }
+
+    const float horizontalSize = std::max(worldSize.x, worldSize.z);
+    const float verticalSize = std::max(worldSize.y, 1.0f);
+    const float cameraDistance = std::clamp(horizontalSize * 0.85f + verticalSize * 0.30f + 7.5f, 11.0f, 52.0f);
+    const glm::vec3 farTarget = worldCenter + glm::vec3(0.0f, std::clamp(verticalSize * 0.10f, 1.5f, 6.0f), 0.0f);
+    const glm::vec3 farDirection = glm::normalize(glm::vec3(-0.38f, 0.42f, 1.0f));
+
+    levelIntroCamera.active = true;
+    levelIntroCamera.startTime = timeSeconds;
+    levelIntroCamera.farTarget = farTarget;
+    levelIntroCamera.farPosition = farTarget + farDirection * cameraDistance;
+    levelIntroCamera.finalPosition = finalPosition;
+    levelIntroCamera.finalTarget = finalTarget;
+    gameplayCameraPosition = levelIntroCamera.farPosition;
+    gameplayCameraTarget = levelIntroCamera.farTarget;
+    cameraInitialized = true;
+    firstMouse = true;
+}
+
+void updateLevelIntroCamera(float timeSeconds) {
+    if (!levelIntroCamera.active) {
+        return;
+    }
+
+    const float elapsed = std::max(0.0f, timeSeconds - levelIntroCamera.startTime);
+    const float zoomProgress = (elapsed - LevelIntroFarHoldSeconds) / LevelIntroZoomSeconds;
+    const float eased = smoothLevelIntroStep(zoomProgress);
+    gameplayCameraPosition = glm::mix(levelIntroCamera.farPosition, levelIntroCamera.finalPosition, eased);
+    gameplayCameraTarget = glm::mix(levelIntroCamera.farTarget, levelIntroCamera.finalTarget, eased);
+
+    if (elapsed >= LevelIntroFarHoldSeconds + LevelIntroZoomSeconds) {
+        gameplayCameraPosition = levelIntroCamera.finalPosition;
+        gameplayCameraTarget = levelIntroCamera.finalTarget;
+        levelIntroCamera.active = false;
+        cameraInitialized = true;
+        firstMouse = true;
+    }
+}
+
+void consumeLevelIntroInput(GLFWwindow* window) {
+    lastToggleKey = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
+    lastJumpKey =
+        glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ||
+        glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+    lastShieldKey = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
 }
 
 void drawShieldHud(MenuContext& menu, int width, int height, bool active) {

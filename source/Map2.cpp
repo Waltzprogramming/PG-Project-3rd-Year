@@ -226,6 +226,8 @@ bool iniciarMundo2(Mundo2Runtime& mundo2) {
     mundo2.toad.reset(mundo2.environment, mundo2.environment.recommendedSpawnPoint());
     mundo2.lastInteractKey = false;
     resetGameplayView(mundo2.player);
+    updateGameplayCamera(mundo2.player, mundo2.environment, mundo2.mission, static_cast<float>(glfwGetTime()), 0.0f);
+    beginLevelIntro(mundo2.environment, mundo2.player, static_cast<float>(glfwGetTime()));
 
     std::cout << "World 2 ready. Collision volumes: " << mundo2.environment.collisionPreview().size() << std::endl;
     std::cout << "Controls 3D: WASD move, mouse camera, Space jump, TAB switch to 2D, Esc back to menu." << std::endl;
@@ -263,17 +265,23 @@ void reanudarMusicaMundo2(Mundo2Runtime& mundo2, bool shouldResume) {
 }
 
 void renderMundo2(GLFWwindow* window, Mundo2Runtime& mundo2, MenuContext& menu, const Shader& sceneShader, const Shader& lavaShader, float now) {
-    const PlayerInput playerInput = buildPlayerInput(window, mundo2.player);
-    const bool interactDown = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
-    const bool interactPressed = interactDown && !mundo2.lastInteractKey;
-    mundo2.lastInteractKey = interactDown;
+    if (levelIntroActive()) {
+        consumeLevelIntroInput(window);
+        mundo2.lastInteractKey = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
+        updateLevelIntroCamera(now);
+    } else {
+        const PlayerInput playerInput = buildPlayerInput(window, mundo2.player);
+        const bool interactDown = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
+        const bool interactPressed = interactDown && !mundo2.lastInteractKey;
+        mundo2.lastInteractKey = interactDown;
 
-    std::vector<Bounds> playerColliders = mundo2.environment.collisionPreview();
-    appendDimensionRestrictionColliders(playerColliders, mundo2.environment, locked2DDepth);
-    mundo2.player.update(playerInput, playerColliders, mundo2.environment.worldMin(), mundo2.environment.worldMax(), deltaTime);
-    mundo2.mission.update(mundo2.player, now);
-    mundo2.toad.update(mundo2.player, interactPressed, now);
-    updateGameplayCamera(mundo2.player, mundo2.environment, mundo2.mission, now, deltaTime);
+        std::vector<Bounds> playerColliders = mundo2.environment.collisionPreview();
+        appendDimensionRestrictionColliders(playerColliders, mundo2.environment, locked2DDepth);
+        mundo2.player.update(playerInput, playerColliders, mundo2.environment.worldMin(), mundo2.environment.worldMax(), deltaTime);
+        mundo2.mission.update(mundo2.player, now);
+        mundo2.toad.update(mundo2.player, interactPressed, now);
+        updateGameplayCamera(mundo2.player, mundo2.environment, mundo2.mission, now, deltaTime);
+    }
 
     int width = 0;
     int height = 0;

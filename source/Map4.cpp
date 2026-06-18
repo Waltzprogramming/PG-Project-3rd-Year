@@ -1116,6 +1116,8 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
             currentMode = PlayMode::Mode2D;
             locked2DDepth = spawnPoint.z;
             cameraInitialized = false;
+            updateGameplayCamera(mapa4.player, mapa4.environment, mapa4.mission, static_cast<float>(glfwGetTime()), 0.0f);
+            beginLevelIntro(mapa4.environment, mapa4.player, static_cast<float>(glfwGetTime()));
             mapa4.sessionActive = true;
         }
         return true;
@@ -1175,6 +1177,8 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     currentMode = PlayMode::Mode2D;
     locked2DDepth = spawnPoint.z;
     cameraInitialized = false;
+    updateGameplayCamera(mapa4.player, mapa4.environment, mapa4.mission, static_cast<float>(glfwGetTime()), 0.0f);
+    beginLevelIntro(mapa4.environment, mapa4.player, static_cast<float>(glfwGetTime()));
 
     std::cout << "Map 4 ready. Collision volumes: " << mapa4.environment.collisionPreview().size() << std::endl;
 
@@ -1229,8 +1233,13 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
 
     const float frameDelta = mapa4.skipFirstUpdateFrame ? 0.0f : deltaTime;
     mapa4.skipFirstUpdateFrame = false;
+    const bool introActive = levelIntroActive();
 
-    if (!mapa4.gameOver && !mapa4.mission.levelComplete()) {
+    if (introActive) {
+        consumeLevelIntroInput(window);
+        mapa4.secretCompleteKeyHeld = glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS;
+        updateLevelIntroCamera(now);
+    } else if (!mapa4.gameOver && !mapa4.mission.levelComplete()) {
         const bool secretCompleteDown = glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS;
         const bool secretCompletePressed = secretCompleteDown && !mapa4.secretCompleteKeyHeld;
         mapa4.secretCompleteKeyHeld = secretCompleteDown;
@@ -1286,7 +1295,9 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
         }
     }
 
-    updateGameplayCamera(mapa4.player, mapa4.environment, mapa4.mission, now, frameDelta);
+    if (!introActive) {
+        updateGameplayCamera(mapa4.player, mapa4.environment, mapa4.mission, now, frameDelta);
+    }
 
     int width = 0;
     int height = 0;
@@ -1295,8 +1306,10 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
     const glm::mat4 view = glm::lookAt(gameplayCameraPosition, gameplayCameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
     const glm::mat4 projection = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 180.0f);
 
-    mapa4.projectileCooldown = std::max(0.0f, mapa4.projectileCooldown - frameDelta);
-    if (!mapa4.gameOver && !mapa4.mission.levelComplete()) {
+    if (!introActive) {
+        mapa4.projectileCooldown = std::max(0.0f, mapa4.projectileCooldown - frameDelta);
+    }
+    if (!introActive && !mapa4.gameOver && !mapa4.mission.levelComplete()) {
         // en 2d se permite disparo continuo y en 3d se corta esa mecánica
         if (currentMode == PlayMode::Mode2D) {
             const bool attackDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
@@ -1316,7 +1329,9 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
             mapa4.projectileCooldown = std::min(mapa4.projectileCooldown, Map4ProjectileCooldown * 0.4f);
         }
     }
-    updateMapa4Projectiles(mapa4, frameDelta);
+    if (!introActive) {
+        updateMapa4Projectiles(mapa4, frameDelta);
+    }
 
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.02f, 0.03f, 0.08f, 1.0f);
