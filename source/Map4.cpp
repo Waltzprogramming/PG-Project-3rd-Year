@@ -1371,7 +1371,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     }
     openMapa4Sfx(mapa4);
 
-    mapa4.player.load(resolveAssetPath("assets/characters/deadpool.glb"));
+    loadWorldOnePlayerSprites(mapa4.player);
     const glm::vec3 spawnPoint = isMarioMapa4Environment(mapa4.environment)
         ? findMarioMapa4Spawn(mapa4.environment)
         : mapa4.environment.recommendedSpawnPoint();

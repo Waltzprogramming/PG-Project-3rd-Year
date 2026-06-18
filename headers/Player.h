@@ -26,6 +26,7 @@ struct PlayerInput {
 class Player {
 public:
     bool load(const std::string& modelPath);
+    bool loadWorldOneSprites(const std::string& playerAssetRoot);
     void configureCharacterMetrics(float desiredHeight, const glm::vec3& collisionHalf, float visualYOffset, float maxSpeed3D, float maxSpeed2D);
     void spawnAt(const glm::vec3& feetPosition);
     void teleportTo(const glm::vec3& feetPosition);
@@ -44,15 +45,25 @@ private:
         Material material;
     };
 
+    struct SpriteFrame {
+        Mesh mesh;
+        std::shared_ptr<Texture2D> texture;
+    };
+
     void updateHorizontalVelocity(const PlayerInput& input, float deltaTime);
     void moveAndCollide(int axis, float amount, const std::vector<Bounds>& colliders);
     void keepInsideWorld(const glm::vec3& worldMin, const glm::vec3& worldMax);
     glm::mat4 modelMatrix() const;
+    glm::mat4 spriteModelMatrix() const;
+    const SpriteFrame* currentSpriteFrame() const;
     void bindMaterial(const Shader& shader, const Material& material) const;
+    bool loadSpriteSequence(const std::string& folderPath, std::vector<SpriteFrame>& frames);
     std::shared_ptr<Texture2D> loadTexture(const std::string& path);
     std::shared_ptr<Texture2D> loadTexture(const LoadedMaterial& material);
 
     std::vector<Part> m_parts;
+    std::vector<SpriteFrame> m_runSpriteFrames;
+    std::vector<SpriteFrame> m_jumpSpriteFrames;
     std::vector<std::shared_ptr<Texture2D>> m_textures;
     glm::vec3 m_position{0.0f, 5.0f, 0.0f};
     glm::vec3 m_spawnPoint{0.0f, 5.0f, 0.0f};
@@ -67,6 +78,12 @@ private:
     float m_modelYawOffset{0.0f};
     float m_maxSpeed3D{4.25f};
     float m_maxSpeed2D{4.65f};
+    float m_animationTime{0.0f};
+    float m_jumpAnimationTime{0.0f};
+    float m_lastCameraYawRadians{0.0f};
+    PlayMode m_lastMode{PlayMode::Mode3D};
+    bool m_spriteMoving{false};
+    bool m_spritePlayer{false};
     bool m_marioMapVariant{false};
     bool m_deadpoolVariant{false};
     bool m_grounded{false};

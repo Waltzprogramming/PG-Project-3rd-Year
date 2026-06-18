@@ -31,6 +31,7 @@ bool environmentUsable(const Environment& environment);
 void appendDimensionRestrictionColliders(std::vector<Bounds>& colliders, const Environment& environment, float lockedDepth);
 std::string resolveAssetPath(const std::string& path);
 std::string resolveFirstExistingAsset(const std::initializer_list<std::string>& paths);
+bool loadWorldOnePlayerSprites(Player& player);
 std::shared_ptr<Texture2D> loadTextureFromMaterial(const LoadedMaterial& material, const std::filesystem::path& modelPath, std::vector<std::shared_ptr<Texture2D>>& cache);
 void bindSceneMaterial(const Shader& shader, const Material& material);
 glm::mat4 localPartMatrix(const MissionRenderablePart& part);

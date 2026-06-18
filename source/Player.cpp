@@ -1,5 +1,7 @@
 #include "Player.h"
 
+#include <GL/glew.h>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -8,8 +10,13 @@
 #include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 
 namespace {
+constexpr float WorldOneSpriteHeight = 1.15f;
+constexpr float WorldOneSpriteFramesPerSecond = 12.0f;
+constexpr float SharedPlayerJumpSpeed = 7.25f;
+
 bool intersects(const Bounds& a, const Bounds& b) {
     const glm::vec3 delta = glm::abs(a.center - b.center);
     const glm::vec3 total = a.halfExtent + b.halfExtent;
@@ -55,6 +62,50 @@ std::filesystem::path resolvePath(const std::string& rawPath) {
     return original;
 }
 
+std::string lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    return value;
+}
+
+int trailingNumber(const std::filesystem::path& path) {
+    const std::string stem = path.stem().string();
+    int value = 0;
+    int multiplier = 1;
+    bool found = false;
+    for (auto it = stem.rbegin(); it != stem.rend(); ++it) {
+        if (!std::isdigit(static_cast<unsigned char>(*it))) {
+            break;
+        }
+        found = true;
+        value += (*it - '0') * multiplier;
+        multiplier *= 10;
+    }
+    return found ? value : std::numeric_limits<int>::max();
+}
+
+Vertex makeSpriteVertex(const glm::vec3& position, const glm::vec2& uv) {
+    return {position, {0.0f, 0.0f, 1.0f}, uv, glm::vec4(1.0f)};
+}
+
+Mesh createWorldOneSpriteMesh(int textureWidth, int textureHeight) {
+    const float aspect = static_cast<float>(std::max(textureWidth, 1)) / static_cast<float>(std::max(textureHeight, 1));
+    const float width = WorldOneSpriteHeight * aspect;
+    const float halfWidth = width * 0.5f;
+    const std::vector<Vertex> vertices = {
+        makeSpriteVertex({halfWidth, WorldOneSpriteHeight, 0.0f}, {1.0f, 1.0f}),
+        makeSpriteVertex({halfWidth, 0.0f, 0.0f}, {1.0f, 0.0f}),
+        makeSpriteVertex({-halfWidth, 0.0f, 0.0f}, {0.0f, 0.0f}),
+        makeSpriteVertex({-halfWidth, WorldOneSpriteHeight, 0.0f}, {0.0f, 1.0f})
+    };
+    const std::vector<unsigned int> indices = {0, 1, 2, 0, 2, 3};
+
+    Mesh mesh;
+    mesh.upload(vertices, indices);
+    return mesh;
+}
+
 std::string normalizeAssetKey(std::string path) {
     std::replace(path.begin(), path.end(), '\\', '/');
     std::transform(path.begin(), path.end(), path.begin(), [](unsigned char value) {
@@ -66,7 +117,13 @@ std::string normalizeAssetKey(std::string path) {
 
 bool Player::load(const std::string& modelPath) {
     m_parts.clear();
+    m_runSpriteFrames.clear();
+    m_jumpSpriteFrames.clear();
     m_textures.clear();
+    m_spritePlayer = false;
+    m_spriteMoving = false;
+    m_animationTime = 0.0f;
+    m_jumpAnimationTime = 0.0f;
 
     LoadedModel model = ModelLoader::loadModel(resolvePath(modelPath).string());
     if (model.meshes.empty()) {
@@ -119,6 +176,39 @@ bool Player::load(const std::string& modelPath) {
     return true;
 }
 
+bool Player::loadWorldOneSprites(const std::string& playerAssetRoot) {
+    m_parts.clear();
+    m_runSpriteFrames.clear();
+    m_jumpSpriteFrames.clear();
+    m_textures.clear();
+    m_marioMapVariant = false;
+    m_deadpoolVariant = false;
+
+    const std::filesystem::path root(playerAssetRoot);
+    if (!loadSpriteSequence((root / "caminar").string(), m_runSpriteFrames)) {
+        std::cerr << "World 1 player walking sprites could not be loaded from "
+            << (root / "caminar").string() << "." << std::endl;
+        return load("assets/characters/mario64_pinix_style/model/scene.gltf");
+    }
+    loadSpriteSequence((root / "saltar").string(), m_jumpSpriteFrames);
+
+    m_modelMin = {-WorldOneSpriteHeight * 0.5f, 0.0f, 0.0f};
+    m_modelMax = {WorldOneSpriteHeight * 0.5f, WorldOneSpriteHeight, 0.0f};
+    m_modelCenter = (m_modelMin + m_modelMax) * 0.5f;
+    configureCharacterMetrics(
+        WorldOneSpriteHeight,
+        glm::vec3(0.16f, WorldOneSpriteHeight * 0.5f, 0.12f),
+        0.0f,
+        4.25f,
+        4.65f);
+    m_animationTime = 0.0f;
+    m_jumpAnimationTime = 0.0f;
+    m_spriteMoving = false;
+    m_modelYawOffset = 0.0f;
+    m_spritePlayer = true;
+    return true;
+}
+
 void Player::configureCharacterMetrics(float desiredHeight, const glm::vec3& collisionHalf, float visualYOffset, float maxSpeed3D, float maxSpeed2D) {
     const float modelHeight = std::max(m_modelMax.y - m_modelMin.y, 0.001f);
     m_modelScale = desiredHeight / modelHeight;
@@ -133,21 +223,29 @@ void Player::spawnAt(const glm::vec3& feetPosition) {
     m_spawnPoint = feetPosition;
     m_velocity = {0.0f, 0.0f, 0.0f};
     m_grounded = false;
+    m_animationTime = 0.0f;
+    m_jumpAnimationTime = 0.0f;
+    m_spriteMoving = false;
 }
 
 void Player::teleportTo(const glm::vec3& feetPosition) {
     m_position = feetPosition;
     m_velocity = {0.0f, 0.0f, 0.0f};
     m_grounded = false;
+    m_animationTime = 0.0f;
+    m_jumpAnimationTime = 0.0f;
+    m_spriteMoving = false;
 }
 
 void Player::update(const PlayerInput& input, const std::vector<Bounds>& colliders, const glm::vec3& worldMin, const glm::vec3& worldMax, float deltaTime) {
     const float dt = std::clamp(deltaTime, 0.0f, 1.0f / 30.0f);
 
+    m_lastMode = input.mode;
+    m_lastCameraYawRadians = input.cameraYawRadians;
     updateHorizontalVelocity(input, dt);
 
     if (input.jumpPressed && m_grounded) {
-        m_velocity.y = 7.25f;
+        m_velocity.y = SharedPlayerJumpSpeed;
         m_grounded = false;
     }
 
@@ -163,10 +261,42 @@ void Player::update(const PlayerInput& input, const std::vector<Bounds>& collide
     if (m_position.y < worldMin.y - 6.0f) {
         spawnAt(m_spawnPoint);
     }
+
+    const float horizontalSpeed = glm::length(glm::vec2(m_velocity.x, m_velocity.z));
+    m_spriteMoving = horizontalSpeed > 0.03f && m_grounded;
+    if (m_spriteMoving || !m_grounded) {
+        m_animationTime += dt;
+    } else {
+        m_animationTime = 0.0f;
+    }
+    if (!m_grounded) {
+        m_jumpAnimationTime += dt;
+    } else {
+        m_jumpAnimationTime = 0.0f;
+    }
 }
 
 void Player::render(const Shader& shader) const {
     shader.use();
+    if (m_spritePlayer) {
+        const SpriteFrame* frame = currentSpriteFrame();
+        if (frame == nullptr || !frame->texture || !frame->texture->valid()) {
+            return;
+        }
+
+        Material material;
+        material.baseColor = {1.0f, 1.0f, 1.0f};
+        material.roughness = 1.0f;
+        material.checkerStrength = 0.0f;
+        material.fogAmount = 0.12f;
+        material.opacity = 1.0f;
+        material.texture = frame->texture;
+        shader.setMat4("uModel", spriteModelMatrix());
+        bindMaterial(shader, material);
+        frame->mesh.draw();
+        return;
+    }
+
     shader.setMat4("uModel", modelMatrix());
 
     for (const Part& part : m_parts) {
@@ -281,6 +411,52 @@ glm::mat4 Player::modelMatrix() const {
     return model;
 }
 
+glm::mat4 Player::spriteModelMatrix() const {
+    float yaw = m_lastCameraYawRadians;
+    if (m_lastMode == PlayMode::Mode2D) {
+        yaw = std::sin(m_facingYaw) >= 0.0f ? 0.0f : glm::pi<float>();
+    }
+
+    const float step = m_spriteMoving ? std::sin(m_animationTime * 14.0f) : 0.0f;
+    const float bounce = m_spriteMoving ? std::abs(step) * 0.035f : 0.0f;
+    const float jumpStrength = !m_grounded
+        ? std::clamp(std::abs(m_velocity.y) / SharedPlayerJumpSpeed, 0.0f, 1.0f)
+        : 0.0f;
+    const float walkTilt = m_spriteMoving ? step * 4.0f : 0.0f;
+    const float jumpTilt = !m_grounded
+        ? (m_velocity.y >= 0.0f ? -10.0f : 8.0f) * jumpStrength
+        : 0.0f;
+    const glm::vec3 jumpScale = !m_grounded
+        ? glm::vec3(1.0f - jumpStrength * 0.06f, 1.0f + jumpStrength * 0.10f, 1.0f)
+        : glm::vec3(1.0f);
+
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, m_position + glm::vec3(0.0f, m_visualYOffset + bounce, 0.0f));
+    model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(walkTilt + jumpTilt), glm::vec3(0.0f, 0.0f, 1.0f));
+    model = glm::scale(model, jumpScale);
+    model = glm::scale(model, glm::vec3(m_modelScale));
+    return model;
+}
+
+const Player::SpriteFrame* Player::currentSpriteFrame() const {
+    const std::vector<SpriteFrame>* frames = &m_runSpriteFrames;
+    bool loop = true;
+    if (!m_grounded && !m_jumpSpriteFrames.empty()) {
+        frames = &m_jumpSpriteFrames;
+        loop = false;
+    }
+
+    if (frames->empty()) {
+        return nullptr;
+    }
+
+    const float time = loop ? m_animationTime : m_jumpAnimationTime;
+    size_t index = static_cast<size_t>(time * WorldOneSpriteFramesPerSecond);
+    index = loop ? index % frames->size() : std::min(index, frames->size() - 1);
+    return &(*frames)[index];
+}
+
 void Player::bindMaterial(const Shader& shader, const Material& material) const {
     shader.setVec3("uMaterial.baseColor", material.baseColor);
     shader.setVec3("uMaterial.emissive", material.emissive);
@@ -293,6 +469,55 @@ void Player::bindMaterial(const Shader& shader, const Material& material) const 
         material.texture->bind(0);
         shader.setInt("uMaterial.albedoMap", 0);
     }
+}
+
+bool Player::loadSpriteSequence(const std::string& folderPath, std::vector<SpriteFrame>& frames) {
+    frames.clear();
+
+    const std::filesystem::path directory(folderPath);
+    if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
+        return false;
+    }
+
+    std::vector<std::filesystem::path> framePaths;
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(directory)) {
+        if (entry.is_regular_file() && lowercase(entry.path().extension().string()) == ".png") {
+            framePaths.push_back(entry.path());
+        }
+    }
+
+    std::sort(framePaths.begin(), framePaths.end(), [](const std::filesystem::path& left, const std::filesystem::path& right) {
+        const int leftNumber = trailingNumber(left);
+        const int rightNumber = trailingNumber(right);
+        if (leftNumber != rightNumber) {
+            return leftNumber < rightNumber;
+        }
+        return left.filename().string() < right.filename().string();
+    });
+
+    frames.reserve(framePaths.size());
+    for (const std::filesystem::path& framePath : framePaths) {
+        auto texture = std::make_shared<Texture2D>();
+        if (!texture->loadFromFile(framePath.string(), false)) {
+            std::cerr << "Player sprite frame could not be loaded: " << framePath.string() << std::endl;
+            frames.clear();
+            return false;
+        }
+
+        texture->bind();
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        SpriteFrame frame;
+        frame.mesh = createWorldOneSpriteMesh(texture->width(), texture->height());
+        frame.texture = std::move(texture);
+        frames.push_back(std::move(frame));
+    }
+
+    return !frames.empty();
 }
 
 std::shared_ptr<Texture2D> Player::loadTexture(const std::string& path) {

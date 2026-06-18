@@ -218,7 +218,7 @@ bool iniciarMundo2(Mundo2Runtime& mundo2) {
         std::cerr << "Background music could not be started." << std::endl;
     }
 
-    mundo2.player.load(resolveAssetPath("assets/characters/mario64_pinix_style/model/scene.gltf"));
+    loadWorldOnePlayerSprites(mundo2.player);
     mundo2.player.spawnAt(mundo2.environment.recommendedSpawnPoint());
     mundo2.mission.initialize();
     mundo2.mission.reset(mundo2.environment, mundo2.environment.recommendedSpawnPoint());

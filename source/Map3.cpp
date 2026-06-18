@@ -1622,10 +1622,7 @@ bool iniciarMap3(Map3Runtime& map3) {
         return false;
     }
 
-    const std::string playerPath = resolveFirstExistingAsset({
-        "assets/mundo3/DS _ DSi - Flower Sun and Rain_ Murder and Mystery in Paradise - Playable Characters - Sumio Mondo (Horse)/SumioMondoS4/ch_01_switchskin.dae"
-    });
-    map3.player.load(playerPath);
+    loadWorldOnePlayerSprites(map3.player);
     configureMap3Player(map3.player);
 
     map3.collisionBounds = isMap3PirateEnvironment(map3.environment)

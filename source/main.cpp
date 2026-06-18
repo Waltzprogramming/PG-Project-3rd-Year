@@ -312,6 +312,10 @@ std::string resolveFirstExistingAsset(const std::initializer_list<std::string>& 
     return paths.size() > 0 ? resolveAssetPath(*paths.begin()) : std::string();
 }
 
+bool loadWorldOnePlayerSprites(Player& player) {
+    return player.loadWorldOneSprites(resolveAssetPath("assets/mapa1/player"));
+}
+
 std::shared_ptr<Texture2D> loadTextureFromMaterial(
     const LoadedMaterial& material,
     const std::filesystem::path& modelPath,
