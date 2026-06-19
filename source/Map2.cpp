@@ -64,6 +64,10 @@ constexpr float Map3ProjectileRenderDistanceSq = 30.0f * 30.0f;
 constexpr float Map3EnemyRenderDistanceSq = 32.0f * 32.0f;
 constexpr float Map3PathCenterZOffset = 0.72f;
 constexpr float Map3FinishX = 12.0f;
+constexpr float Map3MinimumFinishDistance = 7.5f;
+constexpr float Map3FinishStartSafetyDistance = 1.5f;
+constexpr float Map3FinishEdgeMargin = 0.38f;
+constexpr float Map3PiratePathFinishRatio = 0.86f;
 constexpr float Map3BackwardWallX = -14.2f;
 constexpr float Map3Late2DWallX = 9.6f;
 constexpr float Map3InvisibleWallHalfThickness = 0.12f;
@@ -404,6 +408,30 @@ glm::vec3 findMap3PirateSpawn(const Environment& environment, const std::vector<
         spawn.y = floorY;
     }
     return spawn;
+}
+
+float calculateMap3FinishX(const Environment& environment, const std::vector<Bounds>& colliders, const glm::vec3& spawnPoint) {
+    float finishX = Map3FinishX;
+    if (isMap3PirateEnvironment(environment) && !colliders.empty()) {
+        const Bounds& path = colliders.front();
+        finishX = path.center.x + path.halfExtent.x * Map3PiratePathFinishRatio;
+    }
+
+    const float safeMinimum = spawnPoint.x + Map3FinishStartSafetyDistance;
+    finishX = std::max(finishX, spawnPoint.x + Map3MinimumFinishDistance);
+
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    if (worldMax.x > worldMin.x) {
+        const float playableMaxX = worldMax.x - Map3FinishEdgeMargin;
+        if (playableMaxX > safeMinimum) {
+            finishX = std::clamp(finishX, safeMinimum, playableMaxX);
+        } else {
+            finishX = safeMinimum;
+        }
+    }
+
+    return finishX;
 }
 
 bool findFloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float& floorY) {
@@ -1595,6 +1623,7 @@ bool iniciarMap3(Map3Runtime& map3) {
                 ? findMap3PirateSpawn(map3.environment, map3.collisionBounds)
                 : map3.environment.recommendedSpawnPoint();
             map3.player.spawnAt(spawnPoint);
+            map3.finishX = calculateMap3FinishX(map3.environment, map3.collisionBounds, spawnPoint);
             map3.mission.reset(map3.environment, spawnPoint);
             map3.enemies.reset(map3.environment, map3.collisionBounds, spawnPoint);
             map3.health = map3.maxHealth;
@@ -1633,6 +1662,7 @@ bool iniciarMap3(Map3Runtime& map3) {
         ? findMap3PirateSpawn(map3.environment, map3.collisionBounds)
         : map3.environment.recommendedSpawnPoint();
     map3.player.spawnAt(spawnPoint);
+    map3.finishX = calculateMap3FinishX(map3.environment, map3.collisionBounds, spawnPoint);
     map3.mission.initialize();
     map3.mission.reset(map3.environment, spawnPoint);
     map3.enemies.initialize();
@@ -1653,7 +1683,9 @@ bool iniciarMap3(Map3Runtime& map3) {
     updateMap3GameplayCamera(map3.player, map3.environment, map3.mission, static_cast<float>(glfwGetTime()), 0.0f);
     beginLevelIntro(map3.environment, map3.player, static_cast<float>(glfwGetTime()), Mundo2IntroZoomScale);
 
-    std::cout << "World 2 ready. Collision volumes: " << map3ActiveColliders(map3).size() << std::endl;
+    std::cout << "World 2 ready. Collision volumes: " << map3ActiveColliders(map3).size()
+        << " | start X: " << spawnPoint.x
+        << " | finish X: " << map3.finishX << std::endl;
     std::cout << "Controls: TAB cambia 2D/3D, E esquiva en 3D y hace parry en 2D." << std::endl;
 
     map3.initialized = true;
@@ -1754,7 +1786,7 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
             }
         }
 
-        if (map3.player.position().x >= Map3FinishX) {
+        if (map3.player.position().x >= map3.finishX) {
             map3.mission.forceComplete(now);
             stopMap3Music(map3);
         }

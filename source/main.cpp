@@ -166,9 +166,7 @@ bool seleccionRaylibEsMundo(int selectedWorld) {
 }
 
 bool gameOverContinuePressed(GLFWwindow* window) {
-    const bool continueDown =
-        glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS ||
-        glfwGetKey(window, GLFW_KEY_KP_ENTER) == GLFW_PRESS;
+    const bool continueDown = glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
     const bool pressed = continueDown && !lastGameOverContinueKey;
     lastGameOverContinueKey = continueDown;
     return pressed;
@@ -2531,6 +2529,9 @@ void processAppInput(GLFWwindow* window, Mapa1& mapa1, Mundo2Runtime& mundo2, Ma
             break;
         }
         case EstadoJuego::MUNDO_4:
+            if (mapa1.levelComplete()) {
+                break;
+            }
             if (mapa1.shopOpen()) {
                 mapa1.closeShop();
             }
@@ -2756,10 +2757,10 @@ bool initializeMenu(MenuContext& menu) {
     menu.mundo1Victoria = createTextSprite(L"YOU WON!", 46, titleColor, 440, true, true);
     menu.mundo1VictoriaDetalle = createTextSprite(L"You collected the star and completed World 1.", 25, white, 620, true, true);
     menu.juegoTerminado = createTextSprite(L"GAME OVER", 42, titleColor, 520, true, true);
-    menu.juegoTerminadoContinuar = createTextSprite(L"PRESS ENTER TO CONTINUE", 27, white, 520, false, true);
+    menu.juegoTerminadoContinuar = createTextSprite(L"PRESS ESC TO RETURN TO MENU", 27, white, 560, false, true);
     menu.mapa4FinalDetalleVictoria = createTextSprite(L"All 10 coins were collected successfully.", 22, white, 500, true, true);
     menu.mapa4FinalDetalleDerrota = createTextSprite(L"The player was defeated before collecting every coin.", 21, white, 500, true, true);
-    menu.mapa4FinalContinuar = createTextSprite(L"Press ENTER or ESC to return to the new main menu.", 20, white, 500, true, true);
+    menu.mapa4FinalContinuar = createTextSprite(L"Press ESC to return to the main menu.", 20, white, 500, true, true);
     menu.combateSolo2D = createTextSprite(L"Danger! Switch to 2D with TAB to stop the enemies.", 27, white, 720, false, true);
     menu.vidaJugador = createTextSprite(L"HP", 25, white, 120, false, false);
     menu.luzJugador = createTextSprite(L"LIGHT", 25, white, 120, false, false);
@@ -3047,7 +3048,10 @@ int main(int argc, char** argv) {
                     clicked,
                     scrollY);
                 if (mapa1.levelComplete()) {
-                    volverASeleccionDeMundos(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
+                    drawLevelCompleteHud(menu, width, height);
+                    if (gameOverContinuePressed(window)) {
+                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
+                    }
                 }
             }
         } else {
