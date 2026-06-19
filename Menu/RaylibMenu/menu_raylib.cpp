@@ -47,6 +47,8 @@ struct WorldEntry {
     Vector3 previewPosition;
     float previewScale;
     Vector3 previewRotation{0.0f, 0.0f, 0.0f};
+    bool nightPreview{false};
+    const char* previewCaption{"ROTATION Y // LOCKED TO PLANE"};
 };
 
 struct AnimatedButton {
@@ -688,7 +690,10 @@ void drawPreview(
     float timeSeconds
 ) {
     constexpr float groundY = -2.9f;
-    const bool nightMode = activeWorld == 3;
+    const WorldEntry* activeEntry = activeWorld >= 0 && activeWorld < WorldCount
+        ? &worlds[activeWorld]
+        : nullptr;
+    const bool nightMode = activeEntry != nullptr && activeEntry->nightPreview;
     float cameraTargetY = 0.0f;
     if (activeWorld >= 0 && activeWorld < WorldCount && models[activeWorld].loaded) {
         const WorldEntry& world = worlds[activeWorld];
@@ -770,7 +775,7 @@ void drawPreview(
 
     DrawRectangle(0, PreviewHeight - 78, PreviewWidth, 78, withAlpha(nightMode ? DeepBlue : DeepGreen, 0.92f));
     DrawRectangle(0, PreviewHeight - 78, PreviewWidth, 7, nightMode ? PaperBlue : SignalRed);
-    DrawTextEx(GetFontDefault(), nightMode ? "NIGHT PREVIEW // REAL MAP 4" : "ROTATION Y // LOCKED TO PLANE", {24.0f, PreviewHeight - 50.0f}, 22.0f, 1.0f, Paper);
+    DrawTextEx(GetFontDefault(), activeEntry != nullptr ? activeEntry->previewCaption : "", {24.0f, PreviewHeight - 50.0f}, 22.0f, 1.0f, Paper);
     EndTextureMode();
 }
 
@@ -873,8 +878,8 @@ int main(int argc, char** argv) {
     const std::array<WorldEntry, WorldCount> worlds{{
         {"WORLD 1", "FREEZEEZY PEAK", "Menu/RaylibMenu/generated/world2_preview.preview", PaperBlue, true, {0.0f, 0.02f, 0.0f}, 0.92f, {90.0f, 0.0f, 0.0f}},
         {"WORLD 2", "THIRD WORLD ADVENTURE", "assets/mundo3/game_pirate_adventure_map/scene_map3.gltf", SignalRed, true, {0.0f, 0.02f, 0.0f}, 1.45f, {0.0f, 0.0f, 0.0f}},
-        {"WORLD 3", "FINAL CHALLENGE", "Menu/RaylibMenu/generated/world4_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.55f, {0.0f, 0.0f, 0.0f}},
-        {"WORLD 4", "ISLANDS OF THE FIRST JOURNEY", "Menu/RaylibMenu/generated/world1_preview.preview", PaperGreen, true, {0.0f, 0.02f, 0.0f}, 1.65f, {0.0f, 0.0f, 0.0f}}
+        {"WORLD 3", "FINAL CHALLENGE", "Menu/RaylibMenu/generated/world1_preview.preview", DeepGreen, true, {0.0f, 0.02f, 0.0f}, 1.65f, {0.0f, 0.0f, 0.0f}, true, "NIGHT PREVIEW // FINAL CHALLENGE"},
+        {"WORLD 4", "ISLANDS OF THE FIRST JOURNEY", "Menu/RaylibMenu/generated/world4_preview.preview", PaperGreen, true, {0.0f, 0.02f, 0.0f}, 1.55f, {0.0f, 0.0f, 0.0f}}
     }};
 
     const bool pauseMode = hasArgument(argc, argv, "--pause");
