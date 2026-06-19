@@ -81,8 +81,8 @@ constexpr float Mundo2IntroZoomScale = 0.50f;
 constexpr float Map3PlayerHeight = 0.34f;
 constexpr glm::vec3 Map3PlayerCollisionHalf{0.048f, Map3PlayerHeight * 0.46f, 0.038f};
 constexpr float Map3PlayerVisualYOffset = -0.24f;
-constexpr float Map3PlayerSpeed3D = 1.55f;
-constexpr float Map3PlayerSpeed2D = 1.75f;
+constexpr float Map3PlayerSpeed3D = 1.40f;
+constexpr float Map3PlayerSpeed2D = 1.58f;
 constexpr float Map3JumpBlockedMinX = -4.2f;
 constexpr float Map3JumpBlockedMaxX = -1.7f;
 

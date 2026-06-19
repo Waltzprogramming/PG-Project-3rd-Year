@@ -31,6 +31,8 @@ constexpr float Map4LightEnergyMaximum = 20.0f;
 constexpr float Map4LightRespawnTime = 10.0f;
 constexpr size_t Map4SunPickupTotal = 5;
 constexpr float Map4JumpBufferSeconds = 0.16f;
+constexpr float Mundo3PlayerSpeed3D = 2.75f;
+constexpr float Mundo3PlayerSpeed2D = 3.02f;
 
 bool map4BoundsIntersect(const Bounds& a, const Bounds& b) {
     // chequeo simple de cajas para saber si dos cosas del mapa se están tocando
@@ -1372,6 +1374,7 @@ bool iniciarMapa4(Mapa4Runtime& mapa4) {
     openMapa4Sfx(mapa4);
 
     loadWorldOnePlayerSprites(mapa4.player);
+    mapa4.player.configureMovementSpeeds(Mundo3PlayerSpeed3D, Mundo3PlayerSpeed2D);
     const glm::vec3 spawnPoint = isMarioMapa4Environment(mapa4.environment)
         ? findMarioMapa4Spawn(mapa4.environment)
         : mapa4.environment.recommendedSpawnPoint();
@@ -1603,10 +1606,10 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
     glClearColor(0.02f, 0.03f, 0.08f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // variable local flashlitgh armor
+    const float lightRatio = std::clamp(mapa4.lightEnergy / Map4LightEnergyMaximum, 0.0f, 1.0f);
     const glm::vec3 flashlightAnchor = mapa4.player.position();
-    // la luz del jugador se manda al shader para iluminar solo la zona cercana
-    uploadCommonSceneUniforms(sceneShader, mapa4.environment, gameplayCameraPosition, view, projection, now, &flashlightAnchor, mapa4.lightEnergy / Map4LightEnergyMaximum, nullptr);
+    const glm::vec3* playerLightPosition = lightRatio > 0.001f ? &flashlightAnchor : nullptr;
+    uploadCommonSceneUniforms(sceneShader, mapa4.environment, gameplayCameraPosition, view, projection, now, playerLightPosition, lightRatio, nullptr);
     lavaShader.use();
     lavaShader.setMat4("uView", view);
     lavaShader.setMat4("uProjection", projection);
@@ -1621,6 +1624,7 @@ void renderMapa4(GLFWwindow* window, Mapa4Runtime& mapa4, const Shader& sceneSha
     if (mapa4.shieldActive) {
         renderMapa4Shield(sceneShader, mapa4.player, now);
     }
+    mapa4.player.setSpriteBrightness(lightRatio);
     mapa4.player.render(sceneShader);
 }
 

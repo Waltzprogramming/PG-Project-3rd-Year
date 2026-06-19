@@ -28,6 +28,8 @@ public:
     bool load(const std::string& modelPath);
     bool loadWorldOneSprites(const std::string& playerAssetRoot);
     void configureCharacterMetrics(float desiredHeight, const glm::vec3& collisionHalf, float visualYOffset, float maxSpeed3D, float maxSpeed2D);
+    void configureMovementSpeeds(float maxSpeed3D, float maxSpeed2D);
+    void setSpriteBrightness(float brightness);
     void spawnAt(const glm::vec3& feetPosition);
     void teleportTo(const glm::vec3& feetPosition);
     void update(const PlayerInput& input, const std::vector<Bounds>& colliders, const glm::vec3& worldMin, const glm::vec3& worldMax, float deltaTime);
@@ -47,6 +49,7 @@ private:
 
     struct SpriteFrame {
         Mesh mesh;
+        Mesh mirroredMesh;
         std::shared_ptr<Texture2D> texture;
     };
 
@@ -80,9 +83,11 @@ private:
     float m_maxSpeed2D{4.65f};
     float m_animationTime{0.0f};
     float m_jumpAnimationTime{0.0f};
+    float m_spriteBrightness{1.0f};
     float m_lastCameraYawRadians{0.0f};
     PlayMode m_lastMode{PlayMode::Mode3D};
     bool m_spriteMoving{false};
+    bool m_spriteFacingLeft{false};
     bool m_spritePlayer{false};
     bool m_marioMapVariant{false};
     bool m_deadpoolVariant{false};

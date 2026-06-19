@@ -15,6 +15,8 @@
 #include <vector>
 
 namespace {
+constexpr float Mundo1PlayerSpeed3D = 3.55f;
+constexpr float Mundo1PlayerSpeed2D = 3.90f;
 
 void initializeMundo2HudResources(Mundo2HudResources& hud) {
     if (hud.initialized) {
@@ -219,6 +221,7 @@ bool iniciarMundo2(Mundo2Runtime& mundo2) {
     }
 
     loadWorldOnePlayerSprites(mundo2.player);
+    mundo2.player.configureMovementSpeeds(Mundo1PlayerSpeed3D, Mundo1PlayerSpeed2D);
     mundo2.player.spawnAt(mundo2.environment.recommendedSpawnPoint());
     mundo2.mission.initialize();
     mundo2.mission.reset(mundo2.environment, mundo2.environment.recommendedSpawnPoint());

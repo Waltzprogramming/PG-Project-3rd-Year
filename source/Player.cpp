@@ -1,6 +1,7 @@
 #include "Player.h"
 
 #include <GL/glew.h>
+#include <GLFW/glfw3.h>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -14,7 +15,11 @@
 
 namespace {
 constexpr float WorldOneSpriteHeight = 1.15f;
-constexpr float WorldOneSpriteFramesPerSecond = 12.0f;
+constexpr float SharedSpriteRunFramesPerSecond = 12.0f;
+constexpr float SharedSpriteJumpFramesPerSecond = 12.0f;
+constexpr float SharedSpriteWalkSwayFrequency = 9.2f;
+constexpr float SharedSpriteWalkBounce = 0.026f;
+constexpr float SharedSpriteWalkTiltDegrees = 2.8f;
 constexpr float SharedPlayerJumpSpeed = 7.25f;
 
 bool intersects(const Bounds& a, const Bounds& b) {
@@ -89,15 +94,17 @@ Vertex makeSpriteVertex(const glm::vec3& position, const glm::vec2& uv) {
     return {position, {0.0f, 0.0f, 1.0f}, uv, glm::vec4(1.0f)};
 }
 
-Mesh createWorldOneSpriteMesh(int textureWidth, int textureHeight) {
+Mesh createWorldOneSpriteMesh(int textureWidth, int textureHeight, bool mirrored = false) {
     const float aspect = static_cast<float>(std::max(textureWidth, 1)) / static_cast<float>(std::max(textureHeight, 1));
     const float width = WorldOneSpriteHeight * aspect;
     const float halfWidth = width * 0.5f;
+    const float leftU = mirrored ? 1.0f : 0.0f;
+    const float rightU = mirrored ? 0.0f : 1.0f;
     const std::vector<Vertex> vertices = {
-        makeSpriteVertex({halfWidth, WorldOneSpriteHeight, 0.0f}, {1.0f, 1.0f}),
-        makeSpriteVertex({halfWidth, 0.0f, 0.0f}, {1.0f, 0.0f}),
-        makeSpriteVertex({-halfWidth, 0.0f, 0.0f}, {0.0f, 0.0f}),
-        makeSpriteVertex({-halfWidth, WorldOneSpriteHeight, 0.0f}, {0.0f, 1.0f})
+        makeSpriteVertex({halfWidth, WorldOneSpriteHeight, 0.0f}, {rightU, 1.0f}),
+        makeSpriteVertex({halfWidth, 0.0f, 0.0f}, {rightU, 0.0f}),
+        makeSpriteVertex({-halfWidth, 0.0f, 0.0f}, {leftU, 0.0f}),
+        makeSpriteVertex({-halfWidth, WorldOneSpriteHeight, 0.0f}, {leftU, 1.0f})
     };
     const std::vector<unsigned int> indices = {0, 1, 2, 0, 2, 3};
 
@@ -124,6 +131,7 @@ bool Player::load(const std::string& modelPath) {
     m_spriteMoving = false;
     m_animationTime = 0.0f;
     m_jumpAnimationTime = 0.0f;
+    m_spriteBrightness = 1.0f;
 
     LoadedModel model = ModelLoader::loadModel(resolvePath(modelPath).string());
     if (model.meshes.empty()) {
@@ -203,6 +211,7 @@ bool Player::loadWorldOneSprites(const std::string& playerAssetRoot) {
         4.65f);
     m_animationTime = 0.0f;
     m_jumpAnimationTime = 0.0f;
+    m_spriteBrightness = 1.0f;
     m_spriteMoving = false;
     m_modelYawOffset = 0.0f;
     m_spritePlayer = true;
@@ -214,8 +223,16 @@ void Player::configureCharacterMetrics(float desiredHeight, const glm::vec3& col
     m_modelScale = desiredHeight / modelHeight;
     m_collisionHalf = collisionHalf;
     m_visualYOffset = visualYOffset;
+    configureMovementSpeeds(maxSpeed3D, maxSpeed2D);
+}
+
+void Player::configureMovementSpeeds(float maxSpeed3D, float maxSpeed2D) {
     m_maxSpeed3D = maxSpeed3D;
     m_maxSpeed2D = maxSpeed2D;
+}
+
+void Player::setSpriteBrightness(float brightness) {
+    m_spriteBrightness = std::clamp(brightness, 0.0f, 1.0f);
 }
 
 void Player::spawnAt(const glm::vec3& feetPosition) {
@@ -262,9 +279,9 @@ void Player::update(const PlayerInput& input, const std::vector<Bounds>& collide
         spawnAt(m_spawnPoint);
     }
 
-    const float horizontalSpeed = glm::length(glm::vec2(m_velocity.x, m_velocity.z));
-    m_spriteMoving = horizontalSpeed > 0.03f && m_grounded;
-    if (m_spriteMoving || !m_grounded) {
+    const bool movementInputActive = glm::length(input.move) > 0.01f;
+    m_spriteMoving = movementInputActive && m_grounded;
+    if (movementInputActive || !m_grounded) {
         m_animationTime += dt;
     } else {
         m_animationTime = 0.0f;
@@ -285,7 +302,7 @@ void Player::render(const Shader& shader) const {
         }
 
         Material material;
-        material.baseColor = {1.0f, 1.0f, 1.0f};
+        material.baseColor = glm::vec3(m_spriteBrightness);
         material.roughness = 1.0f;
         material.checkerStrength = 0.0f;
         material.fogAmount = 0.0f;
@@ -294,7 +311,11 @@ void Player::render(const Shader& shader) const {
         material.texture = frame->texture;
         shader.setMat4("uModel", spriteModelMatrix());
         bindMaterial(shader, material);
-        frame->mesh.draw();
+        const bool mirrorSprite = m_spriteFacingLeft;
+        const Mesh& spriteMesh = mirrorSprite && frame->mirroredMesh.valid()
+            ? frame->mirroredMesh
+            : frame->mesh;
+        spriteMesh.draw();
         return;
     }
 
@@ -333,11 +354,23 @@ void Player::updateHorizontalVelocity(const PlayerInput& input, float deltaTime)
     if (input.mode == PlayMode::Mode2D) {
         if (input.move.x > 0.01f) {
             m_facingYaw = glm::half_pi<float>();
+            m_spriteFacingLeft = false;
         } else if (input.move.x < -0.01f) {
             m_facingYaw = -glm::half_pi<float>();
+            m_spriteFacingLeft = true;
         }
-    } else if (glm::length(desiredDirection) > 0.01f) {
-        m_facingYaw = std::atan2(desiredDirection.x, desiredDirection.z);
+    } else {
+        if (input.move.x > 0.01f) {
+            m_spriteFacingLeft = false;
+        } else if (input.move.x < -0.01f) {
+            m_spriteFacingLeft = true;
+        } else {
+            m_spriteFacingLeft = false;
+        }
+
+        if (glm::length(desiredDirection) > 0.01f) {
+            m_facingYaw = std::atan2(desiredDirection.x, desiredDirection.z);
+        }
     }
 
     const float maxSpeed = input.mode == PlayMode::Mode3D ? m_maxSpeed3D : m_maxSpeed2D;
@@ -415,15 +448,16 @@ glm::mat4 Player::modelMatrix() const {
 glm::mat4 Player::spriteModelMatrix() const {
     float yaw = m_lastCameraYawRadians;
     if (m_lastMode == PlayMode::Mode2D) {
-        yaw = std::sin(m_facingYaw) >= 0.0f ? 0.0f : glm::pi<float>();
+        yaw = 0.0f;
     }
 
-    const float step = m_spriteMoving ? std::sin(m_animationTime * 14.0f) : 0.0f;
-    const float bounce = m_spriteMoving ? std::abs(step) * 0.035f : 0.0f;
+    const float now = static_cast<float>(glfwGetTime());
+    const float step = m_spriteMoving ? std::sin(now * SharedSpriteWalkSwayFrequency) : 0.0f;
+    const float bounce = m_spriteMoving ? std::abs(step) * SharedSpriteWalkBounce : 0.0f;
+    const float walkTilt = m_spriteMoving ? step * SharedSpriteWalkTiltDegrees : 0.0f;
     const float jumpStrength = !m_grounded
         ? std::clamp(std::abs(m_velocity.y) / SharedPlayerJumpSpeed, 0.0f, 1.0f)
         : 0.0f;
-    const float walkTilt = m_spriteMoving ? step * 4.0f : 0.0f;
     const float jumpTilt = !m_grounded
         ? (m_velocity.y >= 0.0f ? -10.0f : 8.0f) * jumpStrength
         : 0.0f;
@@ -453,7 +487,8 @@ const Player::SpriteFrame* Player::currentSpriteFrame() const {
     }
 
     const float time = loop ? m_animationTime : m_jumpAnimationTime;
-    size_t index = static_cast<size_t>(time * WorldOneSpriteFramesPerSecond);
+    const float framesPerSecond = loop ? SharedSpriteRunFramesPerSecond : SharedSpriteJumpFramesPerSecond;
+    size_t index = static_cast<size_t>(std::max(0.0f, time) * framesPerSecond);
     index = loop ? index % frames->size() : std::min(index, frames->size() - 1);
     return &(*frames)[index];
 }
@@ -515,6 +550,7 @@ bool Player::loadSpriteSequence(const std::string& folderPath, std::vector<Sprit
 
         SpriteFrame frame;
         frame.mesh = createWorldOneSpriteMesh(texture->width(), texture->height());
+        frame.mirroredMesh = createWorldOneSpriteMesh(texture->width(), texture->height(), true);
         frame.texture = std::move(texture);
         frames.push_back(std::move(frame));
     }
