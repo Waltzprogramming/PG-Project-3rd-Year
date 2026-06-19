@@ -17,9 +17,9 @@ namespace {
 constexpr float WorldOneSpriteHeight = 1.15f;
 constexpr float SharedSpriteRunFramesPerSecond = 12.0f;
 constexpr float SharedSpriteJumpFramesPerSecond = 12.0f;
-constexpr float SharedSpriteWalkSwayFrequency = 9.2f;
-constexpr float SharedSpriteWalkBounce = 0.026f;
-constexpr float SharedSpriteWalkTiltDegrees = 2.8f;
+constexpr float SharedSpriteWalkSwayFrequency = 14.0f;
+constexpr float SharedSpriteWalkBounce = 0.035f;
+constexpr float SharedSpriteWalkTiltDegrees = 4.0f;
 constexpr float SharedPlayerJumpSpeed = 7.25f;
 
 bool intersects(const Bounds& a, const Bounds& b) {
@@ -280,8 +280,9 @@ void Player::update(const PlayerInput& input, const std::vector<Bounds>& collide
     }
 
     const bool movementInputActive = glm::length(input.move) > 0.01f;
-    m_spriteMoving = movementInputActive && m_grounded;
-    if (movementInputActive || !m_grounded) {
+    const float horizontalSpeed = glm::length(glm::vec2(m_velocity.x, m_velocity.z));
+    m_spriteMoving = m_grounded && (movementInputActive || horizontalSpeed > 0.18f);
+    if (m_spriteMoving || !m_grounded) {
         m_animationTime += dt;
     } else {
         m_animationTime = 0.0f;
@@ -451,8 +452,7 @@ glm::mat4 Player::spriteModelMatrix() const {
         yaw = 0.0f;
     }
 
-    const float now = static_cast<float>(glfwGetTime());
-    const float step = m_spriteMoving ? std::sin(now * SharedSpriteWalkSwayFrequency) : 0.0f;
+    const float step = m_spriteMoving ? std::sin(m_animationTime * SharedSpriteWalkSwayFrequency) : 0.0f;
     const float bounce = m_spriteMoving ? std::abs(step) * SharedSpriteWalkBounce : 0.0f;
     const float walkTilt = m_spriteMoving ? step * SharedSpriteWalkTiltDegrees : 0.0f;
     const float jumpStrength = !m_grounded

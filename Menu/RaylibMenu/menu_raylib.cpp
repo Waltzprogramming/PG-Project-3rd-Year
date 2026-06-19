@@ -33,6 +33,7 @@ const Color Muted{158, 168, 176, 255};
 
 enum class MenuScreen {
     Home,
+    HowToPlay,
     Credits,
     Worlds,
     Pause
@@ -425,6 +426,70 @@ void drawCreditsPanel(float entry, float timeSeconds, int width, int height) {
     drawPaperBurst({x + panelWidth - 101.0f, y + panelHeight - 76.0f}, 61.0f, timeSeconds*0.12f, PaperGreen);
     DrawTextEx(GetFontDefault(), "TEAM", {x + panelWidth - 155.0f, y + panelHeight - 96.0f}, 23.0f, 1.0f, Paper);
     DrawTextEx(GetFontDefault(), "PINIX", {x + panelWidth - 164.0f, y + panelHeight - 68.0f}, 37.0f, 1.0f, Paper);
+}
+
+void drawHowToPlayPanel(float entry, int width, int height) {
+    const float panelWidth = std::min(900.0f, width - 170.0f);
+    const float panelHeight = std::min(430.0f, height - 190.0f);
+    const float x = (width - panelWidth)*0.5f + (1.0f - easeOutBack(entry))*width;
+    const float y = std::clamp(height - panelHeight - 60.0f, 170.0f, 230.0f);
+
+    drawQuad(
+        {x + 24.0f, y + 28.0f},
+        {x + panelWidth + 16.0f, y + 12.0f},
+        {x + panelWidth - 8.0f, y + panelHeight + 22.0f},
+        {x + 3.0f, y + panelHeight + 16.0f},
+        withAlpha(Ink, 0.84f));
+    drawQuad(
+        {x - 14.0f, y + 4.0f},
+        {x + panelWidth + 8.0f, y - 10.0f},
+        {x + panelWidth - 16.0f, y + panelHeight + 8.0f},
+        {x - 26.0f, y + panelHeight - 6.0f},
+        DeepGreen);
+    drawQuadOutline(
+        {x - 14.0f, y + 4.0f},
+        {x + panelWidth + 8.0f, y - 10.0f},
+        {x + panelWidth - 16.0f, y + panelHeight + 8.0f},
+        {x - 26.0f, y + panelHeight - 6.0f},
+        7.0f,
+        Paper);
+
+    drawPaperStrip({x + 36.0f, y + 27.0f, panelWidth - 72.0f, 62.0f}, 20.0f, SignalRed, Paper);
+    DrawTextEx(GetFontDefault(), "HOW TO PLAY", {x + 70.0f, y + 39.0f}, 40.0f, 2.0f, Paper);
+    DrawTextEx(GetFontDefault(), "ESSENTIALS BY WORLD", {x + panelWidth - 295.0f, y + 51.0f}, 18.0f, 1.0f, withAlpha(Paper, 0.86f));
+
+    const std::array<const char*, WorldCount> titles{{
+        "WORLD 1",
+        "WORLD 2",
+        "WORLD 3",
+        "WORLD 4"
+    }};
+    const std::array<const char*, WorldCount> controlLines{{
+        "Move with WASD, jump with SPACE, switch 2D/3D with TAB.",
+        "Use TAB for 2D/3D. Press E to dodge in 3D or parry in 2D.",
+        "Shoot in 2D, block with E, and refill light with suns.",
+        "Platform through 2D/3D, shoot with mouse, parry with F."
+    }};
+    const std::array<const char*, WorldCount> clearLines{{
+        "Collect the coins, talk to Toad with F, then take the star.",
+        "Survive the enemy waves and reach the finish line.",
+        "Collect every coin while staying alive.",
+        "Use gems at the shop and claim the final star."
+    }};
+    const std::array<Color, WorldCount> rowColors{{PaperBlue, SignalRed, PaperGreen, DeepBlue}};
+
+    const bool compactRows = panelHeight < 455.0f;
+    const float rowStartY = y + (compactRows ? 112.0f : 118.0f);
+    const float rowHeight = compactRows ? 58.0f : 63.0f;
+    const float rowGap = compactRows ? 9.0f : 15.0f;
+    for (int index = 0; index < WorldCount; ++index) {
+        const float rowY = rowStartY + index*(rowHeight + rowGap);
+        drawPaperStrip({x + 48.0f, rowY, panelWidth - 96.0f, rowHeight}, 13.0f, index%2 == 0 ? withAlpha(Ink, 0.82f) : withAlpha(DeepBlue, 0.86f), Paper);
+        drawPaperStrip({x + 67.0f, rowY + 11.0f, 128.0f, 39.0f}, 10.0f, rowColors[index], Paper);
+        DrawTextEx(GetFontDefault(), titles[index], {x + 84.0f, rowY + 20.0f}, 18.0f, 1.0f, Paper);
+        DrawTextEx(GetFontDefault(), controlLines[index], {x + 222.0f, rowY + 12.0f}, 18.0f, 1.0f, Paper);
+        DrawTextEx(GetFontDefault(), clearLines[index], {x + 222.0f, rowY + 35.0f}, 16.0f, 1.0f, withAlpha(Paper, 0.78f));
+    }
 }
 
 PreviewModel loadTexturedModel(const char* path, Shader lightingShader, Texture2D fallbackTexture) {
@@ -966,12 +1031,15 @@ int main(int argc, char** argv) {
         screen = MenuScreen::Worlds;
     } else if (screenshotPath != nullptr && screenshotScreen != nullptr && std::strcmp(screenshotScreen, "credits") == 0) {
         screen = MenuScreen::Credits;
+    } else if (screenshotPath != nullptr && screenshotScreen != nullptr && std::strcmp(screenshotScreen, "how") == 0) {
+        screen = MenuScreen::HowToPlay;
     } else if (screenshotPath != nullptr && (screenshotScreen == nullptr || std::strcmp(screenshotScreen, "worlds") == 0)) {
         screen = MenuScreen::Worlds;
     }
     float screenStarted = static_cast<float>(GetTime());
-    std::array<float, 2> homeHover{};
+    std::array<float, 3> homeHover{};
     float creditsHover = 0.0f;
+    float howToPlayHover = 0.0f;
     std::array<float, WorldCount> worldHover{};
     std::array<float, 3> pauseHover{};
     int activeWorld = screenshotPath != nullptr ? previewWorld : 0;
@@ -1010,13 +1078,15 @@ int main(int argc, char** argv) {
         drawDynamicBackground(now, width, height);
         const char* eyebrow = screen == MenuScreen::Pause
             ? "PAUSE // PAPER PINIX"
-            : (screen == MenuScreen::Credits ? "CREDITS // TEAM PINIX" : "WORLD SELECT // RAYLIB C++");
+            : (screen == MenuScreen::Credits
+                ? "CREDITS // TEAM PINIX"
+                : (screen == MenuScreen::HowToPlay ? "HOW TO PLAY // QUICK GUIDE" : "WORLD SELECT // RAYLIB C++"));
         drawBrand(now, clamp01(now/0.62f), width, eyebrow);
 
         if (screen == MenuScreen::Home) {
             const float buttonX = 82.0f + easeOutBack(entry)*70.0f;
             AnimatedButton start = drawSkewButton(
-                {buttonX, height - 292.0f, 390.0f, 70.0f},
+                {buttonX, height - 336.0f, 390.0f, 70.0f},
                 "START",
                 ">>",
                 homeHover[0],
@@ -1025,23 +1095,37 @@ int main(int argc, char** argv) {
                 PaperBlue);
             homeHover[0] = start.hover;
 
-            AnimatedButton credits = drawSkewButton(
-                {buttonX + 18.0f, height - 208.0f, 354.0f, 62.0f},
-                "CREDITS",
-                "+",
+            AnimatedButton howToPlay = drawSkewButton(
+                {buttonX + 9.0f, height - 252.0f, 372.0f, 62.0f},
+                "HOW TO PLAY",
+                "?",
                 homeHover[1],
                 true,
                 now,
-                PaperGreen);
-            homeHover[1] = credits.hover;
+                SignalRed);
+            homeHover[1] = howToPlay.hover;
 
-            drawPaperStrip({75.0f, height - 126.0f, 425.0f, 38.0f}, 13.0f, DeepGreen, Paper);
-            DrawTextEx(GetFontDefault(), "CHOOSE YOUR NEXT DESTINATION", {93.0f, height - 118.0f}, 23.0f, 1.0f, Paper);
+            AnimatedButton credits = drawSkewButton(
+                {buttonX + 18.0f, height - 180.0f, 354.0f, 62.0f},
+                "CREDITS",
+                "+",
+                homeHover[2],
+                true,
+                now,
+                PaperGreen);
+            homeHover[2] = credits.hover;
+
+            drawPaperStrip({75.0f, height - 102.0f, 425.0f, 38.0f}, 13.0f, DeepGreen, Paper);
+            DrawTextEx(GetFontDefault(), "CHOOSE YOUR NEXT DESTINATION", {93.0f, height - 94.0f}, 23.0f, 1.0f, Paper);
             DrawTextEx(GetFontDefault(), "ESC  EXIT", {46.0f, height - 42.0f}, 18.0f, 1.0f, Ink);
             drawMusicStatus(now, width, height, musicLoaded || screenshotPath != nullptr);
 
             if (start.hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 screen = MenuScreen::Worlds;
+                screenStarted = now;
+            }
+            if (howToPlay.hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                screen = MenuScreen::HowToPlay;
                 screenStarted = now;
             }
             if (credits.hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -1051,6 +1135,22 @@ int main(int argc, char** argv) {
             if (IsKeyPressed(KEY_ESCAPE)) {
                 resultCode = 0;
                 finished = true;
+            }
+        } else if (screen == MenuScreen::HowToPlay) {
+            drawHowToPlayPanel(entry, width, height);
+            AnimatedButton back = drawSkewButton(
+                {56.0f, height - 94.0f, 252.0f, 56.0f},
+                "BACK",
+                "<",
+                howToPlayHover,
+                true,
+                now,
+                SignalRed);
+            howToPlayHover = back.hover;
+
+            if ((back.hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) || IsKeyPressed(KEY_ESCAPE)) {
+                screen = MenuScreen::Home;
+                screenStarted = now;
             }
         } else if (screen == MenuScreen::Credits) {
             drawCreditsPanel(entry, now, width, height);

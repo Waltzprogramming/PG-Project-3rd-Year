@@ -3127,6 +3127,27 @@ struct Mapa1::Impl {
         }
     }
 
+    void drawRedSphereProjectile(const glm::vec3& position, bool fromPlayer, bool charged, float timeSeconds, float phase) {
+        static Mesh projectileMesh = Mesh::sphere(18, 9, 0.5f);
+
+        const float pulse = 0.94f + std::sin(timeSeconds * 16.0f + phase) * 0.06f;
+        const float hotCorePulse = 0.90f + std::abs(std::sin(timeSeconds * 24.0f + phase * 0.7f)) * 0.12f;
+        const float chargedScale = charged ? 1.28f : 1.0f;
+        const float ownerScale = fromPlayer ? 1.0f : 0.92f;
+
+        auto drawLayer = [&](float radius, const glm::vec4& color) {
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
+            model = glm::scale(model, glm::vec3(radius * chargedScale * ownerScale));
+            drawColoredMesh(projectileMesh, model, color);
+        };
+
+        glDepthMask(GL_FALSE);
+        drawLayer(0.33f * pulse, { 1.00f, 0.03f, 0.04f, 0.28f });
+        drawLayer(0.21f, { 1.00f, 0.11f, 0.07f, fromPlayer ? 0.92f : 0.82f });
+        drawLayer(0.095f * hotCorePulse, { 1.00f, 0.74f, 0.64f, 1.0f });
+        glDepthMask(GL_TRUE);
+    }
+
     float renderedDepth(float depth, bool projectIn2D) const {
         return projectIn2D && !mode3D ? posZ : depth;
     }
@@ -3281,19 +3302,8 @@ struct Mapa1::Impl {
         for (const Projectile& projectile : projectiles) {
             const float renderZ = renderedDepth(projectile.position.z, true) - posZ + (!mode3D ? 0.28f : 0.0f);
             const glm::vec3 renderPosition{ projectile.position.x - posX, projectile.position.y, renderZ };
-            if (projectile.cornVisual && projectileCornLoaded) {
-                const float length = CornProjectileLength * (projectile.charged ? 1.45f : 1.0f);
-                drawCornProjectile(normalizedCornMatrix(renderPosition, projectile.velocity, length));
-            }
-            else {
-                const float length = ProjectileSwordLength * (projectile.charged ? 1.55f : 1.0f);
-                const glm::mat4 model = normalizedSwordMatrix(renderPosition, projectile.velocity, length);
-                drawSwordModel(
-                    model,
-                    projectile.fromPlayer
-                    ? glm::vec4(0.18f, 0.66f, 1.00f, 1.0f)
-                    : glm::vec4(1.00f, 0.16f, 0.10f, 1.0f));
-            }
+            const float phase = projectile.position.x * 2.3f + projectile.position.y * 1.7f + projectile.lifetime;
+            drawRedSphereProjectile(renderPosition, projectile.fromPlayer, projectile.charged, static_cast<float>(glfwGetTime()), phase);
         }
     }
 
@@ -3325,15 +3335,10 @@ struct Mapa1::Impl {
     void drawCombatEffects(float now) {
         if (chargingPlayerAttack && !mode3D) {
             const float ratio = std::clamp(playerChargeTime / PlayerChargeTime, 0.0f, 1.0f);
-            const float previewLength = ProjectileSwordLength * (0.42f + ratio * 1.13f);
-            const glm::vec3 offset = playerAimDirection * (0.42f + previewLength * 0.34f);
+            const float previewDistance = 0.50f + ratio * 0.28f;
+            const glm::vec3 offset = playerAimDirection * previewDistance;
             const glm::vec3 previewPosition{ offset.x, posY + 0.62f + offset.y, 0.36f };
-            if (projectileCornLoaded) {
-                drawCornProjectile(normalizedCornMatrix(previewPosition, playerAimDirection, CornProjectileLength * (0.55f + ratio * 0.95f)));
-            }
-            else {
-                drawSwordModel(normalizedSwordMatrix(previewPosition, playerAimDirection, previewLength), { 0.18f, 0.66f, 1.00f, 1.0f });
-            }
+            drawRedSphereProjectile(previewPosition, true, ratio > 0.65f, now, ratio * 7.0f);
         }
 
         if (now <= spectralEffectUntil) {
