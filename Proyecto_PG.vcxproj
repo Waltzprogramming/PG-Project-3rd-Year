@@ -111,7 +111,7 @@ copy /Y "$(ProjectDir)External\GLFW\lib-vc2022\glfw3.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="source\*.cpp" />
+    <ClCompile Include="source\*.cpp" Exclude="source\mapa1.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="headers\*.h" />

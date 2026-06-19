@@ -96,7 +96,7 @@ namespace {
     constexpr float VanPromptVerticalRange = 4.80f;
     constexpr float VanRenderRangeX = 30.0f;
     constexpr float VanRenderRangeZ = 30.0f;
-    constexpr float VanModelDisplaySize = 7.80f;
+    constexpr float VanModelDisplaySize = PlayerSpriteHeight;
     constexpr float GemModelDisplaySize = 0.62f;
     constexpr float PlayerSpawnDistanceFromVan = 2.25f;
     constexpr float SpectralStepCooldown = 0.75f;
