@@ -297,6 +297,11 @@ bool map3PlayerPushingInvisibleWall(const Player& player, const PlayerInput& inp
     probe.center += direction * Map3InvisibleWallProbeDistance;
     probe.halfExtent += glm::vec3(0.018f, 0.0f, 0.018f);
     for (const Bounds& wall : invisibleWalls) {
+        const float positiveXFace = wall.center.x + wall.halfExtent.x;
+        const bool backwardBoundaryWall = std::abs(positiveXFace - Map3BackwardWallX) <= Map3InvisibleWallHalfThickness;
+        if (backwardBoundaryWall) {
+            continue;
+        }
         if (map3BoundsIntersect(probe, wall)) {
             return true;
         }
@@ -647,16 +652,6 @@ void updateMap3GameplayCamera(const Player& player, const Environment& environme
         gameplayCameraPosition = glm::mix(gameplayCameraPosition, desiredPosition, positionSmoothing);
         gameplayCameraTarget = glm::mix(gameplayCameraTarget, desiredTarget, targetSmoothing);
     }
-}
-
-std::wstring formatMap3PlayerX(float x) {
-    const int tenths = static_cast<int>(std::lround(x * 10.0f));
-    const int absoluteTenths = std::abs(tenths);
-    std::wstring value = tenths < 0 ? L"-" : L"";
-    value += std::to_wstring(absoluteTenths / 10);
-    value += L".";
-    value += std::to_wstring(absoluteTenths % 10);
-    return value;
 }
 
 Mesh createMap3ActionMesh() {
@@ -1879,14 +1874,8 @@ bool map3DefensiveActionActive(const Map3Runtime& map3, float timeSeconds) {
 }
 
 void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, int height) {
-    static int cachedXTenths = std::numeric_limits<int>::min();
     static TextSprite startHint;
     static TextSprite invisibleWallNotice;
-    const int currentXTenths = static_cast<int>(std::lround(map3.player.position().x * 10.0f));
-    if (currentXTenths != cachedXTenths || !menu.map3PlayerX.texture || !menu.map3PlayerX.texture->valid()) {
-        cachedXTenths = currentXTenths;
-        menu.map3PlayerX = createTextSprite(formatMap3PlayerX(map3.player.position().x), 38, glm::vec3(1.0f), 180, false, true);
-    }
     if (!startHint.texture || !startHint.texture->valid()) {
         startHint = createTextSprite(
             L"Reach the end to win. Try not to die on the way.",
@@ -1907,16 +1896,8 @@ void drawMap3PositionHud(MenuContext& menu, const Map3Runtime& map3, int width, 
     }
 
     beginUiFrame(menu, width, height);
-    const float panelWidth = std::max(116.0f, menu.map3PlayerX.size.x + 34.0f);
-    const Rect panel = centeredRect(width * 0.5f, 20.0f, panelWidth, 56.0f);
-    drawRect(menu, {panel.x + 5.0f, panel.y + 6.0f, panel.width, panel.height}, {0.01f, 0.02f, 0.05f, 0.46f});
-    drawRect(menu, panel, {0.06f, 0.16f, 0.30f, 0.88f});
-    drawText(menu, menu.map3PlayerX,
-        panel.x + (panel.width - menu.map3PlayerX.size.x) * 0.5f,
-        panel.y + (panel.height - menu.map3PlayerX.size.y) * 0.5f - 1.0f);
-
     const float currentTime = static_cast<float>(glfwGetTime());
-    float nextNoticeY = panel.y + panel.height + 12.0f;
+    float nextNoticeY = 20.0f;
     auto drawNotice = [&](const TextSprite& text, const glm::vec4& tint) {
         const float maxPanelWidth = std::max(280.0f, static_cast<float>(width) - 48.0f);
         const float noticeWidth = std::min(maxPanelWidth, std::max(560.0f, text.size.x + 44.0f));

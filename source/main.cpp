@@ -1651,7 +1651,7 @@ void drawSpinningCoinIcon(MenuContext& menu, const Texture2D& coinIcon, float x,
 }
 
 template <typename Mission>
-void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int height, float timeSeconds) {
+void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int height, float timeSeconds, bool showStarUnlockedMessage = false) {
     // Reúne contador, mensajes temporales y paneles de victoria del objetivo del nivel.
     beginUiFrame(menu, width, height);
 
@@ -1673,7 +1673,7 @@ void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int he
         drawSpinningCoinIcon(menu, mission.coinIconTexture(), messagePanel.x + messagePanel.width - 57.0f, messagePanel.y + 12.0f, 38.0f, timeSeconds);
     }
 
-    if (mission.showStarMessage(timeSeconds)) {
+    if (showStarUnlockedMessage && mission.showStarMessage(timeSeconds)) {
         const Rect starPanel = centeredRect(width * 0.5f, 162.0f, 430.0f, 58.0f);
         drawRect(menu, {starPanel.x + 6.0f, starPanel.y + 7.0f, starPanel.width, starPanel.height}, {0.01f, 0.02f, 0.05f, 0.42f});
         drawRect(menu, starPanel, {0.10f, 0.27f, 0.52f, 0.94f});
@@ -1689,7 +1689,7 @@ void drawMissionHud(MenuContext& menu, const Mission& mission, int width, int he
 }
 
 void drawMissionManagerHud(MenuContext& menu, const MissionManager& mission, int width, int height, float timeSeconds) {
-    drawMissionHud(menu, mission, width, height, timeSeconds);
+    drawMissionHud(menu, mission, width, height, timeSeconds, true);
 }
 
 void drawRedGemIcon(MenuContext& menu, const Texture2D& texture, const Rect& rect, float timeSeconds) {
@@ -2043,10 +2043,15 @@ void drawMapa4EndHud(MenuContext& menu, bool levelCompleted, int width, int heig
 
     const TextSprite& title = levelCompleted ? menu.nivelCompletado : menu.juegoTerminado;
     const TextSprite& detail = levelCompleted ? menu.mapa4FinalDetalleVictoria : menu.mapa4FinalDetalleDerrota;
-    drawText(menu, title, panel.x + (panel.width - title.size.x) * 0.5f, panel.y + 42.0f, {0.08f, 0.10f, 0.18f, 0.42f});
-    drawText(menu, title, panel.x + (panel.width - title.size.x) * 0.5f, panel.y + 34.0f);
-    drawText(menu, detail, panel.x + (panel.width - detail.size.x) * 0.5f, panel.y + 148.0f, {0.94f, 0.96f, 1.0f, 0.98f});
-    drawText(menu, menu.mapa4FinalContinuar, panel.x + (panel.width - menu.mapa4FinalContinuar.size.x) * 0.5f, panel.y + 228.0f, {0.88f, 0.93f, 1.0f, 0.96f});
+    if (levelCompleted) {
+        drawText(menu, title, panel.x + (panel.width - title.size.x) * 0.5f, panel.y + (panel.height - title.size.y) * 0.5f, {0.08f, 0.10f, 0.18f, 0.42f});
+        drawText(menu, title, panel.x + (panel.width - title.size.x) * 0.5f, panel.y + (panel.height - title.size.y) * 0.5f - 8.0f);
+    } else {
+        drawText(menu, title, panel.x + (panel.width - title.size.x) * 0.5f, panel.y + 42.0f, {0.08f, 0.10f, 0.18f, 0.42f});
+        drawText(menu, title, panel.x + (panel.width - title.size.x) * 0.5f, panel.y + 34.0f);
+        drawText(menu, detail, panel.x + (panel.width - detail.size.x) * 0.5f, panel.y + 148.0f, {0.94f, 0.96f, 1.0f, 0.98f});
+        drawText(menu, menu.mapa4FinalContinuar, panel.x + (panel.width - menu.mapa4FinalContinuar.size.x) * 0.5f, panel.y + 228.0f, {0.88f, 0.93f, 1.0f, 0.96f});
+    }
 }
 
 void drawLevelCompleteHud(MenuContext& menu, int width, int height) {
@@ -2060,12 +2065,7 @@ void drawLevelCompleteHud(MenuContext& menu, int width, int height) {
     drawRect(menu, {panel.x + 10.0f, panel.y + 12.0f, panel.width, panel.height}, {0.0f, 0.0f, 0.0f, 0.44f});
     drawRect(menu, {panel.x - 5.0f, panel.y - 5.0f, panel.width + 10.0f, panel.height + 10.0f}, {0.99f, 0.82f, 0.20f, 0.96f});
     drawPanel(menu, panel);
-    const Rect ribbon = centeredRect(width * 0.5f, panel.y + 22.0f, 320.0f, 40.0f);
-    drawRect(menu, ribbon, {0.92f, 0.18f, 0.16f, 0.96f});
-    drawText(menu, menu.estrellaLista, ribbon.x + (ribbon.width - menu.estrellaLista.size.x) * 0.5f, ribbon.y + (ribbon.height - menu.estrellaLista.size.y) * 0.5f, {1.0f, 0.92f, 0.24f, 1.0f});
-    drawText(menu, menu.nivelCompletado, panel.x + (panel.width - menu.nivelCompletado.size.x) * 0.5f, panel.y + 78.0f);
-    drawText(menu, menu.nivelCompletadoDetalle, panel.x + (panel.width - menu.nivelCompletadoDetalle.size.x) * 0.5f, panel.y + 146.0f, {0.94f, 0.96f, 1.0f, 0.98f});
-    drawText(menu, menu.juegoTerminadoContinuar, panel.x + (panel.width - menu.juegoTerminadoContinuar.size.x) * 0.5f, panel.y + 198.0f, {0.94f, 0.96f, 1.0f, 0.96f});
+    drawText(menu, menu.nivelCompletado, panel.x + (panel.width - menu.nivelCompletado.size.x) * 0.5f, panel.y + (panel.height - menu.nivelCompletado.size.y) * 0.5f);
 }
 
 void drawMundo1VictoryHud(MenuContext& menu, int width, int height) {
@@ -2082,9 +2082,7 @@ void drawMundo1VictoryHud(MenuContext& menu, int width, int height) {
     const Rect ribbon = centeredRect(width * 0.5f, panel.y + 22.0f, 320.0f, 40.0f);
     drawRect(menu, ribbon, {0.92f, 0.18f, 0.16f, 0.96f});
     drawText(menu, menu.estrellaLista, ribbon.x + (ribbon.width - menu.estrellaLista.size.x) * 0.5f, ribbon.y + (ribbon.height - menu.estrellaLista.size.y) * 0.5f, {1.0f, 0.92f, 0.24f, 1.0f});
-    drawText(menu, menu.mundo1Victoria, panel.x + (panel.width - menu.mundo1Victoria.size.x) * 0.5f, panel.y + 78.0f);
-    drawText(menu, menu.mundo1VictoriaDetalle, panel.x + (panel.width - menu.mundo1VictoriaDetalle.size.x) * 0.5f, panel.y + 146.0f, {0.94f, 0.96f, 1.0f, 0.98f});
-    drawText(menu, menu.juegoTerminadoContinuar, panel.x + (panel.width - menu.juegoTerminadoContinuar.size.x) * 0.5f, panel.y + 198.0f, {0.94f, 0.96f, 1.0f, 0.96f});
+    drawText(menu, menu.nivelCompletado, panel.x + (panel.width - menu.nivelCompletado.size.x) * 0.5f, panel.y + 110.0f);
 }
 
 void mostrarMenuPrincipal(MenuContext& menu, int width, int height, float timeSeconds, const glm::vec2& mouse, bool clicked, GLFWwindow* window) {
