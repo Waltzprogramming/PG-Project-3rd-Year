@@ -48,6 +48,7 @@ constexpr float LevelIntroFarHoldSeconds = 2.0f;
 constexpr float LevelIntroZoomSeconds = 1.35f;
 constexpr int RaylibPauseResume = 10;
 constexpr int RaylibPauseExit = 11;
+constexpr int RaylibWorldCount = 4;
 
 enum class EstadoJuego {
     MENU_PRINCIPAL,
@@ -87,6 +88,7 @@ glm::vec3 gameplayCameraPosition{0.0f, 6.0f, 14.0f};
 glm::vec3 gameplayCameraTarget{0.0f, 2.0f, 0.0f};
 bool cameraInitialized = false;
 double modeSwitchUnavailableUntil = 0.0;
+int highestUnlockedRaylibWorld = 1;
 
 struct LevelIntroCameraState {
     bool active{false};
@@ -163,6 +165,55 @@ EstadoJuego estadoDesdeSeleccionRaylib(int selectedWorld) {
 
 bool seleccionRaylibEsMundo(int selectedWorld) {
     return selectedWorld >= 1 && selectedWorld <= 4;
+}
+
+bool mundoRaylibDesbloqueado(int selectedWorld) {
+    return seleccionRaylibEsMundo(selectedWorld) && selectedWorld <= highestUnlockedRaylibWorld;
+}
+
+bool solicitarCargaSeleccionRaylib(int selectedWorld) {
+    if (!mundoRaylibDesbloqueado(selectedWorld)) {
+        return false;
+    }
+
+    solicitarCargaMundo(estadoDesdeSeleccionRaylib(selectedWorld));
+    return true;
+}
+
+int numeroMundoRaylib(EstadoJuego state) {
+    switch (state) {
+    case EstadoJuego::MUNDO_1:
+        return 1;
+    case EstadoJuego::MUNDO_2:
+        return 2;
+    case EstadoJuego::MUNDO_3:
+        return 3;
+    case EstadoJuego::MUNDO_4:
+        return 4;
+    default:
+        return 0;
+    }
+}
+
+void registrarMundoCompletadoRaylib(EstadoJuego completedState) {
+    const int completedWorld = numeroMundoRaylib(completedState);
+    if (completedWorld > 0 && completedWorld < RaylibWorldCount) {
+        highestUnlockedRaylibWorld = std::max(highestUnlockedRaylibWorld, completedWorld + 1);
+    }
+}
+
+std::wstring raylibMenuArguments(const std::wstring& modeArguments = L"", bool showGameCompleteMessage = false) {
+    std::wstring arguments = modeArguments;
+    if (!arguments.empty()) {
+        arguments += L" ";
+    }
+
+    arguments += L"--unlocked ";
+    arguments += std::to_wstring(std::clamp(highestUnlockedRaylibWorld, 1, RaylibWorldCount));
+    if (showGameCompleteMessage) {
+        arguments += L" --game-complete";
+    }
+    return arguments;
 }
 
 bool gameOverContinuePressed(GLFWwindow* window) {
@@ -286,16 +337,16 @@ int runRaylibMenuProcess(const std::wstring& arguments = L"") {
     return -1;
 }
 
-int runRaylibWorldMenu() {
-    return runRaylibMenuProcess();
+int runRaylibWorldMenu(bool showGameCompleteMessage = false) {
+    return runRaylibMenuProcess(raylibMenuArguments(L"", showGameCompleteMessage));
 }
 
 int runRaylibWorldSelectorMenu() {
-    return runRaylibMenuProcess(L"--worlds");
+    return runRaylibMenuProcess(raylibMenuArguments(L"--worlds"));
 }
 
 int runRaylibPauseMenu() {
-    return runRaylibMenuProcess(L"--pause");
+    return runRaylibMenuProcess(raylibMenuArguments(L"--pause"));
 }
 
 std::string resolveFirstExistingAsset(const std::initializer_list<std::string>& paths) {
@@ -2365,11 +2416,11 @@ int runRaylibWorldMenuForWindow(GLFWwindow* window) {
     return selectedWorld;
 }
 
-int runRaylibMainMenuForWindow(GLFWwindow* window) {
+int runRaylibMainMenuForWindow(GLFWwindow* window, bool showGameCompleteMessage = false) {
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     glfwHideWindow(window);
     glfwMakeContextCurrent(nullptr);
-    const int selectedWorld = runRaylibWorldMenu();
+    const int selectedWorld = runRaylibWorldMenu(showGameCompleteMessage);
     glfwMakeContextCurrent(window);
     applyLastRaylibMenuWindowPosition(window);
     glfwShowWindow(window);
@@ -2401,16 +2452,33 @@ void cerrarMundoActual(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa
     }
 }
 
+bool mundoActualCompletado(EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
+    switch (currentState) {
+    case EstadoJuego::MUNDO_1:
+        return mundo2.mission.levelComplete();
+    case EstadoJuego::MUNDO_2:
+        return map3.mission.levelComplete();
+    case EstadoJuego::MUNDO_3:
+        return mapa4.mission.levelComplete();
+    case EstadoJuego::MUNDO_4:
+        return mapa1.levelComplete();
+    default:
+        return false;
+    }
+}
+
 void volverASeleccionDeMundos(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
+    if (mundoActualCompletado(currentState, mapa1, mundo2, map3, mapa4)) {
+        registrarMundoCompletadoRaylib(currentState);
+    }
+
     cerrarMundoActual(window, currentState, mapa1, mundo2, map3, mapa4);
     loadingTarget = EstadoJuego::MENU_PRINCIPAL;
     loadingScreenPresented = false;
     modeSwitchUnavailableUntil = 0.0;
 
     const int selectedWorld = runRaylibWorldMenuForWindow(window);
-    if (seleccionRaylibEsMundo(selectedWorld)) {
-        solicitarCargaMundo(estadoDesdeSeleccionRaylib(selectedWorld));
-    } else {
+    if (!solicitarCargaSeleccionRaylib(selectedWorld)) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
 
@@ -2418,18 +2486,20 @@ void volverASeleccionDeMundos(GLFWwindow* window, EstadoJuego currentState, Mapa
     updateCursorMode(window);
 }
 
-void volverAlMenuPrincipalDesdeMundo(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4) {
+void volverAlMenuPrincipalDesdeMundo(GLFWwindow* window, EstadoJuego currentState, Mapa1& mapa1, Mundo2Runtime& mundo2, Map3Runtime& map3, Mapa4Runtime& mapa4, bool showGameCompleteMessage = false) {
+    if (mundoActualCompletado(currentState, mapa1, mundo2, map3, mapa4)) {
+        registrarMundoCompletadoRaylib(currentState);
+    }
+
     cerrarMundoActual(window, currentState, mapa1, mundo2, map3, mapa4);
     loadingTarget = EstadoJuego::MENU_PRINCIPAL;
     loadingScreenPresented = false;
     modeSwitchUnavailableUntil = 0.0;
 
-    const int selectedWorld = runRaylibMainMenuForWindow(window);
+    const int selectedWorld = runRaylibMainMenuForWindow(window, showGameCompleteMessage);
     if (selectedWorld == 0) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
-    } else if (seleccionRaylibEsMundo(selectedWorld)) {
-        solicitarCargaMundo(estadoDesdeSeleccionRaylib(selectedWorld));
-    } else {
+    } else if (!solicitarCargaSeleccionRaylib(selectedWorld)) {
         appState = EstadoJuego::MENU_PRINCIPAL;
     }
 
@@ -2445,9 +2515,9 @@ void aplicarAccionPausaRaylib(
     Mundo2Runtime& mundo2,
     Map3Runtime& map3,
     Mapa4Runtime& mapa4) {
-    if (seleccionRaylibEsMundo(pauseAction)) {
+    if (seleccionRaylibEsMundo(pauseAction) && mundoRaylibDesbloqueado(pauseAction)) {
         cerrarMundoActual(window, pausedState, mapa1, mundo2, map3, mapa4);
-        solicitarCargaMundo(estadoDesdeSeleccionRaylib(pauseAction));
+        solicitarCargaSeleccionRaylib(pauseAction);
     } else if (pauseAction == RaylibPauseExit) {
         cerrarMundoActual(window, pausedState, mapa1, mundo2, map3, mapa4);
         glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -2865,8 +2935,8 @@ int main(int argc, char** argv) {
         if (selectedWorld == 0) {
             return 0;
         }
-        if (seleccionRaylibEsMundo(selectedWorld)) {
-            solicitarCargaMundo(estadoDesdeSeleccionRaylib(selectedWorld));
+        if (!solicitarCargaSeleccionRaylib(selectedWorld)) {
+            return 0;
         }
     }
 
@@ -3044,7 +3114,7 @@ int main(int argc, char** argv) {
                 if (mapa1.levelComplete()) {
                     drawLevelCompleteHud(menu, width, height);
                     if (gameOverContinuePressed(window)) {
-                        volverASeleccionDeMundos(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4);
+                        volverAlMenuPrincipalDesdeMundo(window, EstadoJuego::MUNDO_4, mapa1, mundo2, map3, mapa4, true);
                     }
                 }
             }

@@ -30,6 +30,9 @@ const Color DeepRed{119, 14, 27, 255};
 const Color PaperGreen{35, 151, 91, 255};
 const Color DeepGreen{13, 78, 48, 255};
 const Color Muted{158, 168, 176, 255};
+const char* LockedWorldMessage = "You don´t have this level unlocked yet, complete the previus levels to get this one";
+const char* GameCompleteMessageLine1 = "Congratulations for playing PinixPaper,";
+const char* GameCompleteMessageLine2 = "you are now one of the PinixFamily!";
 
 enum class MenuScreen {
     Home,
@@ -379,6 +382,40 @@ void drawMusicStatus(float timeSeconds, int width, int height, bool musicLoaded)
     DrawTextEx(GetFontDefault(), musicLoaded ? "NOW PLAYING" : "AUDIO UNAVAILABLE", {x + 112.0f, y + 13.0f}, 17.0f, 1.0f, PaperGreen);
     DrawTextEx(GetFontDefault(), "BREAKING THE LIMITS", {x + 112.0f, y + 36.0f}, 24.0f, 1.0f, Paper);
     DrawTextEx(GetFontDefault(), "MAIN MENU", {x + 112.0f, y + 62.0f}, 13.0f, 1.0f, withAlpha(Paper, 0.72f));
+}
+
+void drawNoticePanel(const char* text, float y, int width, Color accent) {
+    const float fontSize = 19.0f;
+    const Vector2 textSize = MeasureTextEx(GetFontDefault(), text, fontSize, 1.0f);
+    const float panelWidth = std::min(static_cast<float>(width) - 72.0f, textSize.x + 54.0f);
+    const float x = (static_cast<float>(width) - panelWidth)*0.5f;
+    drawPaperStrip({x + 8.0f, y + 9.0f, panelWidth, 52.0f}, 14.0f, withAlpha(Ink, 0.82f));
+    drawPaperStrip({x, y, panelWidth, 52.0f}, 14.0f, accent, Paper);
+    DrawTextEx(GetFontDefault(), text, {x + (panelWidth - textSize.x)*0.5f, y + 17.0f}, fontSize, 1.0f, Paper);
+}
+
+void drawInvertedExclamation(Vector2 position, float fontSize, Color color) {
+    DrawCircleV({position.x + 5.0f, position.y + 5.0f}, 2.7f, color);
+    DrawRectangleRounded({position.x + 3.0f, position.y + 13.0f, 4.4f, fontSize - 12.0f}, 0.7f, 6, color);
+}
+
+void drawGameCompleteNotice(float timeSeconds, int width, int height) {
+    const float pulse = 0.88f + std::sin(timeSeconds*5.0f)*0.08f;
+    const float fontSize = 23.0f;
+    const Vector2 firstSize = MeasureTextEx(GetFontDefault(), GameCompleteMessageLine1, fontSize, 1.0f);
+    const Vector2 secondSize = MeasureTextEx(GetFontDefault(), GameCompleteMessageLine2, fontSize, 1.0f);
+    const float firstLineWidth = 17.0f + firstSize.x;
+    const float panelWidth = std::min(static_cast<float>(width) - 82.0f, std::max(firstLineWidth, secondSize.x) + 72.0f);
+    const float panelHeight = 92.0f;
+    const float x = std::max(420.0f, static_cast<float>(width) - panelWidth - 70.0f);
+    const float y = 258.0f;
+    const float firstLineX = x + (panelWidth - firstLineWidth)*0.5f;
+    drawPaperStrip({x + 10.0f, y + 12.0f, panelWidth, panelHeight}, 18.0f, withAlpha(Ink, 0.84f));
+    drawPaperStrip({x, y, panelWidth, panelHeight}, 18.0f, withAlpha(DeepGreen, pulse), Paper);
+    DrawRectangle(static_cast<int>(x + 18.0f), static_cast<int>(y + 16.0f), 6, static_cast<int>(panelHeight - 32.0f), SignalRed);
+    drawInvertedExclamation({firstLineX, y + 22.0f}, fontSize, Paper);
+    DrawTextEx(GetFontDefault(), GameCompleteMessageLine1, {firstLineX + 17.0f, y + 22.0f}, fontSize, 1.0f, Paper);
+    DrawTextEx(GetFontDefault(), GameCompleteMessageLine2, {x + (panelWidth - secondSize.x)*0.5f, y + 52.0f}, fontSize, 1.0f, Paper);
 }
 
 void drawCreditsPanel(float entry, float timeSeconds, int width, int height) {
@@ -925,6 +962,14 @@ const char* argumentValue(int argc, char** argv, const char* argument) {
     return nullptr;
 }
 
+int unlockedWorldCountFromArguments(int argc, char** argv) {
+    const char* value = argumentValue(argc, argv, "--unlocked");
+    if (value == nullptr) {
+        return 1;
+    }
+    return std::clamp(std::atoi(value), 1, WorldCount);
+}
+
 void writeWindowPosition(const char* path) {
     if (path == nullptr || path[0] == '\0') {
         return;
@@ -949,6 +994,8 @@ int main(int argc, char** argv) {
 
     const bool pauseMode = hasArgument(argc, argv, "--pause");
     const bool startWorlds = hasArgument(argc, argv, "--worlds") || hasArgument(argc, argv, "--world-select");
+    const bool showGameCompleteNotice = hasArgument(argc, argv, "--game-complete");
+    const int unlockedWorlds = unlockedWorldCountFromArguments(argc, argv);
     const char* screenshotPath = argumentValue(argc, argv, "--screenshot");
     const char* screenshotScreen = argumentValue(argc, argv, "--screen");
     const char* windowPositionOutPath = argumentValue(argc, argv, "--window-position-out");
@@ -1043,9 +1090,13 @@ int main(int argc, char** argv) {
     std::array<float, WorldCount> worldHover{};
     std::array<float, 3> pauseHover{};
     int activeWorld = screenshotPath != nullptr ? previewWorld : 0;
+    if (screenshotPath == nullptr) {
+        activeWorld = std::clamp(activeWorld, 0, unlockedWorlds - 1);
+    }
     int resultCode = pauseMode ? PauseResume : 0;
     int screenshotFrame = 0;
     float unavailableUntil = 0.0f;
+    float gameCompleteNoticeUntil = showGameCompleteNotice ? static_cast<float>(GetTime()) + 6.5f : 0.0f;
     bool finished = false;
 
     while (!WindowShouldClose() && !finished) {
@@ -1065,7 +1116,7 @@ int main(int argc, char** argv) {
             if (screenshotPath == nullptr) {
                 for (int index = 0; index < WorldCount; ++index) {
                     const Rectangle hitbox{42.0f, 280.0f + index*76.0f, 360.0f, 62.0f};
-                    if (CheckCollisionPointRec(GetMousePosition(), hitbox)) {
+                    if (index < unlockedWorlds && worlds[index].available && CheckCollisionPointRec(GetMousePosition(), hitbox)) {
                         activeWorld = index;
                     }
                 }
@@ -1176,6 +1227,7 @@ int main(int argc, char** argv) {
             const std::array<const char*, 3> labels{"RESUME", "CHANGE WORLD", "EXIT"};
             const std::array<const char*, 3> tags{">>", "[]", "X"};
             for (int index = 0; index < 3; ++index) {
+                const bool buttonEnabled = index != 1 || unlockedWorlds > 1;
                 const float stagger = clamp01(entry*1.55f - index*0.12f);
                 const float x = -430.0f + easeOutBack(stagger)*514.0f;
                 AnimatedButton button = drawSkewButton(
@@ -1183,7 +1235,7 @@ int main(int argc, char** argv) {
                     labels[index],
                     tags[index],
                     pauseHover[index],
-                    true,
+                    buttonEnabled,
                     now,
                     index == 0 ? PaperBlue : (index == 1 ? PaperGreen : SignalRed));
                 pauseHover[index] = button.hover;
@@ -1238,28 +1290,33 @@ int main(int argc, char** argv) {
             DrawTextEx(GetFontDefault(), "CHOOSE WORLD", {46.0f, 237.0f}, 27.0f, 1.0f, Paper);
 
             for (int index = 0; index < WorldCount; ++index) {
+                const bool worldUnlocked = index < unlockedWorlds && worlds[index].available;
                 const float stagger = clamp01(entry*1.45f - index*0.10f);
                 const float x = -410.0f + easeOutBack(stagger)*452.0f;
+                const Rectangle buttonBounds{x, 280.0f + index*76.0f, 360.0f, 62.0f};
                 char tag[8]{};
                 std::snprintf(tag, sizeof(tag), "%02d", index + 1);
                 AnimatedButton button = drawSkewButton(
-                    {x, 280.0f + index*76.0f, 360.0f, 62.0f},
+                    buttonBounds,
                     worlds[index].title,
                     tag,
                     worldHover[index],
-                    true,
+                    worldUnlocked,
                     now,
                     worlds[index].accent);
                 worldHover[index] = button.hover;
 
-                if (button.hovered && screenshotPath == nullptr) {
-                    activeWorld = index;
+                const bool rawHovered = screenshotPath == nullptr && CheckCollisionPointRec(GetMousePosition(), buttonBounds);
+                if (rawHovered && screenshotPath == nullptr) {
+                    if (worldUnlocked) {
+                        activeWorld = index;
+                    }
                     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                        if (worlds[index].available) {
+                        if (worldUnlocked) {
                             resultCode = index + 1;
                             finished = true;
                         } else {
-                            unavailableUntil = now + 1.7f;
+                            unavailableUntil = now + 2.6f;
                         }
                     }
                 }
@@ -1269,15 +1326,18 @@ int main(int argc, char** argv) {
             DrawTextEx(GetFontDefault(), pauseMode ? "ESC  RESUME" : "ESC  BACK", {47.0f, height - 42.0f}, 18.0f, 1.0f, withAlpha(Paper, 0.70f));
 
             if (now < unavailableUntil) {
-                const float pulse = 0.75f + std::sin(now*15.0f)*0.15f;
-                drawPaperStrip({38.0f, height - 112.0f, 390.0f, 48.0f}, 13.0f, withAlpha(SignalRed, pulse), Paper);
-                DrawTextEx(GetFontDefault(), "THIS WORLD IS NOT AVAILABLE YET", {54.0f, height - 99.0f}, 18.0f, 1.0f, Paper);
+                const float pulse = 0.80f + std::sin(now*15.0f)*0.12f;
+                drawNoticePanel(LockedWorldMessage, static_cast<float>(height) - 116.0f, width, withAlpha(SignalRed, pulse));
             }
 
             if (IsKeyPressed(KEY_ESCAPE)) {
                 screen = pauseMode ? MenuScreen::Pause : MenuScreen::Home;
                 screenStarted = now;
             }
+        }
+
+        if (!pauseMode && screen == MenuScreen::Home && now < gameCompleteNoticeUntil) {
+            drawGameCompleteNotice(now, width, height);
         }
 
         EndDrawing();
