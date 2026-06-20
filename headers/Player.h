@@ -83,11 +83,14 @@ private:
     float m_maxSpeed2D{4.65f};
     float m_animationTime{0.0f};
     float m_jumpAnimationTime{0.0f};
+    float m_spriteMoveBlend{0.0f};
+    float m_spriteGroundGrace{0.0f};
     float m_spriteBrightness{1.0f};
     float m_lastCameraYawRadians{0.0f};
     PlayMode m_lastMode{PlayMode::Mode3D};
     bool m_spriteMoving{false};
     bool m_spriteFacingLeft{false};
+    bool m_spriteVisuallyGrounded{false};
     bool m_spritePlayer{false};
     bool m_marioMapVariant{false};
     bool m_deadpoolVariant{false};

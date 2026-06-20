@@ -15,11 +15,12 @@
 
 namespace {
 constexpr float WorldOneSpriteHeight = 1.15f;
-constexpr float SharedSpriteRunFramesPerSecond = 12.0f;
-constexpr float SharedSpriteJumpFramesPerSecond = 12.0f;
-constexpr float SharedSpriteWalkSwayFrequency = 14.0f;
-constexpr float SharedSpriteWalkBounce = 0.035f;
-constexpr float SharedSpriteWalkTiltDegrees = 4.0f;
+constexpr float SharedSpriteRunFramesPerSecond = 14.5f;
+constexpr float SharedSpriteJumpFramesPerSecond = 13.0f;
+constexpr float SharedSpriteWalkSwayFrequency = 13.2f;
+constexpr float SharedSpriteWalkBounce = 0.024f;
+constexpr float SharedSpriteWalkTiltDegrees = 2.4f;
+constexpr float SharedSpriteGroundGraceSeconds = 0.11f;
 constexpr float SharedPlayerJumpSpeed = 7.25f;
 
 bool intersects(const Bounds& a, const Bounds& b) {
@@ -35,6 +36,11 @@ glm::vec3 approach(glm::vec3 current, glm::vec3 target, float maxDelta) {
         return target;
     }
     return current + delta / distance * maxDelta;
+}
+
+float smoothToward(float current, float target, float sharpness, float deltaTime) {
+    const float t = 1.0f - std::exp(-sharpness * deltaTime);
+    return current + (target - current) * std::clamp(t, 0.0f, 1.0f);
 }
 
 std::filesystem::path resolvePath(const std::string& rawPath) {
@@ -129,6 +135,9 @@ bool Player::load(const std::string& modelPath) {
     m_textures.clear();
     m_spritePlayer = false;
     m_spriteMoving = false;
+    m_spriteMoveBlend = 0.0f;
+    m_spriteGroundGrace = 0.0f;
+    m_spriteVisuallyGrounded = false;
     m_animationTime = 0.0f;
     m_jumpAnimationTime = 0.0f;
     m_spriteBrightness = 1.0f;
@@ -213,6 +222,9 @@ bool Player::loadWorldOneSprites(const std::string& playerAssetRoot) {
     m_jumpAnimationTime = 0.0f;
     m_spriteBrightness = 1.0f;
     m_spriteMoving = false;
+    m_spriteMoveBlend = 0.0f;
+    m_spriteGroundGrace = 0.0f;
+    m_spriteVisuallyGrounded = false;
     m_modelYawOffset = 0.0f;
     m_spritePlayer = true;
     return true;
@@ -243,6 +255,9 @@ void Player::spawnAt(const glm::vec3& feetPosition) {
     m_animationTime = 0.0f;
     m_jumpAnimationTime = 0.0f;
     m_spriteMoving = false;
+    m_spriteMoveBlend = 0.0f;
+    m_spriteGroundGrace = SharedSpriteGroundGraceSeconds;
+    m_spriteVisuallyGrounded = true;
 }
 
 void Player::teleportTo(const glm::vec3& feetPosition) {
@@ -252,6 +267,9 @@ void Player::teleportTo(const glm::vec3& feetPosition) {
     m_animationTime = 0.0f;
     m_jumpAnimationTime = 0.0f;
     m_spriteMoving = false;
+    m_spriteMoveBlend = 0.0f;
+    m_spriteGroundGrace = SharedSpriteGroundGraceSeconds;
+    m_spriteVisuallyGrounded = true;
 }
 
 void Player::update(const PlayerInput& input, const std::vector<Bounds>& colliders, const glm::vec3& worldMin, const glm::vec3& worldMax, float deltaTime) {
@@ -261,9 +279,11 @@ void Player::update(const PlayerInput& input, const std::vector<Bounds>& collide
     m_lastCameraYawRadians = input.cameraYawRadians;
     updateHorizontalVelocity(input, dt);
 
+    bool jumpedThisFrame = false;
     if (input.jumpPressed && m_grounded) {
         m_velocity.y = SharedPlayerJumpSpeed;
         m_grounded = false;
+        jumpedThisFrame = true;
     }
 
     m_velocity.y = std::max(m_velocity.y - 20.0f * dt, -26.0f);
@@ -281,14 +301,36 @@ void Player::update(const PlayerInput& input, const std::vector<Bounds>& collide
 
     const bool movementInputActive = glm::length(input.move) > 0.01f;
     const float horizontalSpeed = glm::length(glm::vec2(m_velocity.x, m_velocity.z));
-    m_spriteMoving = m_grounded && (movementInputActive || horizontalSpeed > 0.18f);
-    if (m_spriteMoving || !m_grounded) {
-        m_animationTime += dt;
+    const float maxSpeed = input.mode == PlayMode::Mode3D ? m_maxSpeed3D : m_maxSpeed2D;
+    if (m_grounded) {
+        m_spriteGroundGrace = SharedSpriteGroundGraceSeconds;
     } else {
+        m_spriteGroundGrace = std::max(0.0f, m_spriteGroundGrace - dt);
+    }
+
+    m_spriteVisuallyGrounded = m_grounded ||
+        (!jumpedThisFrame && m_spriteGroundGrace > 0.0f && m_velocity.y > -2.8f);
+
+    const bool velocityActive = horizontalSpeed > 0.075f;
+    float targetMoveBlend = 0.0f;
+    if (m_spriteVisuallyGrounded && (movementInputActive || velocityActive)) {
+        const float speedRatio = std::clamp(horizontalSpeed / std::max(maxSpeed, 0.001f), 0.0f, 1.0f);
+        targetMoveBlend = std::clamp(speedRatio * 1.35f, movementInputActive ? 0.38f : 0.0f, 1.0f);
+    }
+    m_spriteMoveBlend = smoothToward(m_spriteMoveBlend, targetMoveBlend, targetMoveBlend > m_spriteMoveBlend ? 18.0f : 10.5f, dt);
+    m_spriteMoving = m_spriteMoveBlend > 0.08f;
+
+    if (m_spriteMoving) {
+        const float speedRatio = std::clamp(horizontalSpeed / std::max(maxSpeed, 0.001f), 0.0f, 1.25f);
+        const float cadence = std::clamp(0.62f + speedRatio * 0.62f, 0.68f, 1.24f);
+        m_animationTime += dt * cadence;
+    } else if (m_spriteMoveBlend < 0.02f) {
         m_animationTime = 0.0f;
     }
-    if (!m_grounded) {
-        m_jumpAnimationTime += dt;
+
+    if (!m_spriteVisuallyGrounded) {
+        const float jumpCadence = std::clamp(0.82f + std::abs(m_velocity.y) / SharedPlayerJumpSpeed * 0.32f, 0.82f, 1.18f);
+        m_jumpAnimationTime += dt * jumpCadence;
     } else {
         m_jumpAnimationTime = 0.0f;
     }
@@ -337,10 +379,11 @@ Bounds Player::bounds() const {
 
 void Player::updateHorizontalVelocity(const PlayerInput& input, float deltaTime) {
     glm::vec3 desiredDirection(0.0f);
+    glm::vec3 cameraRight(1.0f, 0.0f, 0.0f);
 
     if (input.mode == PlayMode::Mode3D) {
         const glm::vec3 cameraForward = glm::normalize(glm::vec3(-std::sin(input.cameraYawRadians), 0.0f, -std::cos(input.cameraYawRadians)));
-        const glm::vec3 cameraRight = glm::normalize(glm::vec3(std::cos(input.cameraYawRadians), 0.0f, -std::sin(input.cameraYawRadians)));
+        cameraRight = glm::normalize(glm::vec3(std::cos(input.cameraYawRadians), 0.0f, -std::sin(input.cameraYawRadians)));
         desiredDirection = cameraRight * input.move.x + cameraForward * input.move.y;
     } else {
         desiredDirection = {input.move.x, 0.0f, 0.0f};
@@ -361,12 +404,11 @@ void Player::updateHorizontalVelocity(const PlayerInput& input, float deltaTime)
             m_spriteFacingLeft = true;
         }
     } else {
-        if (input.move.x > 0.01f) {
+        const float lateralMotion = glm::dot(desiredDirection, cameraRight);
+        if (lateralMotion > 0.12f) {
             m_spriteFacingLeft = false;
-        } else if (input.move.x < -0.01f) {
+        } else if (lateralMotion < -0.12f) {
             m_spriteFacingLeft = true;
-        } else {
-            m_spriteFacingLeft = false;
         }
 
         if (glm::length(desiredDirection) > 0.01f) {
@@ -452,18 +494,21 @@ glm::mat4 Player::spriteModelMatrix() const {
         yaw = 0.0f;
     }
 
+    const float walkAmount = std::clamp(m_spriteMoveBlend, 0.0f, 1.0f);
     const float step = m_spriteMoving ? std::sin(m_animationTime * SharedSpriteWalkSwayFrequency) : 0.0f;
-    const float bounce = m_spriteMoving ? std::abs(step) * SharedSpriteWalkBounce : 0.0f;
-    const float walkTilt = m_spriteMoving ? step * SharedSpriteWalkTiltDegrees : 0.0f;
-    const float jumpStrength = !m_grounded
+    const float bounce = std::abs(step) * SharedSpriteWalkBounce * walkAmount;
+    const float walkTilt = step * SharedSpriteWalkTiltDegrees * walkAmount;
+    const float walkStretch = std::abs(step) * 0.018f * walkAmount;
+    const bool airborne = !m_spriteVisuallyGrounded;
+    const float jumpStrength = airborne
         ? std::clamp(std::abs(m_velocity.y) / SharedPlayerJumpSpeed, 0.0f, 1.0f)
         : 0.0f;
-    const float jumpTilt = !m_grounded
+    const float jumpTilt = airborne
         ? (m_velocity.y >= 0.0f ? -10.0f : 8.0f) * jumpStrength
         : 0.0f;
-    const glm::vec3 jumpScale = !m_grounded
+    const glm::vec3 jumpScale = airborne
         ? glm::vec3(1.0f - jumpStrength * 0.06f, 1.0f + jumpStrength * 0.10f, 1.0f)
-        : glm::vec3(1.0f);
+        : glm::vec3(1.0f + walkStretch, 1.0f - walkStretch * 0.40f, 1.0f);
 
     glm::mat4 model(1.0f);
     model = glm::translate(model, m_position + glm::vec3(0.0f, m_visualYOffset + bounce, 0.0f));
@@ -477,13 +522,17 @@ glm::mat4 Player::spriteModelMatrix() const {
 const Player::SpriteFrame* Player::currentSpriteFrame() const {
     const std::vector<SpriteFrame>* frames = &m_runSpriteFrames;
     bool loop = true;
-    if (!m_grounded && !m_jumpSpriteFrames.empty()) {
+    if (!m_spriteVisuallyGrounded && !m_jumpSpriteFrames.empty()) {
         frames = &m_jumpSpriteFrames;
         loop = false;
     }
 
     if (frames->empty()) {
         return nullptr;
+    }
+
+    if (loop && !m_spriteMoving) {
+        return &frames->front();
     }
 
     const float time = loop ? m_animationTime : m_jumpAnimationTime;
