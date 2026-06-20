@@ -91,7 +91,9 @@ struct Map3Runtime {
     float dodgeActiveUntil{0.0f};
     float parryActiveUntil{0.0f};
     float startHintUntil{0.0f};
+    glm::vec3 startPosition{0.0f};
     float finishX{12.0f};
+    float finishCheckAvailableAt{0.0f};
     float invisibleWallNoticeUntil{0.0f};
     float nextEnemyWaveAt{0.0f};
     int nextEnemyWaveSize{2};

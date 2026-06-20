@@ -64,10 +64,13 @@ constexpr float Map3ProjectileRenderDistanceSq = 30.0f * 30.0f;
 constexpr float Map3EnemyRenderDistanceSq = 32.0f * 32.0f;
 constexpr float Map3PathCenterZOffset = 0.72f;
 constexpr float Map3FinishX = 12.0f;
+constexpr float Map3FinishCheckDelay = 3.0f;
 constexpr float Map3MinimumFinishDistance = 7.5f;
 constexpr float Map3FinishStartSafetyDistance = 1.5f;
 constexpr float Map3FinishEdgeMargin = 0.38f;
 constexpr float Map3PiratePathFinishRatio = 0.86f;
+constexpr float Map3PiratePathStartRatio = -0.70f;
+constexpr float Map3SpawnWorldMargin = 0.42f;
 constexpr float Map3BackwardWallX = -14.2f;
 constexpr float Map3Late2DWallX = 9.6f;
 constexpr float Map3InvisibleWallHalfThickness = 0.12f;
@@ -402,7 +405,42 @@ glm::vec3 findMap3PirateSpawn(const Environment& environment, const std::vector<
     const Bounds& path = colliders.empty()
         ? Bounds{environment.recommendedSpawnPoint(), glm::vec3(1.0f)}
         : colliders.front();
-    glm::vec3 spawn{path.center.x - path.halfExtent.x * 0.42f, path.center.y + path.halfExtent.y + 0.08f, path.center.z};
+    glm::vec3 spawn{path.center.x + path.halfExtent.x * Map3PiratePathStartRatio, path.center.y + path.halfExtent.y, path.center.z};
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    if (worldMax.x > worldMin.x && worldMax.z > worldMin.z) {
+        float minSpawnX = worldMin.x + Map3SpawnWorldMargin;
+        if (Map3BackwardWallX > worldMin.x && Map3BackwardWallX < worldMax.x) {
+            minSpawnX = std::max(minSpawnX, Map3BackwardWallX + Map3SpawnWorldMargin);
+        }
+        spawn.x = std::clamp(spawn.x, minSpawnX, worldMax.x - Map3SpawnWorldMargin);
+        spawn.z = std::clamp(spawn.z, worldMin.z + Map3SpawnWorldMargin, worldMax.z - Map3SpawnWorldMargin);
+    }
+
+    float floorY = spawn.y;
+    if (findFloorAt(colliders, spawn.x, spawn.z, spawn.y, floorY)) {
+        spawn.y = floorY;
+    }
+    return spawn;
+}
+
+glm::vec3 calculateMap3StartPosition(const Environment& environment, const std::vector<Bounds>& colliders) {
+    if (isMap3PirateEnvironment(environment)) {
+        return findMap3PirateSpawn(environment, colliders);
+    }
+
+    glm::vec3 spawn = environment.recommendedSpawnPoint();
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    if (worldMax.x > worldMin.x && worldMax.z > worldMin.z) {
+        float minSpawnX = worldMin.x + Map3SpawnWorldMargin;
+        if (Map3BackwardWallX > worldMin.x && Map3BackwardWallX < worldMax.x) {
+            minSpawnX = std::max(minSpawnX, Map3BackwardWallX + Map3SpawnWorldMargin);
+        }
+        spawn.x = std::clamp(spawn.x, minSpawnX, worldMax.x - Map3SpawnWorldMargin);
+        spawn.z = std::clamp(spawn.z, worldMin.z + Map3SpawnWorldMargin, worldMax.z - Map3SpawnWorldMargin);
+    }
+
     float floorY = spawn.y;
     if (findFloorAt(colliders, spawn.x, spawn.z, spawn.y, floorY)) {
         spawn.y = floorY;
@@ -1619,11 +1657,11 @@ bool iniciarMap3(Map3Runtime& map3) {
             map3.collisionBounds = isMap3PirateEnvironment(map3.environment)
                 ? buildMap3PirateCollision(map3.environment)
                 : map3.environment.collisionPreview();
-            const glm::vec3 spawnPoint = isMap3PirateEnvironment(map3.environment)
-                ? findMap3PirateSpawn(map3.environment, map3.collisionBounds)
-                : map3.environment.recommendedSpawnPoint();
+            const glm::vec3 spawnPoint = calculateMap3StartPosition(map3.environment, map3.collisionBounds);
+            map3.startPosition = spawnPoint;
             map3.player.spawnAt(spawnPoint);
             map3.finishX = calculateMap3FinishX(map3.environment, map3.collisionBounds, spawnPoint);
+            map3.finishCheckAvailableAt = 0.0f;
             map3.mission.reset(map3.environment, spawnPoint);
             map3.enemies.reset(map3.environment, map3.collisionBounds, spawnPoint);
             map3.health = map3.maxHealth;
@@ -1658,11 +1696,11 @@ bool iniciarMap3(Map3Runtime& map3) {
     map3.collisionBounds = isMap3PirateEnvironment(map3.environment)
         ? buildMap3PirateCollision(map3.environment)
         : map3.environment.collisionPreview();
-    const glm::vec3 spawnPoint = isMap3PirateEnvironment(map3.environment)
-        ? findMap3PirateSpawn(map3.environment, map3.collisionBounds)
-        : map3.environment.recommendedSpawnPoint();
+    const glm::vec3 spawnPoint = calculateMap3StartPosition(map3.environment, map3.collisionBounds);
+    map3.startPosition = spawnPoint;
     map3.player.spawnAt(spawnPoint);
     map3.finishX = calculateMap3FinishX(map3.environment, map3.collisionBounds, spawnPoint);
+    map3.finishCheckAvailableAt = 0.0f;
     map3.mission.initialize();
     map3.mission.reset(map3.environment, spawnPoint);
     map3.enemies.initialize();
@@ -1685,7 +1723,8 @@ bool iniciarMap3(Map3Runtime& map3) {
 
     std::cout << "World 2 ready. Collision volumes: " << map3ActiveColliders(map3).size()
         << " | start X: " << spawnPoint.x
-        << " | finish X: " << map3.finishX << std::endl;
+        << " | finish X: " << map3.finishX
+        << " | win check delay: " << Map3FinishCheckDelay << "s" << std::endl;
     std::cout << "Controls: TAB cambia 2D/3D, E esquiva en 3D y hace parry en 2D." << std::endl;
 
     map3.initialized = true;
@@ -1703,6 +1742,7 @@ void volverAlMenu(Map3Runtime& map3) {
     map3.dodgeActiveUntil = 0.0f;
     map3.parryActiveUntil = 0.0f;
     map3.startHintUntil = 0.0f;
+    map3.finishCheckAvailableAt = 0.0f;
     map3.invisibleWallNoticeUntil = 0.0f;
     resetMap3RuntimeBuffers(map3);
 }
@@ -1734,6 +1774,10 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
         consumeLevelIntroInput(window);
         updateLevelIntroCamera(now);
     } else if (!map3.gameOver && !map3.mission.levelComplete()) {
+        if (map3.finishCheckAvailableAt <= 0.0f) {
+            map3.finishCheckAvailableAt = now + Map3FinishCheckDelay;
+        }
+
         PlayerInput playerInput = buildMap3PlayerInput(window, map3.player, map3.mission.levelComplete());
         const bool actionDown = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
         const bool actionPressed = actionDown && !lastShieldKey;
@@ -1786,7 +1830,7 @@ void renderMap3(GLFWwindow* window, Map3Runtime& map3, const Shader& sceneShader
             }
         }
 
-        if (map3.player.position().x >= map3.finishX) {
+        if (now >= map3.finishCheckAvailableAt && map3.player.position().x >= map3.finishX) {
             map3.mission.forceComplete(now);
             stopMap3Music(map3);
         }
