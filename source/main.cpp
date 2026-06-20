@@ -1603,11 +1603,7 @@ void MissionManager::recolectarMoneda(Coin& coin, float timeSeconds) {
     m_collectedCount = std::min(m_collectedCount + 1, MissionCoinTotal);
     mostrarMensajeMonedaTemporal(timeSeconds);
     if (m_collectedCount >= MissionCoinTotal) {
-        if (m_completeOnAllCoins) {
-            completarNivel(timeSeconds);
-        } else {
-            activarEstrella(timeSeconds);
-        }
+        activarEstrella(timeSeconds);
     }
 }
 

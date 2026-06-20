@@ -58,10 +58,16 @@ struct Mundo2Runtime {
     ToadNpc toad;
     AudioPlayer music;
     Mundo2HudResources hud;
+    std::vector<Bounds> collisionBounds;
+    glm::vec3 safePlayerPosition{0.0f};
+    glm::vec3 cameraLead{0.0f};
+    glm::vec3 previousCameraPlayerPosition{0.0f};
+    double jumpBufferUntil{0.0};
     bool initialized{false};
     bool musicOpen{false};
     bool musicPlaying{false};
     bool lastInteractKey{false};
+    bool hasSafePlayerPosition{false};
 };
 
 bool iniciarMundo2(Mundo2Runtime& mundo2);

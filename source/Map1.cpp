@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -17,6 +18,424 @@
 namespace {
 constexpr float Mundo1PlayerSpeed3D = 3.55f;
 constexpr float Mundo1PlayerSpeed2D = 3.90f;
+constexpr float Mundo1JumpBufferSeconds = 0.16f;
+constexpr float Mundo1Camera3DDistance = 3.25f;
+constexpr float Mundo1Camera3DBaseHeight = 0.42f;
+constexpr float Mundo1Camera3DTargetHeight = 0.48f;
+constexpr float Mundo1Camera2DDistance = 4.15f;
+constexpr float Mundo1Camera2DHeight = 0.86f;
+constexpr float Mundo1Camera2DTargetHeight = 0.56f;
+constexpr float Mundo1CameraCollisionPadding = 0.18f;
+constexpr float Mundo1CameraMinimumDistance = 1.25f;
+constexpr float Mundo1SafeStepProbe = 0.34f;
+constexpr float Mundo1SafeDropProbe = 4.25f;
+
+bool mundo1FloorAt(const std::vector<Bounds>& colliders, float x, float z, float preferredY, float maxBelow, float maxAbove, float& floorY) {
+    bool found = false;
+    float bestScore = std::numeric_limits<float>::max();
+
+    for (const Bounds& collider : colliders) {
+        const float width = collider.halfExtent.x * 2.0f;
+        const float depth = collider.halfExtent.z * 2.0f;
+        const float area = width * depth;
+        const float top = collider.center.y + collider.halfExtent.y;
+        const bool floorLike = collider.halfExtent.y <= 0.42f && area >= 0.16f;
+        const bool inside =
+            x >= collider.center.x - collider.halfExtent.x - 0.10f &&
+            x <= collider.center.x + collider.halfExtent.x + 0.10f &&
+            z >= collider.center.z - collider.halfExtent.z - 0.10f &&
+            z <= collider.center.z + collider.halfExtent.z + 0.10f;
+        const bool reachable = top <= preferredY + maxAbove && top >= preferredY - maxBelow;
+        if (!floorLike || !inside || !reachable) {
+            continue;
+        }
+
+        const float score = std::abs(top - preferredY);
+        if (score < bestScore) {
+            bestScore = score;
+            floorY = top;
+            found = true;
+        }
+    }
+
+    return found;
+}
+
+std::vector<Bounds> buildMundo1BasePlayerColliders(const Environment& environment) {
+    const std::vector<Bounds>& rawColliders = environment.collisionPreview();
+    const glm::vec3 worldMin = environment.worldMin();
+    std::vector<Bounds> filtered;
+    filtered.reserve(rawColliders.size());
+
+    for (const Bounds& collider : rawColliders) {
+        const float width = collider.halfExtent.x * 2.0f;
+        const float height = collider.halfExtent.y * 2.0f;
+        const float depth = collider.halfExtent.z * 2.0f;
+        const float area = width * depth;
+        const float top = collider.center.y + collider.halfExtent.y;
+        const bool floorLike = collider.halfExtent.y <= 0.42f && area >= 0.16f;
+        const bool majorBlocker = height >= 1.10f && (width >= 0.34f || depth >= 0.34f);
+        const bool largeLowObstacle = height >= 0.56f && area >= 1.20f;
+        const bool tinyTrim = area < 0.035f || width < 0.045f || depth < 0.045f;
+        const bool playableHeight = top >= worldMin.y - 0.45f;
+
+        if (!playableHeight || (tinyTrim && !majorBlocker)) {
+            continue;
+        }
+
+        if (floorLike || majorBlocker || largeLowObstacle) {
+            filtered.push_back(collider);
+        }
+    }
+
+    return filtered.empty() ? rawColliders : filtered;
+}
+
+std::vector<Bounds> mundo1PlayerColliders(const Mundo2Runtime& mundo1) {
+    const std::vector<Bounds>& baseColliders = mundo1.collisionBounds.empty()
+        ? mundo1.environment.collisionPreview()
+        : mundo1.collisionBounds;
+    std::vector<Bounds> filtered;
+    filtered.reserve(baseColliders.size());
+
+    for (const Bounds& collider : baseColliders) {
+        if (currentMode == PlayMode::Mode2D) {
+            const bool nearLockedPlane =
+                locked2DDepth >= collider.center.z - collider.halfExtent.z - 0.42f &&
+                locked2DDepth <= collider.center.z + collider.halfExtent.z + 0.42f;
+            if (!nearLockedPlane) {
+                continue;
+            }
+        }
+        filtered.push_back(collider);
+    }
+
+    return filtered.empty() ? baseColliders : filtered;
+}
+
+glm::vec3 mundo1MoveDirectionFromInput(const PlayerInput& input) {
+    glm::vec3 desiredDirection(0.0f);
+
+    if (input.mode == PlayMode::Mode3D) {
+        const glm::vec3 cameraForward = glm::normalize(glm::vec3(-std::sin(input.cameraYawRadians), 0.0f, -std::cos(input.cameraYawRadians)));
+        const glm::vec3 cameraRight = glm::normalize(glm::vec3(std::cos(input.cameraYawRadians), 0.0f, -std::sin(input.cameraYawRadians)));
+        desiredDirection = cameraRight * input.move.x + cameraForward * input.move.y;
+    } else {
+        desiredDirection = {input.move.x, 0.0f, 0.0f};
+    }
+
+    if (glm::length(desiredDirection) > 1.0f) {
+        desiredDirection = glm::normalize(desiredDirection);
+    }
+    return desiredDirection;
+}
+
+glm::vec3 findMundo1SpawnPoint(const Environment& environment, const std::vector<Bounds>& colliders) {
+    const glm::vec3 requested = environment.recommendedSpawnPoint();
+    const glm::vec3 worldMin = environment.worldMin();
+    const glm::vec3 worldMax = environment.worldMax();
+    glm::vec3 best = requested;
+    float bestScore = std::numeric_limits<float>::max();
+
+    for (const Bounds& collider : colliders) {
+        const float top = collider.center.y + collider.halfExtent.y;
+        const float width = collider.halfExtent.x * 2.0f;
+        const float depth = collider.halfExtent.z * 2.0f;
+        const float area = width * depth;
+        const bool floorLike = collider.halfExtent.y <= 0.42f && area >= 0.20f;
+        const bool validHeight = top >= worldMin.y - 0.25f && top <= worldMax.y + 0.60f;
+        if (!floorLike || !validHeight) {
+            continue;
+        }
+
+        const float safeX = std::max(collider.halfExtent.x - 0.24f, 0.0f);
+        const float safeZ = std::max(collider.halfExtent.z - 0.24f, 0.0f);
+        glm::vec3 candidate{
+            std::clamp(requested.x, collider.center.x - safeX, collider.center.x + safeX),
+            top,
+            std::clamp(requested.z, collider.center.z - safeZ, collider.center.z + safeZ)
+        };
+
+        const float score = glm::length(glm::vec2(candidate.x - requested.x, candidate.z - requested.z)) +
+            std::abs(candidate.y - requested.y) * 0.45f;
+        if (score < bestScore) {
+            bestScore = score;
+            best = candidate;
+        }
+    }
+
+    if (worldMax.x > worldMin.x && worldMax.z > worldMin.z) {
+        best.x = std::clamp(best.x, worldMin.x + 0.34f, worldMax.x - 0.34f);
+        best.z = std::clamp(best.z, worldMin.z + 0.34f, worldMax.z - 0.34f);
+    }
+    return best;
+}
+
+void rememberMundo1SafePosition(Mundo2Runtime& mundo1, const std::vector<Bounds>& colliders) {
+    const glm::vec3 position = mundo1.player.position();
+    float floorY = position.y;
+    if (!mundo1FloorAt(colliders, position.x, position.z, position.y, 0.40f, 0.18f, floorY)) {
+        return;
+    }
+
+    if (!mundo1.player.grounded() && std::abs(position.y - floorY) > 0.12f) {
+        return;
+    }
+
+    mundo1.safePlayerPosition = {position.x, floorY, position.z};
+    mundo1.hasSafePlayerPosition = true;
+}
+
+void guardMundo1Edges(const Player& player, PlayerInput& input, const std::vector<Bounds>& colliders) {
+    if (!player.grounded() || glm::length(input.move) <= 0.01f) {
+        return;
+    }
+
+    const glm::vec3 direction = mundo1MoveDirectionFromInput(input);
+    if (glm::length(direction) <= 0.01f) {
+        return;
+    }
+
+    const glm::vec3 current = player.position();
+    const glm::vec3 probe = current + direction * Mundo1SafeStepProbe;
+    float currentFloorY = current.y;
+    float nextFloorY = probe.y;
+    const bool hasCurrentFloor = mundo1FloorAt(colliders, current.x, current.z, current.y, 0.55f, 0.20f, currentFloorY);
+    const bool hasNextFloor = mundo1FloorAt(colliders, probe.x, probe.z, current.y, 1.15f, 0.34f, nextFloorY);
+    if (hasCurrentFloor && !hasNextFloor) {
+        input.move = glm::vec2(0.0f);
+    }
+}
+
+void rescueMundo1FromVoid(Mundo2Runtime& mundo1, const std::vector<Bounds>& colliders) {
+    const glm::vec3 position = mundo1.player.position();
+    float floorY = position.y;
+    const bool floorBelow = mundo1FloorAt(colliders, position.x, position.z, position.y, Mundo1SafeDropProbe, 0.45f, floorY);
+    if (floorBelow) {
+        rememberMundo1SafePosition(mundo1, colliders);
+        return;
+    }
+
+    const bool belowWorld = position.y <= mundo1.environment.worldMin().y + 0.25f;
+    const bool fallingFast = mundo1.player.velocity().y < -4.5f;
+    const bool tooFarFromSafe = mundo1.hasSafePlayerPosition && position.y < mundo1.safePlayerPosition.y - 0.75f;
+    if (mundo1.hasSafePlayerPosition && (belowWorld || fallingFast || tooFarFromSafe)) {
+        mundo1.player.teleportTo(mundo1.safePlayerPosition);
+    }
+}
+
+void prepareMundo1Jump(Mundo2Runtime& mundo1, PlayerInput& input, const std::vector<Bounds>& colliders, float timeSeconds) {
+    if (input.jumpPressed) {
+        mundo1.jumpBufferUntil = static_cast<double>(timeSeconds) + Mundo1JumpBufferSeconds;
+    }
+
+    if (timeSeconds > static_cast<float>(mundo1.jumpBufferUntil)) {
+        input.jumpPressed = false;
+        return;
+    }
+
+    input.jumpPressed = true;
+    if (mundo1.player.grounded()) {
+        mundo1.jumpBufferUntil = 0.0;
+        return;
+    }
+
+    float floorY = mundo1.player.position().y;
+    if (!mundo1FloorAt(colliders, mundo1.player.position().x, mundo1.player.position().z, mundo1.player.position().y, 0.45f, 0.30f, floorY)) {
+        input.jumpPressed = false;
+        return;
+    }
+
+    const float distanceToFloor = mundo1.player.position().y - floorY;
+    if (distanceToFloor < -0.06f || distanceToFloor > 0.30f) {
+        input.jumpPressed = false;
+        return;
+    }
+
+    PlayerInput settleInput = input;
+    settleInput.jumpPressed = false;
+    mundo1.player.update(settleInput, colliders, mundo1.environment.worldMin(), mundo1.environment.worldMax(), 1.0f / 60.0f);
+    if (!mundo1.player.grounded()) {
+        input.jumpPressed = false;
+        return;
+    }
+
+    mundo1.player.update(input, colliders, mundo1.environment.worldMin(), mundo1.environment.worldMax(), 0.0f);
+    input.jumpPressed = false;
+    mundo1.jumpBufferUntil = 0.0;
+}
+
+bool mundo1CameraColliderRelevant(const Bounds& collider, const glm::vec3& from, const glm::vec3& to) {
+    const float width = collider.halfExtent.x * 2.0f;
+    const float height = collider.halfExtent.y * 2.0f;
+    const float depth = collider.halfExtent.z * 2.0f;
+    const float top = collider.center.y + collider.halfExtent.y;
+    const float lowestRayY = std::min(from.y, to.y);
+    const bool visibleBlocker = width >= 0.08f && depth >= 0.08f && height >= 0.08f;
+    return visibleBlocker && top >= lowestRayY - 0.32f;
+}
+
+bool mundo1SegmentHitsBounds(const glm::vec3& start, const glm::vec3& end, const Bounds& bounds, float padding, float& hitT) {
+    const glm::vec3 expandedHalf = bounds.halfExtent + glm::vec3(padding);
+    const glm::vec3 minBounds = bounds.center - expandedHalf;
+    const glm::vec3 maxBounds = bounds.center + expandedHalf;
+    const glm::vec3 direction = end - start;
+    float tMin = 0.0f;
+    float tMax = 1.0f;
+
+    for (int axis = 0; axis < 3; ++axis) {
+        if (std::abs(direction[axis]) < 0.00001f) {
+            if (start[axis] < minBounds[axis] || start[axis] > maxBounds[axis]) {
+                return false;
+            }
+            continue;
+        }
+
+        float t1 = (minBounds[axis] - start[axis]) / direction[axis];
+        float t2 = (maxBounds[axis] - start[axis]) / direction[axis];
+        if (t1 > t2) {
+            std::swap(t1, t2);
+        }
+
+        tMin = std::max(tMin, t1);
+        tMax = std::min(tMax, t2);
+        if (tMin > tMax) {
+            return false;
+        }
+    }
+
+    hitT = tMin;
+    return true;
+}
+
+glm::vec3 resolveMundo1CameraPosition(const glm::vec3& target, const glm::vec3& desiredPosition, const std::vector<Bounds>& colliders) {
+    const glm::vec3 ray = desiredPosition - target;
+    const float rayLength = glm::length(ray);
+    if (rayLength < 0.001f) {
+        return desiredPosition;
+    }
+
+    float closestT = 1.0f;
+    for (const Bounds& collider : colliders) {
+        if (!mundo1CameraColliderRelevant(collider, target, desiredPosition)) {
+            continue;
+        }
+
+        float hitT = 1.0f;
+        if (mundo1SegmentHitsBounds(target, desiredPosition, collider, Mundo1CameraCollisionPadding, hitT) &&
+            hitT > 0.035f &&
+            hitT < closestT) {
+            closestT = hitT;
+        }
+    }
+
+    if (closestT >= 0.999f) {
+        return desiredPosition;
+    }
+
+    const float safeT = std::max(Mundo1CameraMinimumDistance / rayLength, closestT - 0.055f);
+    return target + ray * std::clamp(safeT, 0.08f, 1.0f);
+}
+
+glm::vec3 chooseMundo1StarCameraPosition(const Player& player, const glm::vec3& target, const std::vector<Bounds>& colliders) {
+    glm::vec3 preferred = player.position() - target;
+    preferred.y = 0.0f;
+    if (glm::length(preferred) < 0.1f) {
+        preferred = glm::vec3(0.0f, 0.0f, 1.0f);
+    }
+    preferred = glm::normalize(preferred);
+
+    const std::array<glm::vec3, 8> candidates = {
+        preferred,
+        glm::vec3(-preferred.z, 0.0f, preferred.x),
+        glm::vec3(preferred.z, 0.0f, -preferred.x),
+        -preferred,
+        glm::normalize(preferred + glm::vec3(-preferred.z, 0.0f, preferred.x)),
+        glm::normalize(preferred + glm::vec3(preferred.z, 0.0f, -preferred.x)),
+        glm::normalize(-preferred + glm::vec3(-preferred.z, 0.0f, preferred.x)),
+        glm::normalize(-preferred + glm::vec3(preferred.z, 0.0f, -preferred.x))
+    };
+
+    glm::vec3 bestPosition = target + preferred * 4.55f + glm::vec3(0.0f, 2.10f, 0.0f);
+    float bestScore = std::numeric_limits<float>::max();
+
+    for (const glm::vec3& direction : candidates) {
+        const glm::vec3 desired = target + direction * 4.55f + glm::vec3(0.0f, 2.10f, 0.0f);
+        const glm::vec3 resolved = resolveMundo1CameraPosition(target, desired, colliders);
+        const float blockedPenalty = glm::length(desired - resolved) * 4.5f;
+        const float preferredPenalty = (1.0f - glm::dot(direction, preferred)) * 0.28f;
+        const float continuityPenalty = cameraInitialized ? glm::length(resolved - gameplayCameraPosition) * 0.05f : 0.0f;
+        const float score = blockedPenalty + preferredPenalty + continuityPenalty;
+        if (score < bestScore) {
+            bestScore = score;
+            bestPosition = resolved;
+        }
+    }
+
+    return bestPosition;
+}
+
+void updateMundo1GameplayCamera(Mundo2Runtime& mundo1, float timeSeconds, float dt) {
+    const std::vector<Bounds>& colliders = mundo1.collisionBounds.empty()
+        ? mundo1.environment.collisionPreview()
+        : mundo1.collisionBounds;
+    glm::vec3 desiredLead(0.0f);
+
+    if (currentMode == PlayMode::Mode3D && dt > 0.0001f) {
+        glm::vec3 playerStep = mundo1.player.position() - mundo1.previousCameraPlayerPosition;
+        playerStep.y = 0.0f;
+        const float stepLengthSq = glm::dot(playerStep, playerStep);
+        if (stepLengthSq > 0.001f * 0.001f && stepLengthSq < 1.2f * 1.2f) {
+            const glm::vec3 playerVelocity = playerStep / dt;
+            const float speedSq = glm::dot(playerVelocity, playerVelocity);
+            if (speedSq > 0.05f * 0.05f) {
+                const float speed = std::sqrt(speedSq);
+                desiredLead = (playerVelocity / speed) * std::min(0.26f, speed * 0.055f);
+            }
+        }
+    }
+
+    const float leadSmoothing = dt > 0.0f ? 1.0f - std::exp(-8.0f * dt) : 1.0f;
+    mundo1.cameraLead = glm::mix(mundo1.cameraLead, desiredLead, leadSmoothing);
+    if (currentMode != PlayMode::Mode3D) {
+        mundo1.cameraLead = glm::mix(mundo1.cameraLead, glm::vec3(0.0f), leadSmoothing);
+    }
+    mundo1.previousCameraPlayerPosition = mundo1.player.position();
+
+    glm::vec3 desiredTarget = mundo1.player.position() + glm::vec3(0.0f, Mundo1Camera3DTargetHeight, 0.0f);
+    glm::vec3 desiredPosition;
+
+    if (mundo1.mission.starFocusActive(timeSeconds)) {
+        const glm::vec3 starTarget = mundo1.mission.starPosition() + glm::vec3(0.0f, 0.38f, 0.0f);
+        desiredTarget = starTarget;
+        desiredPosition = chooseMundo1StarCameraPosition(mundo1.player, starTarget, colliders);
+    } else if (currentMode == PlayMode::Mode3D) {
+        const float yaw = glm::radians(cameraYawDegrees);
+        const float pitch = glm::radians(cameraPitchDegrees);
+        const float horizontalDistance = std::cos(pitch) * Mundo1Camera3DDistance;
+        const glm::vec3 orbitOffset(
+            std::sin(yaw) * horizontalDistance,
+            Mundo1Camera3DBaseHeight + std::sin(pitch) * Mundo1Camera3DDistance,
+            std::cos(yaw) * horizontalDistance);
+        desiredTarget = mundo1.player.position() + glm::vec3(0.0f, Mundo1Camera3DTargetHeight, 0.0f) + mundo1.cameraLead;
+        desiredPosition = resolveMundo1CameraPosition(desiredTarget, desiredTarget + orbitOffset, colliders);
+    } else {
+        desiredTarget = mundo1.player.position() + glm::vec3(0.0f, Mundo1Camera2DTargetHeight, 0.0f);
+        desiredPosition = resolveMundo1CameraPosition(desiredTarget, desiredTarget + glm::vec3(0.0f, Mundo1Camera2DHeight, Mundo1Camera2DDistance), colliders);
+    }
+
+    const float positionSmoothing = dt > 0.0f ? 1.0f - std::exp(-(currentMode == PlayMode::Mode3D ? 6.2f : 7.4f) * dt) : 1.0f;
+    const float targetSmoothing = dt > 0.0f ? 1.0f - std::exp(-(currentMode == PlayMode::Mode3D ? 9.0f : 7.4f) * dt) : 1.0f;
+    if (!cameraInitialized) {
+        gameplayCameraPosition = desiredPosition;
+        gameplayCameraTarget = desiredTarget;
+        cameraInitialized = true;
+    } else {
+        gameplayCameraTarget = glm::mix(gameplayCameraTarget, desiredTarget, targetSmoothing);
+        gameplayCameraPosition = glm::mix(gameplayCameraPosition, desiredPosition, positionSmoothing);
+        gameplayCameraPosition = resolveMundo1CameraPosition(gameplayCameraTarget, gameplayCameraPosition, colliders);
+    }
+}
 
 void initializeMundo2HudResources(Mundo2HudResources& hud) {
     if (hud.initialized) {
@@ -222,14 +641,22 @@ bool iniciarMundo2(Mundo2Runtime& mundo2) {
 
     loadWorldOnePlayerSprites(mundo2.player);
     mundo2.player.configureMovementSpeeds(Mundo1PlayerSpeed3D, Mundo1PlayerSpeed2D);
-    mundo2.player.spawnAt(mundo2.environment.recommendedSpawnPoint());
+    mundo2.collisionBounds = buildMundo1BasePlayerColliders(mundo2.environment);
+    const glm::vec3 spawnPoint = findMundo1SpawnPoint(mundo2.environment, mundo2.collisionBounds);
+    mundo2.player.spawnAt(spawnPoint);
     mundo2.mission.initialize();
-    mundo2.mission.reset(mundo2.environment, mundo2.environment.recommendedSpawnPoint());
+    mundo2.mission.reset(mundo2.environment, spawnPoint);
     mundo2.toad.initialize();
-    mundo2.toad.reset(mundo2.environment, mundo2.environment.recommendedSpawnPoint());
+    mundo2.toad.reset(mundo2.environment, spawnPoint);
     mundo2.lastInteractKey = false;
+    mundo2.jumpBufferUntil = 0.0;
+    mundo2.safePlayerPosition = spawnPoint;
+    mundo2.hasSafePlayerPosition = true;
+    mundo2.cameraLead = glm::vec3(0.0f);
+    mundo2.previousCameraPlayerPosition = spawnPoint;
     resetGameplayView(mundo2.player);
-    updateGameplayCamera(mundo2.player, mundo2.environment, mundo2.mission, static_cast<float>(glfwGetTime()), 0.0f);
+    currentMode = PlayMode::Mode3D;
+    updateMundo1GameplayCamera(mundo2, static_cast<float>(glfwGetTime()), 0.0f);
     beginLevelIntro(mundo2.environment, mundo2.player, static_cast<float>(glfwGetTime()));
 
     std::cout << "World 1 ready. Collision volumes: " << mundo2.environment.collisionPreview().size() << std::endl;
@@ -249,6 +676,11 @@ void volverAlMenu(Mundo2Runtime& mundo2) {
         mundo2.musicOpen = false;
     }
     mundo2.lastInteractKey = false;
+    mundo2.collisionBounds.clear();
+    mundo2.jumpBufferUntil = 0.0;
+    mundo2.hasSafePlayerPosition = false;
+    mundo2.cameraLead = glm::vec3(0.0f);
+    mundo2.previousCameraPlayerPosition = glm::vec3(0.0f);
     mundo2.initialized = false;
 }
 
@@ -272,18 +704,26 @@ void renderMundo2(GLFWwindow* window, Mundo2Runtime& mundo2, MenuContext& menu, 
         consumeLevelIntroInput(window);
         mundo2.lastInteractKey = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
         updateLevelIntroCamera(now);
+        const std::vector<Bounds>& cameraColliders = mundo2.collisionBounds.empty()
+            ? mundo2.environment.collisionPreview()
+            : mundo2.collisionBounds;
+        gameplayCameraPosition = resolveMundo1CameraPosition(gameplayCameraTarget, gameplayCameraPosition, cameraColliders);
     } else if (!mundo2.mission.levelComplete()) {
-        const PlayerInput playerInput = buildPlayerInput(window, mundo2.player);
+        PlayerInput playerInput = buildPlayerInput(window, mundo2.player);
         const bool interactDown = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
         const bool interactPressed = interactDown && !mundo2.lastInteractKey;
         mundo2.lastInteractKey = interactDown;
 
-        std::vector<Bounds> playerColliders = mundo2.environment.collisionPreview();
+        std::vector<Bounds> playerColliders = mundo1PlayerColliders(mundo2);
         appendDimensionRestrictionColliders(playerColliders, mundo2.environment, locked2DDepth);
+        rememberMundo1SafePosition(mundo2, playerColliders);
+        guardMundo1Edges(mundo2.player, playerInput, playerColliders);
+        prepareMundo1Jump(mundo2, playerInput, playerColliders, now);
         mundo2.player.update(playerInput, playerColliders, mundo2.environment.worldMin(), mundo2.environment.worldMax(), deltaTime);
+        rescueMundo1FromVoid(mundo2, playerColliders);
         mundo2.mission.update(mundo2.player, now);
         mundo2.toad.update(mundo2.player, interactPressed, now);
-        updateGameplayCamera(mundo2.player, mundo2.environment, mundo2.mission, now, deltaTime);
+        updateMundo1GameplayCamera(mundo2, now, deltaTime);
     }
 
     int width = 0;
